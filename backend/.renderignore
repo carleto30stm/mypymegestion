@@ -1,0 +1,5 @@
+# Archivos a ignorar en Render para evitar detección de Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+docker-compose.*.yml
