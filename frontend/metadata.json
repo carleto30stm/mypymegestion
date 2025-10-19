@@ -1,0 +1,5 @@
+{
+  "name": "Gestor de Gastos Fullstack (MUI)",
+  "description": "Una aplicación para gestionar gastos con un dashboard interactivo, CRUD completo y una interfaz construida con React y Material UI.",
+  "requestFramePermissions": []
+}
