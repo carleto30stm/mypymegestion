@@ -25,7 +25,7 @@ export const fetchGastos = createAsyncThunk('gastos/fetchGastos', async (_, { re
 
 export const createGasto = createAsyncThunk('/api/gastos/createGasto', async (newGasto: Omit<Gasto, '_id'>, { rejectWithValue }) => {
   try {
-    const response = await api.post('/gastos', newGasto);
+    const response = await api.post('/api/gastos', newGasto);
     return response.data;
   } catch (error: any) {
     return rejectWithValue(error.response?.data?.message || 'Failed to create expense');
