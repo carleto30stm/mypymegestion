@@ -8,6 +8,19 @@ export default defineConfig(({ mode }) => {
   
   return {
     plugins: [react()],
+    build: {
+      // Configuraciones específicas para Vercel
+      target: 'es2015', // Compatible con navegadores más antiguos
+      outDir: 'dist',
+      assetsDir: 'assets',
+      sourcemap: false, // Desactivar sourcemaps para reducir tamaño
+      minify: 'esbuild', // Usar esbuild para minificación (más rápido)
+      rollupOptions: {
+        output: {
+          manualChunks: undefined, // No dividir en chunks automáticamente
+        }
+      }
+    },
     server: {
       proxy: {
         // Proxy requests starting with /api to the backend dev server
