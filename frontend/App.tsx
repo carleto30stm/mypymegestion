@@ -4,6 +4,7 @@ import { useSelector } from 'react-redux';
 import { RootState } from './redux/store';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
+import EmployeesPage from './pages/EmployeesPage';
 
 const PrivateRoute: React.FC = () => {
     const { isAuthenticated } = useSelector((state: RootState) => state.auth);
@@ -16,6 +17,7 @@ const App: React.FC = () => {
         <Route path="/login" element={<LoginPage />} />
         <Route element={<PrivateRoute />}>
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/employees" element={<EmployeesPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

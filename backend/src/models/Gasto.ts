@@ -26,6 +26,13 @@ const gastoSchema = new mongoose.Schema({
     validate: {
       validator: function(this: any, value: string) {
         if (!value) return true; // Optional field
+        
+        // Para el rubro SUELDOS, permitir cualquier valor (nombres de empleados)
+        if (this.rubro === 'SUELDOS') {
+          return true;
+        }
+        
+        // Para otros rubros, usar la validación estática
         const validSubRubros = subRubrosByRubro[this.rubro] || [];
         return validSubRubros.includes(value);
       },
@@ -35,6 +42,11 @@ const gastoSchema = new mongoose.Schema({
   medioDePago: { type: String, enum: ['Mov. Banco', 'reserva', 'CR.F', 'DLL.B', 'FCI', 'FT', 'Visa', 'Amex', 'otro'] },
   clientes: { type: String },
   detalleGastos: { type: String, required: true },
+  concepto: { 
+    type: String,
+    enum: ['sueldo', 'adelanto', 'hora_extra', 'aguinaldo', 'bonus', 'otro'],
+    default: 'sueldo'
+  },
   comentario: { type: String },
   fechaStandBy: { type: Date },
   entrada: { type: Number, default: 0 },

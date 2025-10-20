@@ -4,6 +4,36 @@ export interface User {
   userType: 'admin' | 'oper' | 'oper_ad';
 }
 
+// Interface para empleados
+export interface Employee {
+  _id?: string;
+  nombre: string;
+  apellido: string;
+  documento: string;
+  puesto: string;
+  fechaIngreso: string;
+  sueldoBase: number;
+  estado: 'activo' | 'inactivo';
+  email?: string;
+  telefono?: string;
+  observaciones?: string;
+}
+
+// Interface para el cálculo de sueldos
+export interface EmployeePayroll {
+  employeeId: string;
+  nombre: string;
+  apellido: string;
+  sueldoBase: number;
+  totalPagado: number; // Suma de gastos con su nombre en subRubro de SUELDOS
+  adelantos: number;    // Adelantos registrados (concepto = 'adelanto')
+  horasExtra: number;   // Horas extra (concepto = 'hora_extra')
+  sueldos: number;      // Sueldos regulares (concepto = 'sueldo')
+  aguinaldos: number;   // Aguinaldos (concepto = 'aguinaldo')
+  bonus: number;        // Bonus (concepto = 'bonus')
+  saldoPendiente: number; // sueldoBase - totalPagado
+}
+
 // SubRubros mapping
 export const subRubrosByRubro: Record<string, string[]> = {
   'SERVICIOS': ['EDENOR', 'PROGRAMACION', 'AGUA', 'GAS', 'RED NET', 'NIC AR', 'JARDIN'],
@@ -27,6 +57,7 @@ export interface Gasto {
   medioDePago: '' | 'Mov. Banco' | 'reserva' | 'CR.F' | 'DLL.B' | 'FCI' | 'FT' | 'Visa' | 'Amex' | 'otro';
   clientes: string;
   detalleGastos: string;
+  concepto?: 'sueldo' | 'adelanto' | 'hora_extra' | 'aguinaldo' | 'bonus' | 'otro';
   comentario: string;
   fechaStandBy?: string;
   entrada?: number;

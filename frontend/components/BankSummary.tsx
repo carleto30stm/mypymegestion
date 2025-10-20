@@ -158,7 +158,122 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
           6: { halign: 'right' }  // Salida alignment
         }
       });
+
+      yPosition = (pdf as any).lastAutoTable.finalY + 20;
+
+      // 3. Totales por banco consolidados
+      pdf.setFontSize(14);
+      pdf.text('Totales Consolidados por Banco', 20, yPosition);
+      yPosition += 10;
+
+      // Crear tabla con totales por banco incluyendo saldo total
+      const bankTotalsData = bankBalances.map(balance => [
+        balance.banco,
+        `$${balance.entradas.toLocaleString('es-AR')}`,
+        `$${balance.salidas.toLocaleString('es-AR')}`,
+        `$${balance.saldo.toLocaleString('es-AR')}`,
+        balance.saldo >= 0 ? 'POSITIVO' : 'NEGATIVO'
+      ]);
+
+      // Agregar fila de totales generales
+      const totalEntradas = bankBalances.reduce((sum, balance) => sum + balance.entradas, 0);
+      const totalSalidas = bankBalances.reduce((sum, balance) => sum + balance.salidas, 0);
+      const saldoGeneral = totalEntradas - totalSalidas;
       
+      bankTotalsData.push([
+        'TOTAL GENERAL',
+        `$${totalEntradas.toLocaleString('es-AR')}`,
+        `$${totalSalidas.toLocaleString('es-AR')}`,
+        `$${saldoGeneral.toLocaleString('es-AR')}`,
+        saldoGeneral >= 0 ? 'POSITIVO' : 'NEGATIVO'
+      ]);
+
+      autoTable(pdf, {
+        startY: yPosition,
+        head: [['Banco', 'Total Entradas', 'Total Salidas', 'Saldo Final', 'Estado']],
+        body: bankTotalsData,
+        theme: 'striped',
+        styles: { 
+          fontSize: 10,
+          halign: 'center'
+        },
+        headStyles: { 
+          fillColor: [52, 152, 219],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold'
+        },
+        columnStyles: {
+          0: { halign: 'left', fontStyle: 'bold' },
+          1: { halign: 'right' },
+          2: { halign: 'right' },
+          3: { halign: 'right', fontStyle: 'bold' },
+          4: { halign: 'center' }
+        },
+        didParseCell: function (data) {
+          // Resaltar la fila del total general
+          if (data.row.index === bankTotalsData.length - 1) {
+            data.cell.styles.fillColor = [44, 62, 80]; // Azul oscuro
+            data.cell.styles.textColor = [255, 255, 255]; // Texto blanco
+            data.cell.styles.fontStyle = 'bold';
+          }
+          // Colorear el estado según sea positivo o negativo
+          else if (data.column.index === 4) {
+            const isPositive = data.cell.text[0] === 'POSITIVO';
+            data.cell.styles.fillColor = isPositive ? [46, 204, 113] : [231, 76, 60];
+            data.cell.styles.textColor = [255, 255, 255];
+            data.cell.styles.fontStyle = 'bold';
+          }
+          // Colorear los saldos según sean positivos o negativos
+          else if (data.column.index === 3) {
+            const saldoText = data.cell.text[0];
+            const isPositive = !saldoText.includes('-');
+            data.cell.styles.textColor = isPositive ? [39, 174, 96] : [192, 57, 43];
+            data.cell.styles.fontStyle = 'bold';
+          }
+        }
+      });
+
+      yPosition = (pdf as any).lastAutoTable.finalY + 20;
+
+      // 4. Resumen ejecutivo
+      pdf.setFontSize(14);
+      pdf.text('Resumen Ejecutivo', 20, yPosition);
+      yPosition += 10;
+
+      // Calcular totales generales
+      const totalEntradas_exec = gastosActivos.reduce((sum, gasto) => sum + (gasto.entrada || 0), 0);
+      const totalSalidas_exec = gastosActivos.reduce((sum, gasto) => sum + (gasto.salida || 0), 0);
+      const saldoTotal = totalEntradas_exec - totalSalidas_exec;
+
+      const executiveSummaryData = [
+        ['Total Entradas', `$${totalEntradas_exec.toLocaleString('es-AR')}`],
+        ['Total Salidas', `$${totalSalidas_exec.toLocaleString('es-AR')}`],
+        ['SALDO FINAL', `$${saldoTotal.toLocaleString('es-AR')}`]
+      ];
+
+      autoTable(pdf, {
+        startY: yPosition,
+        body: executiveSummaryData,
+        theme: 'plain',
+        styles: { 
+          fontSize: 14,
+          fontStyle: 'bold'
+        },
+        columnStyles: {
+          0: { halign: 'left', cellWidth: 50 },
+          1: { halign: 'right', cellWidth: 50 }
+        },
+        didParseCell: function (data) {
+          // Resaltar la fila del saldo final pero con colores más suaves
+          if (data.row.index === 2) {
+            // Solo cambiar el color del texto, sin fondo
+            data.cell.styles.textColor = saldoTotal >= 0 ? [39, 174, 96] : [192, 57, 43];
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.fontSize = 14;
+          }
+        }
+      });
+
       pdf.save(`Reporte_Financiero_${monthName.replace(/ /g, '_')}.pdf`);
       
     } catch (error) {

@@ -1,7 +1,8 @@
 import React from 'react';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { logout } from '../redux/slices/authSlice';
-import { AppDispatch } from '../redux/store';
+import { AppDispatch, RootState } from '../redux/store';
 import Box from '@mui/material/Box';
 // Using Box instead of Drawer to participate in flex layout and avoid spacing issues
 import List from '@mui/material/List';
@@ -17,12 +18,14 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import PeopleIcon from '@mui/icons-material/People';
 
 export const drawerWidth = 240;
 export const drawerHandleWidth = 40;
 
 interface SidebarProps {
-    onAddNew: () => void;
+  onAddNew?: () => void;
   isOpen?: boolean;
   onToggle?: () => void;
   onToggleBankSummary?: () => void;
@@ -37,8 +40,14 @@ const Sidebar: React.FC<SidebarProps> = ({
   showBankSummary = true 
 }) => {
   const dispatch = useDispatch<AppDispatch>();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { user } = useSelector((state: RootState) => state.auth);
+  
   // Todos los usuarios pueden crear registros (OPER puede crear, pero no editar/eliminar)
   const canCreate = true;
+  // Solo usuarios no-oper pueden ver empleados
+  const canViewEmployees = user?.userType !== 'oper';
 
   const handleLogout = () => {
     dispatch(logout());
@@ -57,31 +66,68 @@ const Sidebar: React.FC<SidebarProps> = ({
             )}
         </Box>
       <Divider />
+      
+      {/* Navegación principal */}
       <List>
-        {canCreate && (
+        <ListItem disablePadding>
+          <ListItemButton 
+            onClick={() => navigate('/dashboard')}
+            selected={location.pathname === '/dashboard'}
+          >
+            <ListItemIcon>
+              <DashboardIcon />
+            </ListItemIcon>
+            <ListItemText primary="Dashboard" />
+          </ListItemButton>
+        </ListItem>
+        
+        {canViewEmployees && (
           <ListItem disablePadding>
-            <ListItemButton onClick={onAddNew}>
+            <ListItemButton 
+              onClick={() => navigate('/employees')}
+              selected={location.pathname === '/employees'}
+            >
               <ListItemIcon>
-                <AddCircleOutlineIcon />
+                <PeopleIcon />
               </ListItemIcon>
-              <ListItemText primary="Agregar Registro" />
-            </ListItemButton>
-          </ListItem>
-        )}
-        {onToggleBankSummary && (
-          <ListItem disablePadding>
-            <ListItemButton onClick={onToggleBankSummary}>
-              <ListItemIcon>
-                <AccountBalanceIcon />
-              </ListItemIcon>
-              <ListItemText 
-                primary={showBankSummary ? "Ocultar Resumen Bancos" : "Mostrar Resumen Bancos"} 
-              />
+              <ListItemText primary="Empleados" />
             </ListItemButton>
           </ListItem>
         )}
       </List>
       <Divider />
+      
+      {/* Acciones específicas del dashboard */}
+      {location.pathname === '/dashboard' && (
+        <>
+          <List>
+            {canCreate && onAddNew && (
+              <ListItem disablePadding>
+                <ListItemButton onClick={onAddNew}>
+                  <ListItemIcon>
+                    <AddCircleOutlineIcon />
+                  </ListItemIcon>
+                  <ListItemText primary="Agregar Registro" />
+                </ListItemButton>
+              </ListItem>
+            )}
+            {onToggleBankSummary && (
+              <ListItem disablePadding>
+                <ListItemButton onClick={onToggleBankSummary}>
+                  <ListItemIcon>
+                    <AccountBalanceIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary={showBankSummary ? "Ocultar Resumen Bancos" : "Mostrar Resumen Bancos"} 
+                  />
+                </ListItemButton>
+              </ListItem>
+            )}
+          </List>
+          <Divider />
+        </>
+      )}
+      
       <List>
         <ListItem disablePadding>
             <ListItemButton onClick={handleLogout}>

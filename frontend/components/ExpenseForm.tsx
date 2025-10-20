@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useDispatch } from 'react-redux';
-import { AppDispatch } from '../redux/store';
+import { useDispatch, useSelector } from 'react-redux';
+import { AppDispatch, RootState } from '../redux/store';
 import { createGasto, updateGasto } from '../redux/slices/gastosSlice';
+import { fetchEmployees } from '../redux/slices/employeesSlice';
 import { Gasto, subRubrosByRubro } from '../types';
 import { Grid, TextField, Button, Box, MenuItem, Select, InputLabel, FormControl, Alert } from '@mui/material';
 
@@ -12,6 +13,7 @@ interface ExpenseFormProps {
 
 const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
   const dispatch = useDispatch<AppDispatch>();
+  const { items: employees } = useSelector((state: RootState) => state.employees);
 
   const [formData, setFormData] = useState({
     fecha: '',
@@ -20,6 +22,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
     medioDePago: '',
     clientes: '',
     detalleGastos: '',
+    concepto: 'sueldo',
     comentario: '',
     fechaStandBy: '',
     entrada: '',
@@ -28,6 +31,11 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
   });
 
   const [validationError, setValidationError] = useState('');
+
+  // Cargar empleados al inicializar el componente
+  useEffect(() => {
+    dispatch(fetchEmployees());
+  }, [dispatch]);
 
   // Función para validar entrada y salida
   const validateEntradaSalida = (entrada: string, salida: string) => {
@@ -54,6 +62,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
         medioDePago: gastoToEdit.medioDePago || '',
         clientes: gastoToEdit.clientes || '',
         detalleGastos: gastoToEdit.detalleGastos || '',
+        concepto: gastoToEdit.concepto || 'sueldo',
         comentario: gastoToEdit.comentario || '',
         fechaStandBy: gastoToEdit.fechaStandBy ? new Date(gastoToEdit.fechaStandBy).toISOString().split('T')[0] : '',
         entrada: gastoToEdit.entrada?.toString() || '',
@@ -85,6 +94,11 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
 
   const handleSelectChange = (name: string, value: string) => {  
     if (name === 'rubro') {
+      // Si selecciona SUELDOS, cargar empleados
+      if (value === 'SUELDOS') {
+        dispatch(fetchEmployees());
+      }
+      
       setFormData(prev => ({ 
         ...prev, 
         rubro: value, 
@@ -198,7 +212,17 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
             >
               {!formData.rubro ? (
                 <MenuItem disabled>Selecciona un rubro primero</MenuItem>
+              ) : formData.rubro === 'SUELDOS' ? (
+                // Si es SUELDOS, mostrar empleados activos
+                employees
+                  .filter(emp => emp.estado === 'activo')
+                  .map((employee) => (
+                    <MenuItem key={employee._id} value={`${employee.apellido}, ${employee.nombre}`}>
+                      {employee.apellido}, {employee.nombre} - {employee.puesto}
+                    </MenuItem>
+                  ))
               ) : (
+                // Para otros rubros, usar los sub-rubros estáticos
                 subRubrosByRubro[formData.rubro]?.map((subRubro) => (
                   <MenuItem key={subRubro} value={subRubro}>
                     {subRubro}
@@ -240,6 +264,28 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
             required
           />
         </Grid>
+
+        {/* Campo Concepto - Solo para SUELDOS */}
+        {formData.rubro === 'SUELDOS' && (
+          <Grid item xs={12} sm={6}>
+            <FormControl fullWidth required>
+              <InputLabel>Concepto</InputLabel>
+              <Select
+                value={formData.concepto}
+                label="Concepto"
+                onChange={(e) => handleSelectChange('concepto', e.target.value)}
+              >
+                <MenuItem value="sueldo">Sueldo</MenuItem>
+                <MenuItem value="adelanto">Adelanto</MenuItem>
+                <MenuItem value="hora_extra">Hora Extra</MenuItem>
+                <MenuItem value="aguinaldo">Aguinaldo</MenuItem>
+                <MenuItem value="bonus">Bonus</MenuItem>
+                <MenuItem value="otro">Otro</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+        )}
+
         <Grid item xs={12} sm={6}>
           <FormControl fullWidth required>
             <InputLabel>Banco</InputLabel>
