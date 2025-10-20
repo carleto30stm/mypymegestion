@@ -1,16 +1,27 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
+import DiagnosticPage from './src/pages/DiagnosticPage';
 
-// Debug simple - solo mostrar que React funciona
-const SimpleApp = () => {
-  const backendUrl = (import.meta as any).env?.VITE_BACKEND_URL || 'No configurada';
-  
+const theme = createTheme({
+  palette: {
+    mode: 'light',
+    primary: {
+      main: '#1976d2',
+    },
+    secondary: {
+      main: '#dc004e',
+    },
+  },
+});
+
+const DiagnosticApp = () => {
   return (
-    <div style={{ padding: '20px', fontFamily: 'Arial' }}>
-      <h1>🚀 React está funcionando!</h1>
-      <p>Backend URL: {backendUrl}</p>
-      <p>Timestamp: {new Date().toISOString()}</p>
-    </div>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <DiagnosticPage />
+    </ThemeProvider>
   );
 };
 
@@ -22,7 +33,7 @@ if (!rootElement) {
   console.log("✅ Elemento root encontrado, montando React...");
   try {
     const root = ReactDOM.createRoot(rootElement);
-    root.render(<SimpleApp />);
+    root.render(<DiagnosticApp />);
     console.log("✅ React montado exitosamente");
   } catch (error) {
     console.error("❌ Error al montar React:", error);
