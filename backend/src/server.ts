@@ -12,6 +12,12 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Middleware de logging para debug
+app.use((req, res, next) => {
+  console.log(`🔥 [${new Date().toISOString()}] ${req.method} ${req.path} - Origin: ${req.headers.origin || 'No origin'}`);
+  next();
+});
+
 // Conectar a la base de datos y arrancar el servidor solo si la conexión es exitosa
 const start = async () => {
   try {
@@ -40,6 +46,48 @@ const start = async () => {
       });
     });
 
+    // DEBUG ENDPOINTS - TEMPORALES
+    app.get('/api/debug/test', (req, res) => {
+      console.log('🔵 [DEBUG] Endpoint /api/debug/test llamado');
+      res.json({ 
+        message: 'Backend funcionando correctamente!',
+        timestamp: new Date().toISOString(),
+        cors: req.headers.origin || 'No origin header',
+        environment: {
+          NODE_ENV: process.env.NODE_ENV,
+          PORT: process.env.PORT,
+          MONGODB_CONNECTED: conn?.connection.readyState === 1,
+          DATABASE_NAME: conn?.connection.name,
+          CORS_ORIGIN: process.env.CORS_ORIGIN
+        }
+      });
+    });
+
+    app.get('/api/debug/gastos', (req, res) => {
+      console.log('🔵 [DEBUG] Endpoint /api/debug/gastos llamado');
+      res.json({ 
+        message: 'Ruta de gastos accesible',
+        gastos: [
+          { id: 1, descripcion: 'Gasto de prueba', monto: 100 },
+          { id: 2, descripcion: 'Otro gasto', monto: 200 }
+        ]
+      });
+    });
+
+    // DEBUG LOGIN - SIN JWT TEMPORALMENTE
+    app.post('/api/debug/login', (req, res) => {
+      console.log('🔵 [DEBUG] Login intentado:', req.body);
+      res.json({
+        message: 'Login debug exitoso',
+        user: {
+          id: '12345',
+          username: 'admin',
+          userType: 'admin'
+        },
+        token: 'fake-token-for-debug'
+      });
+    });
+
     // Rutas de la API
     app.use('/api/auth', authRoutes);
     app.use('/api/gastos', gastosRoutes);
@@ -50,6 +98,12 @@ const start = async () => {
       console.log(`🚀 Servidor corriendo en puerto ${PORT} (env: ${env})`);
       console.log(`[DB] Conectado a MongoDB: ${conn?.connection.host}/${conn?.connection.name}`);
       console.log(`[CORS] Origen permitido: ${process.env.CORS_ORIGIN || "http://localhost:5173"}`);
+      console.log(`[DEBUG] Variables de entorno:`);
+      console.log(`  - NODE_ENV: ${process.env.NODE_ENV}`);
+      console.log(`  - PORT: ${process.env.PORT}`);
+      console.log(`  - MONGODB_URI: ${process.env.MONGODB_URI ? 'SET' : 'NOT SET'}`);
+      console.log(`  - JWT_SECRET: ${process.env.JWT_SECRET ? 'SET' : 'NOT SET'}`);
+      console.log(`  - CORS_ORIGIN: ${process.env.CORS_ORIGIN || 'NOT SET'}`);
     });
   } catch (err) {
     console.error('[Server] No se pudo iniciar la aplicación debido a un error:', err);
