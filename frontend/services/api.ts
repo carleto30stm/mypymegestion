@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Configuración de la API base URL
-const baseURL = (import.meta as any).env?.VITE_BACKEND_URL || 'http://localhost:5001';
+const baseURL = (import.meta as any).env?.VITE_BACKEND_URL || 'http://localhost:3001';
 
 console.log('🔗 API Base URL:', baseURL);
 

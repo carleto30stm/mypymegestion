@@ -20,9 +20,33 @@ const start = async () => {
     // Crear usuario admin si no existe
     await seedAdminUser();
 
-    // Configuración de CORS
+    // Configuración de CORS para Railway
+    const allowedOrigins = [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      process.env.FRONTEND_URL, // URL del frontend en Railway
+      process.env.CORS_ORIGIN
+    ].filter(Boolean);
+
     const corsOptions = {
-      origin: process.env.CORS_ORIGIN || "http://localhost:5173",
+      origin: function (origin: string | undefined, callback: Function) {
+        // Permitir requests sin origin (apps móviles, Postman, etc.)
+        if (!origin) return callback(null, true);
+        
+        // En producción, verificar la lista de orígenes permitidos
+        if (process.env.NODE_ENV === 'production') {
+          if (allowedOrigins.some(allowedOrigin => 
+            allowedOrigin && (origin.includes(allowedOrigin) || 
+            origin.endsWith('.railway.app'))
+          )) {
+            return callback(null, true);
+          }
+          return callback(new Error('No permitido por CORS'));
+        }
+        
+        // En desarrollo, permitir todo
+        return callback(null, true);
+      },
       credentials: true,
       optionsSuccessStatus: 200
     };
