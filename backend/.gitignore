@@ -8,6 +8,11 @@ yarn-error.log*
 dist/
 build/
 
+# Docker files (not needed for Render native deployment)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
 # Compiled TypeScript files in src (should only be in dist)
 src/**/*.js
 src/**/*.d.ts

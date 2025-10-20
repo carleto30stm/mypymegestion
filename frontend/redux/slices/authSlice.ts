@@ -6,14 +6,24 @@ interface AuthState {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
+  isInitialized: boolean;
   status: 'idle' | 'loading' | 'succeeded' | 'failed';
   error: string | null;
 }
 
+// Función segura para acceder a localStorage
+const getTokenFromStorage = (): string | null => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('token');
+  }
+  return null;
+};
+
 const initialState: AuthState = {
   user: null,
-  token: localStorage.getItem('token'),
-  isAuthenticated: !!localStorage.getItem('token'),
+  token: getTokenFromStorage(),
+  isAuthenticated: !!getTokenFromStorage(),
+  isInitialized: false,
   status: 'idle',
   error: null,
 };
@@ -35,11 +45,17 @@ const authSlice = createSlice({
   name: 'auth',
   initialState,
   reducers: {
+    initializeAuth: (state) => {
+      state.isInitialized = true;
+    },
     logout: (state) => {
       state.user = null;
       state.token = null;
       state.isAuthenticated = false;
-      localStorage.removeItem('token');
+      state.isInitialized = true;
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('token');
+      }
     },
   },
   extraReducers: (builder) => {
@@ -64,6 +80,6 @@ const authSlice = createSlice({
   },
 });
 
-export const { logout } = authSlice.actions;
+export const { initializeAuth, logout } = authSlice.actions;
 
 export default authSlice.reducer;
