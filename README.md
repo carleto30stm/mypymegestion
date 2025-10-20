@@ -74,7 +74,7 @@ NODE_ENV=production
 
 **Frontend (.env)**:
 ```env
-VITE_API_URL=https://tu-backend.render.com
+VITE_BACKEND_URL=https://tu-backend.render.com
 ```
 
 ### Stack de Deployment
