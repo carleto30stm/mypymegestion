@@ -65,9 +65,9 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
         return true;
       }
       
-      // Si tiene fechaStandBy, solo se incluye cuando sea hoy
+      // Si tiene fechaStandBy, solo se incluye cuando la fecha StandBy sea hoy o anterior
       const fechaStandBy = new Date(gasto.fechaStandBy).toISOString().split('T')[0];
-      return fechaStandBy === today;
+      return fechaStandBy <= today; // Cambio: <= en lugar de ===
     });
 
     // Luego aplicar filtro de fecha según el tipo
@@ -336,7 +336,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
           �️ <strong>Filtro:</strong> {filterType === 'total' ? 'Histórico completo' : `Mes de ${availableMonths.find(m => m.value === selectedMonth)?.label}`}
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-          �📅 <strong>Lógica StandBy:</strong> Solo se suman cuando fechaStandBy = hoy ({today})
+          📅 <strong>Lógica StandBy:</strong> Solo se suman cuando fechaStandBy ≤ hoy ({today})
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
           💰 <strong>Cálculo:</strong> Saldo = Entradas - Salidas

@@ -125,9 +125,9 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
         return true;
       }
       
-      // Si tiene fechaStandBy, solo se incluye cuando sea hoy
+      // Si tiene fechaStandBy, solo se incluye cuando la fecha StandBy sea hoy o anterior
       const fechaStandBy = new Date(gasto.fechaStandBy).toISOString().split('T')[0];
-      return fechaStandBy === today;
+      return fechaStandBy <= today; // Cambio: <= en lugar de ===
     });
 
     // Luego aplicar filtro de fecha según el tipo
