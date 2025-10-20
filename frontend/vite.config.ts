@@ -9,17 +9,10 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     build: {
-      // Configuraciones específicas para Vercel
-      target: 'es2015', // Compatible con navegadores más antiguos
+      // Configuración mínima para Vercel
       outDir: 'dist',
-      assetsDir: 'assets',
-      sourcemap: false, // Desactivar sourcemaps para reducir tamaño
-      minify: 'esbuild', // Usar esbuild para minificación (más rápido)
-      rollupOptions: {
-        output: {
-          manualChunks: undefined, // No dividir en chunks automáticamente
-        }
-      }
+      sourcemap: false,
+      minify: false, // Sin minificación para debug
     },
     server: {
       proxy: {
