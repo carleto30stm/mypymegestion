@@ -10,10 +10,18 @@ interface AuthState {
   error: string | null;
 }
 
+// Función segura para acceder a localStorage
+const getTokenFromStorage = (): string | null => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('token');
+  }
+  return null;
+};
+
 const initialState: AuthState = {
   user: null,
-  token: localStorage.getItem('token'),
-  isAuthenticated: !!localStorage.getItem('token'),
+  token: getTokenFromStorage(),
+  isAuthenticated: !!getTokenFromStorage(),
   status: 'idle',
   error: null,
 };
@@ -23,7 +31,9 @@ export const login = createAsyncThunk(
   async (credentials: { username: string; password: string }, { rejectWithValue }) => {
     try {
       const response = await api.post('/login', credentials);
-      localStorage.setItem('token', response.data.token);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('token', response.data.token);
+      }
       return response.data;
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.message || 'Login failed');
@@ -39,7 +49,9 @@ const authSlice = createSlice({
       state.user = null;
       state.token = null;
       state.isAuthenticated = false;
-      localStorage.removeItem('token');
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('token');
+      }
     },
   },
   extraReducers: (builder) => {
