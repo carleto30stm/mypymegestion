@@ -26,9 +26,27 @@ const start = async () => {
     // Crear usuario admin si no existe
     await seedAdminUser();
 
-    // Configuración de CORS
+    // Configuración de CORS - permitir múltiples orígenes para Vercel
+    const allowedOrigins = [
+      "http://localhost:5173", // desarrollo local
+      "https://mypymegestion.vercel.app", // URL principal de Vercel
+      "https://mypymegestion-git-main-carleto30stms-projects.vercel.app", // URL con branch
+      process.env.CORS_ORIGIN // origen personalizado si está definido
+    ].filter(Boolean); // eliminar valores undefined
+
     const corsOptions = {
-      origin: process.env.CORS_ORIGIN || "http://localhost:5173",
+      origin: function (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) {
+        // Permitir requests sin origin (móviles, Postman, etc.)
+        if (!origin) return callback(null, true);
+        
+        // Verificar si el origin está en la lista permitida o es un subdomain de vercel
+        if (allowedOrigins.indexOf(origin) !== -1 || origin.includes('.vercel.app')) {
+          callback(null, true);
+        } else {
+          console.log('🚫 [CORS] Origin no permitido:', origin);
+          callback(new Error('No permitido por CORS'));
+        }
+      },
       credentials: true,
       optionsSuccessStatus: 200
     };
