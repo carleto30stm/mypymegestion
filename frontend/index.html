@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestor de Gastos - Funcionando</title>
+    <title>Gestor de Gastos - Test React CDN</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -67,7 +70,8 @@
     </style>
 </head>
 <body>
-    <div class="container">
+    <div id="root"></div>
+    <div class="container" style="display:none;">
         <h1>🚀 Gestor de Gastos</h1>
         
         <div class="success">
@@ -92,45 +96,89 @@
         </div>
     </div>
 
-    <script>
-        // Información básica
-        document.getElementById('currentUrl').textContent = window.location.href;
-        document.getElementById('currentDate').textContent = new Date().toLocaleString();
+    <script type="text/babel">
+        const { useState, useEffect } = React;
         
-        // Test del backend
-        async function testBackend() {
-            const resultDiv = document.getElementById('backendResult');
-            resultDiv.style.display = 'block';
-            resultDiv.innerHTML = '🔄 Probando conexión...';
-            resultDiv.style.background = '#fff3cd';
+        const TestApp = () => {
+            const [backendStatus, setBackendStatus] = useState('🔄 No probado');
+            const [backendData, setBackendData] = useState(null);
             
-            try {
-                const response = await fetch('https://mypymegestion.onrender.com/api/debug/test');
+            const testBackend = async () => {
+                setBackendStatus('🔄 Probando...');
+                setBackendData(null);
                 
-                if (response.ok) {
-                    const data = await response.json();
-                    resultDiv.innerHTML = `
-                        <strong>✅ Backend conectado!</strong><br>
-                        Mensaje: ${data.message}<br>
-                        Timestamp: ${data.timestamp}<br>
-                        MongoDB: ${data.environment.MONGODB_CONNECTED ? '✅ Conectada' : '❌ Desconectada'}
-                    `;
-                    resultDiv.style.background = '#d4edda';
-                    resultDiv.style.color = '#155724';
-                } else {
-                    throw new Error(`HTTP ${response.status}`);
+                try {
+                    const response = await fetch('https://mypymegestion.onrender.com/api/debug/test');
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        setBackendStatus('✅ Backend conectado!');
+                        setBackendData(data);
+                    } else {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                } catch (error) {
+                    setBackendStatus(`❌ Error: ${error.message}`);
+                    setBackendData(null);
                 }
-            } catch (error) {
-                resultDiv.innerHTML = `
-                    <strong>❌ Error de conexión</strong><br>
-                    ${error.message}
-                `;
-                resultDiv.style.background = '#f8d7da';
-                resultDiv.style.color = '#721c24';
-            }
-        }
+            };
+            
+            return (
+                <div className="container">
+                    <h1>🚀 Gestor de Gastos - React CDN Test</h1>
+                    
+                    <div className="success">
+                        <h3>✅ React funcionando desde CDN</h3>
+                        <p>Esta página usa React directamente desde CDN sin bundle de Vite</p>
+                        <p><strong>URL:</strong> {window.location.href}</p>
+                        <p><strong>Fecha:</strong> {new Date().toLocaleString()}</p>
+                    </div>
+                    
+                    <div className="backend-test">
+                        <h3>🔗 Test de Backend</h3>
+                        <p>Estado: {backendStatus}</p>
+                        <button onClick={testBackend}>Probar Backend</button>
+                        {backendData && (
+                            <div style={{marginTop: '10px', padding: '10px', background: '#f8f9fa', borderRadius: '4px'}}>
+                                <strong>Respuesta del Backend:</strong>
+                                <pre>{JSON.stringify(backendData, null, 2)}</pre>
+                            </div>
+                        )}
+                    </div>
+                    
+                    <div className="info">
+                        <h3>📊 Diagnóstico</h3>
+                        <p>✅ HTML estático: Funciona</p>
+                        <p>✅ JavaScript vanilla: Funciona</p>
+                        <p>✅ React desde CDN: {React ? 'Funciona' : 'Falla'}</p>
+                        <p>❌ Bundle de Vite: Problema identificado</p>
+                    </div>
+                </div>
+            );
+        };
         
-        console.log('Aplicación cargada exitosamente');
+        // Montar React
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<TestApp />);
+        
+        console.log('React CDN app cargada exitosamente');
+    </script>
+    
+    <script>
+        // Fallback en caso de que React no cargue
+        setTimeout(() => {
+            const rootDiv = document.getElementById('root');
+            if (!rootDiv.hasChildNodes()) {
+                rootDiv.innerHTML = `
+                    <div class="container">
+                        <h1>❌ React CDN falló</h1>
+                        <p>React no se pudo cargar desde CDN</p>
+                        <p>URL: ${window.location.href}</p>
+                        <p>Fecha: ${new Date().toLocaleString()}</p>
+                    </div>
+                `;
+            }
+        }, 3000);
     </script>
 </body>
 </html>
