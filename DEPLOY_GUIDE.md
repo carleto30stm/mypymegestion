@@ -75,7 +75,7 @@ CORS_ORIGIN=https://tu-app.vercel.app
 ### 3.1 Crear .env.local
 En el directorio `frontend/`, crear `.env.local`:
 ```bash
-VITE_API_URL=https://tu-app.onrender.com
+VITE_BACKEND_URL=https://tu-app.onrender.com
 ```
 
 ### 3.2 Desplegar en Vercel
@@ -91,7 +91,7 @@ En el dashboard de Vercel:
 1. Ir a Settings > Environment Variables
 2. Agregar:
    ```
-   VITE_API_URL = https://tu-app.onrender.com
+   VITE_BACKEND_URL = https://tu-app.onrender.com
    ```
 
 ### 3.4 Desplegar
@@ -159,7 +159,7 @@ npm run build
 
 ### Error de CORS
 - Verificar que `CORS_ORIGIN` en Render apunte a la URL de Vercel
-- Verificar que `VITE_API_URL` en Vercel apunte a la URL de Render
+- Verificar que `VITE_BACKEND_URL` en Vercel apunte a la URL de Render
 
 ### Error de Base de Datos
 - Verificar connection string en MongoDB Atlas
