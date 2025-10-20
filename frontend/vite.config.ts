@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => {
       proxy: {
         // Proxy requests starting with /api to the backend dev server
         '/api': {
-          target: env.VITE_BACKEND_URL || 'http://localhost:5001',
+          target: env.VITE_BACKEND_URL || '/mypymegestion',
           changeOrigin: true,
           secure: false,
           rewrite: (path) => path.replace(/^\/api/, '/api'),
