@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Configuración de la API base URL
-const baseURL = (import.meta as any).env?.VITE_BACKEND_URL || 'http://localhost:5001';
+const baseURL = (import.meta as any).env?.VITE_BACKEND_URL || 'http://localhost:3001';
 
 console.log('🔗 API Base URL:', baseURL);
 
@@ -34,6 +34,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       // Token expirado o no válido
       localStorage.removeItem('token');
+      // Con BrowserRouter, usar path directo
       window.location.href = '/login';
     }
     return Promise.reject(error);

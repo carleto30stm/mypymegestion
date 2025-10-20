@@ -16,7 +16,7 @@ const initialState: GastosState = {
 
 export const fetchGastos = createAsyncThunk('gastos/fetchGastos', async (_, { rejectWithValue }) => {
   try {
-    const response = await api.get('/gastos');
+    const response = await api.get('/api/gastos');
     return response.data;
   } catch (error: any) {
     return rejectWithValue(error.response?.data?.message || 'Failed to fetch expenses');
@@ -25,7 +25,7 @@ export const fetchGastos = createAsyncThunk('gastos/fetchGastos', async (_, { re
 
 export const createGasto = createAsyncThunk('gastos/createGasto', async (newGasto: Omit<Gasto, '_id'>, { rejectWithValue }) => {
   try {
-    const response = await api.post('/gastos', newGasto);
+    const response = await api.post('/api/gastos', newGasto);
     return response.data;
   } catch (error: any) {
     return rejectWithValue(error.response?.data?.message || 'Failed to create expense');
@@ -35,7 +35,7 @@ export const createGasto = createAsyncThunk('gastos/createGasto', async (newGast
 export const updateGasto = createAsyncThunk('gastos/updateGasto', async (gastoToUpdate: Gasto, { rejectWithValue }) => {
     try {
       const { _id, ...gastoData } = gastoToUpdate;
-      const response = await api.put(`/gastos/${_id}`, gastoData);
+      const response = await api.put(`/api/gastos/${_id}`, gastoData);
       return response.data;
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.message || 'Failed to update expense');
@@ -45,7 +45,7 @@ export const updateGasto = createAsyncThunk('gastos/updateGasto', async (gastoTo
 
 export const deleteGasto = createAsyncThunk('gastos/deleteGasto', async (gastoId: string, { rejectWithValue }) => {
     try {
-      await api.delete(`/gastos/${gastoId}`);
+      await api.delete(`/api/gastos/${gastoId}`);
       return gastoId;
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.message || 'Failed to delete expense');
