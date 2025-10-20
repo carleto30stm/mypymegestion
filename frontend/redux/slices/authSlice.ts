@@ -6,6 +6,7 @@ interface AuthState {
   user: User | null;
   token: string | null;
   isAuthenticated: boolean;
+  isInitialized: boolean;
   status: 'idle' | 'loading' | 'succeeded' | 'failed';
   error: string | null;
 }
@@ -22,6 +23,7 @@ const initialState: AuthState = {
   user: null,
   token: getTokenFromStorage(),
   isAuthenticated: !!getTokenFromStorage(),
+  isInitialized: false,
   status: 'idle',
   error: null,
 };
@@ -45,10 +47,14 @@ const authSlice = createSlice({
   name: 'auth',
   initialState,
   reducers: {
+    initializeAuth: (state) => {
+      state.isInitialized = true;
+    },
     logout: (state) => {
       state.user = null;
       state.token = null;
       state.isAuthenticated = false;
+      state.isInitialized = true;
       if (typeof window !== 'undefined') {
         localStorage.removeItem('token');
       }
@@ -76,6 +82,6 @@ const authSlice = createSlice({
   },
 });
 
-export const { logout } = authSlice.actions;
+export const { initializeAuth, logout } = authSlice.actions;
 
 export default authSlice.reducer;
