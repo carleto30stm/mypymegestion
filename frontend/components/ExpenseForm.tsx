@@ -5,6 +5,7 @@ import { createGasto, updateGasto } from '../redux/slices/gastosSlice';
 import { fetchEmployees } from '../redux/slices/employeesSlice';
 import { Gasto, subRubrosByRubro } from '../types';
 import { Grid, TextField, Button, Box, MenuItem, Select, InputLabel, FormControl, Alert } from '@mui/material';
+import { formatCurrency, parseCurrency } from '../utils/formatters';
 
 interface ExpenseFormProps {
   onClose: () => void;
@@ -15,6 +16,26 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
   const dispatch = useDispatch<AppDispatch>();
   const { items: employees } = useSelector((state: RootState) => state.employees);
 
+  // Función para formatear el número mientras se escribe
+  const formatNumberInput = (value: string): string => {
+    // Remover todo excepto números
+    const numbers = value.replace(/[^\d]/g, '');
+    
+    if (numbers === '') return '';
+    
+    // Convertir a número y formatear con puntos
+    const num = parseInt(numbers, 10);
+    return num.toLocaleString('es-AR');
+  };
+
+  // Función para obtener el valor numérico desde el formato visual
+  const getNumericValue = (formattedValue: string): number => {
+    if (!formattedValue) return 0;
+    // Remover puntos y convertir a número
+    const cleanValue = formattedValue.replace(/\./g, '');
+    return parseInt(cleanValue, 10) || 0;
+  };
+
   const [formData, setFormData] = useState({
     fecha: '',
     rubro: '',
@@ -22,6 +43,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
     medioDePago: '',
     clientes: '',
     detalleGastos: '',
+    tipoOperacion: 'salida',
     concepto: 'sueldo',
     comentario: '',
     fechaStandBy: '',
@@ -29,6 +51,10 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
     salida: '',
     banco: '',
   });
+
+  // Estados separados para los valores formateados de entrada y salida
+  const [entradaFormatted, setEntradaFormatted] = useState('');
+  const [salidaFormatted, setSalidaFormatted] = useState('');
 
   const [validationError, setValidationError] = useState('');
 
@@ -55,6 +81,9 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
 
   useEffect(() => {
     if (gastoToEdit) {
+      // Determinar tipoOperacion basado en los valores existentes
+      const tipoOperacion = (gastoToEdit.entrada && gastoToEdit.entrada > 0) ? 'entrada' : 'salida';
+      
       setFormData({
         fecha: gastoToEdit.fecha ? new Date(gastoToEdit.fecha).toISOString().split('T')[0] : '',
         rubro: gastoToEdit.rubro || '',
@@ -62,6 +91,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
         medioDePago: gastoToEdit.medioDePago || '',
         clientes: gastoToEdit.clientes || '',
         detalleGastos: gastoToEdit.detalleGastos || '',
+        tipoOperacion: gastoToEdit.tipoOperacion || tipoOperacion,
         concepto: gastoToEdit.concepto || 'sueldo',
         comentario: gastoToEdit.comentario || '',
         fechaStandBy: gastoToEdit.fechaStandBy ? new Date(gastoToEdit.fechaStandBy).toISOString().split('T')[0] : '',
@@ -69,6 +99,20 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
         salida: gastoToEdit.salida?.toString() || '',
         banco: gastoToEdit.banco || '',
       });
+      
+      // Formatear los valores de entrada y salida
+      if (gastoToEdit.entrada && gastoToEdit.entrada > 0) {
+        setEntradaFormatted(gastoToEdit.entrada.toLocaleString('es-AR'));
+      } else {
+        setEntradaFormatted('');
+      }
+      
+      if (gastoToEdit.salida && gastoToEdit.salida > 0) {
+        setSalidaFormatted(gastoToEdit.salida.toLocaleString('es-AR'));
+      } else {
+        setSalidaFormatted('');
+      }
+      
       // Limpiar error de validación al cargar un gasto para editar
       setValidationError('');
     }
@@ -76,19 +120,46 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type } = e.target;
-    const newFormData = {
+    
+    // Manejar campos de entrada y salida con formato especial
+    if (name === 'entrada') {
+      const formatted = formatNumberInput(value);
+      setEntradaFormatted(formatted);
+      const numericValue = getNumericValue(formatted);
+      setFormData(prev => ({ ...prev, entrada: numericValue.toString() }));
+      return;
+    }
+    
+    if (name === 'salida') {
+      const formatted = formatNumberInput(value);
+      setSalidaFormatted(formatted);
+      const numericValue = getNumericValue(formatted);
+      setFormData(prev => ({ ...prev, salida: numericValue.toString() }));
+      return;
+    }
+    
+    // Para otros campos, comportamiento normal
+    let newFormData = {
       ...formData,
       [name]: type === 'number' ? (value === '' ? '' : Number(value)) : value,
     };
     
+    // Si cambia el tipo de operación, limpiar los campos de monto correspondientes
+    if (name === 'tipoOperacion') {
+      if (value === 'entrada') {
+        newFormData.salida = '';
+        setSalidaFormatted('');
+      } else if (value === 'salida') {
+        newFormData.entrada = '';
+        setEntradaFormatted('');
+      }
+    }
+    
     setFormData(newFormData);
 
-    // Validar entrada/salida cuando cambien estos campos
-    if (name === 'entrada' || name === 'salida') {
-      const entrada = name === 'entrada' ? value : formData.entrada;
-      const salida = name === 'salida' ? value : formData.salida;
-      const error = validateEntradaSalida(entrada.toString(), salida.toString());
-      setValidationError(error);
+    // Limpiar error de validación cuando cambien los campos relevantes
+    if (name === 'entrada' || name === 'salida' || name === 'tipoOperacion') {
+      setValidationError('');
     }
   };
 
@@ -104,6 +175,21 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
         rubro: value, 
         subRubro: '' 
       }));
+    } else if (name === 'tipoOperacion') {
+      // Si cambia el tipo de operación, limpiar los campos de monto correspondientes
+      const updatedFormData = {
+        ...formData,
+        tipoOperacion: value,
+      };
+      
+      if (value === 'entrada') {
+        updatedFormData.salida = '';
+      } else if (value === 'salida') {
+        updatedFormData.entrada = '';
+      }
+      
+      setFormData(updatedFormData);
+      setValidationError('');
     } else {
       setFormData(prev => ({ 
         ...prev, 
@@ -122,27 +208,35 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
     const entradaValue = Number(formData.entrada) || 0;
     const salidaValue = Number(formData.salida) || 0;
 
-    // Validar entrada y salida usando la función de validación
-    const error = validateEntradaSalida(formData.entrada.toString(), formData.salida.toString());
-    if (error) {
-      setValidationError(error);
-      return;
+    // Validar según el tipo de operación
+    if (formData.tipoOperacion === 'entrada') {
+      if (entradaValue <= 0) {
+        setValidationError('Debe ingresar un monto válido para la entrada');
+        return;
+      }
+    } else if (formData.tipoOperacion === 'salida') {
+      if (salidaValue <= 0) {
+        setValidationError('Debe ingresar un monto válido para la salida');
+        return;
+      }
     }
 
-    // Verificar que al menos uno tenga valor mayor a 0
-    if (entradaValue === 0 && salidaValue === 0) {
-      setValidationError("Debes registrar al menos una entrada o una salida. No pueden estar ambos en 0.");
+    // Si es SUELDOS, validar que tenga concepto
+    if (formData.rubro === 'SUELDOS' && !formData.concepto) {
+      alert("Para gastos de SUELDOS debe seleccionar un concepto.");
       return;
     }
     
+    // Preparar payload según el tipo de operación
     const payload = {
       ...formData,
       rubro: formData.rubro as any,
       subRubro: formData.subRubro as any,
       medioDePago: formData.medioDePago as any,
       banco: formData.banco as any,
-      entrada: entradaValue,
-      salida: salidaValue,
+      tipoOperacion: formData.tipoOperacion,
+      entrada: formData.tipoOperacion === 'entrada' ? entradaValue : 0,
+      salida: formData.tipoOperacion === 'salida' ? salidaValue : 0,
     };
     
     if (gastoToEdit) {
@@ -177,6 +271,21 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
             required
             InputLabelProps={{ shrink: true }}
           />
+        </Grid>
+        
+        {/* Tipo de Operación */}
+        <Grid item xs={12} sm={6}>
+          <FormControl fullWidth required>
+            <InputLabel>Tipo de Operación</InputLabel>
+            <Select
+              value={formData.tipoOperacion}
+              label="Tipo de Operación"
+              onChange={(e) => handleSelectChange('tipoOperacion', e.target.value)}
+            >
+              <MenuItem value="entrada">Entrada (Ingresos)</MenuItem>
+              <MenuItem value="salida">Salida (Gastos)</MenuItem>
+            </Select>
+          </FormControl>
         </Grid>
 
         {/* Rubro */}
@@ -242,15 +351,15 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
               label="Medio de Pago"
               onChange={(e) => handleSelectChange('medioDePago', e.target.value)}
             >
-              <MenuItem value="Mov. Banco">Mov. Banco</MenuItem>
-              <MenuItem value="reserva">reserva</MenuItem>
-              <MenuItem value="CR.F">CR.F</MenuItem>
-              <MenuItem value="DLL.B">DLL.B</MenuItem>
+              <MenuItem value="Efectivo">Efectivo</MenuItem>
+              <MenuItem value="Transferencia">Transferencia</MenuItem>
+              <MenuItem value="Tarjeta Débito">Tarjeta Débito</MenuItem>
+              <MenuItem value="Tarjeta Crédito">Tarjeta Crédito</MenuItem>
+              <MenuItem value="Cheque Propio">Cheque Propio</MenuItem>
+              <MenuItem value="Cheque Tercero">Cheque Tercero</MenuItem>
               <MenuItem value="FCI">FCI</MenuItem>
               <MenuItem value="FT">FT</MenuItem>
-              <MenuItem value="Visa">Visa</MenuItem>
-              <MenuItem value="Amex">Amex</MenuItem>
-              <MenuItem value="otro">otro</MenuItem>
+              <MenuItem value="otro">Otro</MenuItem>
             </Select>
           </FormControl>
         </Grid>
@@ -297,9 +406,9 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
               <MenuItem value="SANTANDER">SANTANDER</MenuItem>
               <MenuItem value="EFECTIVO">EFECTIVO</MenuItem>
               <MenuItem value="PROVINCIA">PROVINCIA</MenuItem>
+              <MenuItem value="RESERVA">RESERVA</MenuItem>
               <MenuItem value="FCI">FCI</MenuItem>
-              <MenuItem value="CHEQUES 3ro">CHEQUES 3ro</MenuItem>
-              <MenuItem value="CHEQUE PRO.">CHEQUE PRO.</MenuItem>
+              <MenuItem value="OTROS">OTROS</MenuItem>
             </Select>
           </FormControl>
         </Grid>
@@ -347,31 +456,44 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
           </Grid>
         )}
 
-        <Grid item xs={12} sm={6}>
-          <TextField
-            name="entrada"
-            label="Entrada"
-            type="number"
-            value={formData.entrada}
-            onChange={handleInputChange}
-            fullWidth
-            error={!!validationError}
-            helperText={validationError && "Revisa entrada y salida"}
-          />
-        </Grid>
+        {/* Campo Entrada - Solo si tipoOperacion es 'entrada' */}
+        {formData.tipoOperacion === 'entrada' && (
+          <Grid item xs={12} sm={6}>
+            <TextField
+              name="entrada"
+              label="Entrada (Monto del Ingreso)"
+              type="text"
+              value={entradaFormatted}
+              onChange={handleInputChange}
+              fullWidth
+              required
+              placeholder="Ej: 100.000"
+              InputProps={{
+                startAdornment: <span style={{ marginRight: '8px' }}>$</span>,
+              }}
+            />
+          </Grid>
+        )}
 
-        <Grid item xs={12} sm={6}>
-          <TextField
-            name="salida"
-            label="Salida"
-            type="number"
-            value={formData.salida}
-            onChange={handleInputChange}
-            fullWidth
-            error={!!validationError}
-            helperText={validationError && "Revisa entrada y salida"}
-          />
-        </Grid>
+        {/* Campo Salida - Solo si tipoOperacion es 'salida' */}
+        {formData.tipoOperacion === 'salida' && (
+          <Grid item xs={12} sm={6}>
+            <TextField
+              name="salida"
+              label="Salida (Monto del Gasto)"
+              type="text"
+              value={salidaFormatted}
+              onChange={handleInputChange}
+              fullWidth
+              required
+              placeholder="Ej: 50.000"
+              InputProps={{
+                startAdornment: <span style={{ marginRight: '8px' }}>$</span>,
+              }}
+            />
+          </Grid>
+        )}
+
         {/* Botones */}
         <Grid item xs={12}>
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mt: 2 }}>

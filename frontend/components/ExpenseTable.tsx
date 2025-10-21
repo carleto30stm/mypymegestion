@@ -15,6 +15,7 @@ import {
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import ExpenseForm from './ExpenseForm';
+import { formatDate, formatCurrencyWithSymbol } from '../utils/formatters';
 
 interface ExpenseTableProps {
     isModalOpen: boolean;
@@ -61,28 +62,46 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
   const columns: GridColDef[] = [
     { field: 'fecha', headerName: 'Fecha', width: 120,
       valueFormatter: (value: string) => {
-        if (!value) return '';
-        // Parse the date and format it correctly to avoid timezone issues
-        const date = new Date(value);
-        return date.toLocaleDateString('es-ES', { timeZone: 'UTC' });
+        return formatDate(value);
       } },
     { field: 'rubro', headerName: 'Rubro', width: 150 },
     { field: 'subRubro', headerName: 'Sub-Rubro', width: 150 },
     { field: 'medioDePago', headerName: 'Medio de Pago', width: 140 },
     { field: 'clientes', headerName: 'Clientes', width: 160 },
     { field: 'detalleGastos', headerName: 'Detalle', flex: 1, minWidth: 200 },
-  { field: 'comentario', headerName: 'Comentario', width: 200 },
+    { field: 'comentario', headerName: 'Comentario', width: 200 },
     { field: 'fechaStandBy', headerName: 'Fecha StandBy', width: 140,
       valueFormatter: (value: string) => {
-        if (!value) return '';
-        // Parse the date and format it correctly to avoid timezone issues
-        const date = new Date(value);
-        return date.toLocaleDateString('es-ES', { timeZone: 'UTC' });
+        return formatDate(value);
       } },
+    { 
+      field: 'statusStandBy', 
+      headerName: 'Estado', 
+      width: 100,
+      renderCell: (params) => {
+        const gasto = params.row as Gasto;
+        if (!gasto.fechaStandBy) {
+          return <span style={{ color: '#2e7d32', fontWeight: 'bold' }}>✅ ACTIVO</span>;
+        }
+        
+        const fechaStandBy = new Date(gasto.fechaStandBy).toISOString().split('T')[0];
+        const isActive = fechaStandBy <= today;
+        
+        if (isActive) {
+          return <span style={{ color: '#2e7d32', fontWeight: 'bold' }}>✅ ACTIVO</span>;
+        } else {
+          return <span style={{ color: '#f57c00', fontWeight: 'bold' }}>⏳ STANDBY</span>;
+        }
+      }
+    },
     { field: 'entrada', headerName: 'Entrada', type: 'number', width: 130,
-      valueFormatter: (value: number) => typeof value === 'number' ? value.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' }) : '' },
+      valueFormatter: (value: number) => {
+        return typeof value === 'number' && value > 0 ? formatCurrencyWithSymbol(value) : '';
+      } },
     { field: 'salida', headerName: 'Salida', type: 'number', width: 130,
-      valueFormatter: (value: number) => typeof value === 'number' ? value.toLocaleString('es-AR', { style: 'currency', currency: 'ARS' }) : '' },
+      valueFormatter: (value: number) => {
+        return typeof value === 'number' && value > 0 ? formatCurrencyWithSymbol(value) : '';
+      } },
     { field: 'banco', headerName: 'Banco', width: 120},
   ];
 
@@ -116,26 +135,16 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
     });
   }
 
-  // Función para filtrar gastos según el tipo de filtro (misma lógica que BankSummary)
+  // Función para filtrar gastos según el tipo de filtro
   const getFilteredGastos = () => {
-    // Primero aplicar la lógica de StandBy
-    let gastosStandBy = gastos.filter(gasto => {
-      // Si no tiene fechaStandBy, se incluye normalmente
-      if (!gasto.fechaStandBy) {
-        return true;
-      }
-      
-      // Si tiene fechaStandBy, solo se incluye cuando la fecha StandBy sea hoy o anterior
-      const fechaStandBy = new Date(gasto.fechaStandBy).toISOString().split('T')[0];
-      return fechaStandBy <= today; // Cambio: <= en lugar de ===
-    });
-
-    // Luego aplicar filtro de fecha según el tipo
+    // CAMBIO: Ya NO filtramos por fechaStandBy aquí - mostramos TODOS los registros
+    // La lógica de StandBy solo aplicará en los cálculos (BankSummary)
+    
     if (filterType === 'total') {
-      return gastosStandBy;
+      return gastos; // Mostrar todos los gastos
     } else {
-      // Filtrar por mes seleccionado
-      return gastosStandBy.filter(gasto => {
+      // Filtrar solo por mes seleccionado
+      return gastos.filter(gasto => {
         const fechaGasto = new Date(gasto.fecha).toISOString().slice(0, 7); // YYYY-MM
         return fechaGasto === selectedMonth;
       });
@@ -153,6 +162,10 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
             
             <Typography variant="body2" color="text.secondary">
               Mostrando {gastosFiltered.length} de {gastos.length} registros
+            </Typography>
+            
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1, fontStyle: 'italic' }}>
+              💡 Los registros en STANDBY se muestran pero no se incluyen en cálculos hasta su fecha de activación
             </Typography>
         </Box>
         <DataGrid

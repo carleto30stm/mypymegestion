@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { AppDispatch, RootState } from '../redux/store';
 import { fetchEmployees } from '../redux/slices/employeesSlice';
 import {
@@ -15,13 +16,15 @@ import {
   MenuItem,
   Fab,
   Badge,
-  Grid
+  Grid,
+  Button
 } from '@mui/material';
 import {
   Add as AddIcon,
   People as PeopleIcon,
   AccountBalance as PayrollIcon,
-  Person as PersonIcon
+  Person as PersonIcon,
+  ArrowBack as BackIcon
 } from '@mui/icons-material';
 import EmployeeList from '../components/EmployeeList';
 import EmployeeForm from '../components/EmployeeForm';
@@ -50,6 +53,7 @@ function TabPanel({ children, value, index }: TabPanelProps) {
 
 const EmployeesPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
+  const navigate = useNavigate();
   const { items: employees, status, error } = useSelector((state: RootState) => state.employees);
   
   const [tabValue, setTabValue] = useState(0);
@@ -57,8 +61,11 @@ const EmployeesPage: React.FC = () => {
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   
   // Estado para filtros de nómina
-  const [payrollFilterType, setPayrollFilterType] = useState<'total' | 'month'>('total');
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
+  const [payrollFilterType, setPayrollFilterType] = useState<'total' | 'month'>('month');
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
 
   useEffect(() => {
     dispatch(fetchEmployees());
@@ -135,6 +142,14 @@ const EmployeesPage: React.FC = () => {
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Button
+            variant="outlined"
+            startIcon={<BackIcon />}
+            onClick={() => navigate('/dashboard')}
+            sx={{ mr: 2 }}
+          >
+            Volver al Dashboard
+          </Button>
           <PeopleIcon sx={{ fontSize: 40, color: 'primary.main' }} />
           <Box>
             <Typography variant="h4" component="h1" gutterBottom>

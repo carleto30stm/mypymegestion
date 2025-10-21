@@ -14,6 +14,7 @@ import {
   Button,
   CircularProgress
 } from '@mui/material';
+import { formatCurrency, formatCurrencyWithSymbol, formatDate } from '../utils/formatters';
 import { Download as DownloadIcon } from '@mui/icons-material';
 
 interface BankSummaryProps {
@@ -30,7 +31,7 @@ interface BankBalance {
 }
 
 // Lista de bancos disponibles
-const BANCOS = ['SANTANDER', 'EFECTIVO', 'PROVINCIA', 'FCI', 'CHEQUES 3ro', 'CHEQUE PRO.','RESERVA'];
+const BANCOS = ['SANTANDER', 'EFECTIVO', 'PROVINCIA', 'FCI','RESERVA'];
 
 const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) => {
   const { items: gastos } = useSelector((state: RootState) => state.gastos);
@@ -307,13 +308,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
     saldo: acc.saldo + bank.saldo
   }), { entradas: 0, salidas: 0, saldo: 0 });
 
-  const formatCurrency = (amount: number) => {
-    return amount.toLocaleString('es-AR', { 
-      style: 'currency', 
-      currency: 'ARS',
-      minimumFractionDigits: 2 
-    });
-  };
+
 
 
 
@@ -324,7 +319,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
           Resumen por Banco
         </Typography>
         <Typography variant="body2" color="text.secondary" gutterBottom>
-          Gastos activos + StandBy que vencen hoy ({new Date().toLocaleDateString('es-ES')})
+          Gastos activos + StandBy que vencen hoy ({formatDate(new Date())})
         </Typography>
         
         {/* Botón de descarga PDF - Solo para usuarios admin y oper_ad */}
@@ -355,7 +350,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
               : 'Histórico Completo'}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Generado el {new Date().toLocaleDateString('es-ES')} a las {new Date().toLocaleTimeString('es-ES')}
+            Generado el {formatDate(new Date())} a las {new Date().toLocaleTimeString('es-ES')}
           </Typography>
         </Box>
 
@@ -379,12 +374,12 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
                 </TableCell>
                 <TableCell align="right">
                   <Typography color="success.main">
-                    {formatCurrency(bank.entradas)}
+                    {formatCurrencyWithSymbol(bank.entradas)}
                   </Typography>
                 </TableCell>
                 <TableCell align="right">
                   <Typography color="error.main">
-                    {formatCurrency(bank.salidas)}
+                    {formatCurrencyWithSymbol(bank.salidas)}
                   </Typography>
                 </TableCell>
                 <TableCell align="right">
@@ -400,7 +395,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
                       fontSize: '0.875rem'
                     }}
                   >
-                    {formatCurrency(bank.saldo)}
+                    {formatCurrencyWithSymbol(bank.saldo)}
                   </Typography>
                 </TableCell>
               </TableRow>
@@ -414,12 +409,12 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
               </TableCell>
               <TableCell align="right">
                 <Typography variant="h6" color="success.main" fontWeight="bold">
-                  {formatCurrency(totales.entradas)}
+                  {formatCurrencyWithSymbol(totales.entradas)}
                 </Typography>
               </TableCell>
               <TableCell align="right">
                 <Typography variant="h6" color="error.main" fontWeight="bold">
-                  {formatCurrency(totales.salidas)}
+                  {formatCurrencyWithSymbol(totales.salidas)}
                 </Typography>
               </TableCell>
               <TableCell align="right">
@@ -434,7 +429,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
                     display: 'inline-block'
                   }}
                 >
-                  {formatCurrency(totales.saldo)}
+                  {formatCurrencyWithSymbol(totales.saldo)}
                 </Typography>
               </TableCell>
             </TableRow>

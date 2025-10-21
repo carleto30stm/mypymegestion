@@ -18,6 +18,7 @@ import {
 import {
   AccountBalance as PayrollIcon
 } from '@mui/icons-material';
+import { formatCurrency } from '../utils/formatters';
 
 interface EmployeePayrollProps {
   filterType: 'total' | 'month';
@@ -50,10 +51,20 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
       return sueldosGastos;
     } else {
       // Filtrar por mes seleccionado
-      return sueldosGastos.filter(gasto => {
+      const filteredByMonth = sueldosGastos.filter(gasto => {
         const fechaGasto = new Date(gasto.fecha).toISOString().slice(0, 7); // YYYY-MM
         return fechaGasto === selectedMonth;
       });
+      
+      // Log para depuración
+      console.log('🔍 Debug filtro de nómina:', {
+        selectedMonth,
+        totalSueldos: sueldosGastos.length,
+        filteredByMonth: filteredByMonth.length,
+        fechasDisponibles: [...new Set(sueldosGastos.map(g => new Date(g.fecha).toISOString().slice(0, 7)))]
+      });
+      
+      return filteredByMonth;
     }
   };
 
@@ -133,14 +144,6 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
     bonus: 0,
     saldoPendiente: 0 
   });
-
-  const formatCurrency = (amount: number) => {
-    return amount.toLocaleString('es-AR', { 
-      style: 'currency', 
-      currency: 'ARS',
-      minimumFractionDigits: 2 
-    });
-  };
 
   const getStatusChip = (saldoPendiente: number, sueldoBase: number) => {
     const percentage = (saldoPendiente / sueldoBase) * 100;

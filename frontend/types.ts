@@ -40,7 +40,7 @@ export const subRubrosByRubro: Record<string, string[]> = {
   'COBRO.VENTA': ['DEVOLUCION', 'COBRO', 'ADEUDADO', 'FLETE', 'COMISION', 'AJUSTE'],
   'PROOV.MATERIA.PRIMA': ['ALAMBRE INDUSTRIA', 'ALAMBRE RAUP', 'EMBALAJE', 'POLIESTIRENO', 'FUNDICION', 'PORTARRETRATOS', 'LLAVEROS Y PORTA', 'OTROS'],
   'PROOVMANO.DE.OBRA': ['PORTA RETRATOS', 'SIN/FINES', 'INYECCION DE PLASTICO', 'TRIANGULOS', 'ARGOLLAS', 'GALVANO CADENAS', 'GALVANO CABEZALES', 'ARMADORAS'],
-  'BANCO': ['MOVIMIENTOS AJUSTE', 'MOV.BANC', 'AJUSTE DE BANCO'],
+  'BANCO': ['MOVIMIENTOS AJUSTE', 'MOV.BANC', 'AJUSTE DE BANCO','AJUSTE CAJA','OTROS'],
   'GASTOS.ADMIN': ['MANT.CTA', 'B.PERSONALES', 'CONVENIO MULT','IMP.DEB.CRED','HONORARIOS MARKETING','AFIP','SIRCREB'],
   'AFIT': ['IVA'],
   'MANT.MAQ': ['MECANICO', 'MATERIALES', 'TERNERO','MAQ. NUEVA','OTROS'],
@@ -54,13 +54,14 @@ export interface Gasto {
   rubro: 'COBRO.VENTA' | 'SERVICIOS' | 'PROOV.MATERIA.PRIMA' | 'PROOVMANO.DE.OBRA' | 'BANCO' | 'AFIT' | 'GASTOS.ADMIN' | 'MANT.MAQ' | 'SUELDOS' | 'MOVILIDAD';
   subRubro: string;
   // Allow empty string as a valid initial value for Select components
-  medioDePago: '' | 'Mov. Banco' | 'reserva' | 'CR.F' | 'DLL.B' | 'FCI' | 'FT' | 'Visa' | 'Amex' | 'otro';
+  medioDePago: '' | 'Mov. Banco' | 'Efectivo' | 'Transferencia' | 'Tarjeta Débito' | 'Tarjeta Crédito' | 'Cheque Propio' | 'Cheque Tercero' | 'FCI' | 'FT' | 'otro';
   clientes: string;
   detalleGastos: string;
+  tipoOperacion: 'entrada' | 'salida';
   concepto?: 'sueldo' | 'adelanto' | 'hora_extra' | 'aguinaldo' | 'bonus' | 'otro';
   comentario: string;
   fechaStandBy?: string;
   entrada?: number;
   salida?: number;
-  banco: 'SANTANDER' | 'EFECTIVO' | 'PROVINCIA' | 'FCI' | 'CHEQUES 3ro' | 'CHEQUE PRO.';
+  banco: 'SANTANDER' | 'EFECTIVO' | 'PROVINCIA' | 'RESERVA' | 'FCI' | 'OTROS';
 }

@@ -6,7 +6,7 @@ const subRubrosByRubro: Record<string, string[]> = {
   'COBRO.VENTA': ['DEVOLUCION', 'COBRO', 'ADEUDADO', 'FLETE', 'COMISION', 'AJUSTE'],
   'PROOV.MATERIA.PRIMA': ['ALAMBRE INDUSTRIA', 'ALAMBRE RAUP', 'EMBALAJE', 'POLIESTIRENO', 'FUNDICION', 'PORTARRETRATOS', 'LLAVEROS Y PORTA', 'OTROS'],
   'PROOVMANO.DE.OBRA': ['PORTA RETRATOS', 'SIN/FINES', 'INYECCION DE PLASTICO', 'TRIANGULOS', 'ARGOLLAS', 'GALVANO CADENAS', 'GALVANO CABEZALES', 'ARMADORAS'],
-  'BANCO': ['MOVIMIENTOS AJUSTE', 'MOV.BANC', 'AJUSTE DE BANCO'],
+  'BANCO': ['MOVIMIENTOS AJUSTE', 'MOV.BANC', 'AJUSTE DE BANCO','AJUSTE CAJA','OTROS'],
   'AFIT': ['IVA'],
   'GASTOS.ADMIN': ['MANT.CTA', 'B.PERSONALES', 'CONVENIO MULT','IMP.DEB.CRED','HONORARIOS MARKETING','AFIP','SIRCREB'],
   'MANT.MAQ': ['MECANICO', 'MATERIALES', 'TERNERO','MAQ. NUEVA','OTROS'],
@@ -39,9 +39,29 @@ const gastoSchema = new mongoose.Schema({
       message: 'SubRubro no válido para el rubro seleccionado'
     }
   },
-  medioDePago: { type: String, enum: ['Mov. Banco', 'reserva', 'CR.F', 'DLL.B', 'FCI', 'FT', 'Visa', 'Amex', 'otro'] },
+  medioDePago: { 
+    type: String, 
+    enum: [
+      'Mov. Banco', 
+      'Efectivo', 
+      'Transferencia',
+      'Tarjeta Débito',
+      'Tarjeta Crédito',
+      'Cheque Propio',
+      'Cheque Tercero',
+      'FCI', 
+      'FT',
+      'otro'
+    ] 
+  },
   clientes: { type: String },
   detalleGastos: { type: String, required: true },
+  tipoOperacion: {
+    type: String,
+    required: true,
+    enum: ['entrada', 'salida'],
+    default: 'salida'
+  },
   concepto: { 
     type: String,
     enum: ['sueldo', 'adelanto', 'hora_extra', 'aguinaldo', 'bonus', 'otro'],
@@ -51,7 +71,18 @@ const gastoSchema = new mongoose.Schema({
   fechaStandBy: { type: Date },
   entrada: { type: Number, default: 0 },
   salida: { type: Number, default: 0 },
-  banco: { type: String, required: true, enum: ['SANTANDER', 'EFECTIVO', 'PROVINCIA', 'FCI', 'CHEQUES 3ro', 'CHEQUE PRO.'] },
+  banco: { 
+    type: String, 
+    required: true, 
+    enum: [
+      'SANTANDER', 
+      'EFECTIVO', 
+      'PROVINCIA',
+      'RESERVA',
+      'FCI',
+      'OTROS'
+    ] 
+  },
   // user: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'User' } // Opcional: para asociar gastos a usuarios
 }, { timestamps: true });
 
