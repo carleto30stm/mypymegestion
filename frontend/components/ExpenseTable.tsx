@@ -94,15 +94,44 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
         }
       }
     },
+    { field: 'tipoOperacion', headerName: 'Tipo', width: 100,
+      valueFormatter: (value: string) => {
+        switch(value) {
+          case 'entrada': return 'Entrada';
+          case 'salida': return 'Salida';
+          case 'transferencia': return 'Transfer.';
+          default: return value;
+        }
+      } },
     { field: 'entrada', headerName: 'Entrada', type: 'number', width: 130,
-      valueFormatter: (value: number) => {
+      valueFormatter: (value: number, row: any) => {
+        if (row.tipoOperacion === 'transferencia') return '';
         return typeof value === 'number' && value > 0 ? formatCurrencyWithSymbol(value) : '';
       } },
     { field: 'salida', headerName: 'Salida', type: 'number', width: 130,
-      valueFormatter: (value: number) => {
+      valueFormatter: (value: number, row: any) => {
+        if (row.tipoOperacion === 'transferencia') return '';
         return typeof value === 'number' && value > 0 ? formatCurrencyWithSymbol(value) : '';
       } },
-    { field: 'banco', headerName: 'Banco', width: 120},
+    { field: 'transferencia', headerName: 'Cuentas', width: 160,
+      valueGetter: (value: any, row: any) => {
+        if (row.tipoOperacion === 'transferencia') {
+          return `${row.cuentaOrigen} → ${row.cuentaDestino}`;
+        }
+        return '';
+      } },
+    { field: 'montoTransferencia', headerName: 'Monto Transfer.', type: 'number', width: 130,
+      valueFormatter: (value: number, row: any) => {
+        if (row.tipoOperacion === 'transferencia' && typeof value === 'number' && value > 0) {
+          return formatCurrencyWithSymbol(value);
+        }
+        return '';
+      } },
+    { field: 'banco', headerName: 'Banco', width: 120,
+      valueGetter: (value: any, row: any) => {
+        if (row.tipoOperacion === 'transferencia') return '';
+        return value || '';
+      } },
   ];
 
   // Solo agregar columna de acciones si el usuario puede editar/eliminar

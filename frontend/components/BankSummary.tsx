@@ -31,7 +31,7 @@ interface BankBalance {
 }
 
 // Lista de bancos disponibles
-const BANCOS = ['SANTANDER', 'EFECTIVO', 'PROVINCIA', 'FCI','RESERVA'];
+const BANCOS = ['SANTANDER', 'EFECTIVO', 'PROVINCIA', 'FCI', 'CHEQUES 3ro', 'CHEQUE PRO.'];
 
 const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) => {
   const { items: gastos } = useSelector((state: RootState) => state.gastos);
@@ -289,14 +289,27 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
   const bankBalances: BankBalance[] = BANCOS.map(banco => {
     const gastosDelBanco = gastosActivos.filter(gasto => gasto.banco === banco);
     
+    // Calcular entradas y salidas normales
     const entradas = gastosDelBanco.reduce((sum, gasto) => sum + (gasto.entrada || 0), 0);
     const salidas = gastosDelBanco.reduce((sum, gasto) => sum + (gasto.salida || 0), 0);
-    const saldo = entradas - salidas;
+    
+    // Calcular transferencias donde este banco es origen (sale dinero)
+    const transferenciasOrigen = gastosActivos
+      .filter(gasto => gasto.tipoOperacion === 'transferencia' && gasto.cuentaOrigen === banco)
+      .reduce((sum, gasto) => sum + (gasto.montoTransferencia || 0), 0);
+    
+    // Calcular transferencias donde este banco es destino (entra dinero)
+    const transferenciasDestino = gastosActivos
+      .filter(gasto => gasto.tipoOperacion === 'transferencia' && gasto.cuentaDestino === banco)
+      .reduce((sum, gasto) => sum + (gasto.montoTransferencia || 0), 0);
+    
+    // El saldo incluye las transferencias
+    const saldo = entradas - salidas - transferenciasOrigen + transferenciasDestino;
 
     return {
       banco,
-      entradas,
-      salidas,
+      entradas: entradas + transferenciasDestino, // Mostrar transferencias recibidas como entradas
+      salidas: salidas + transferenciasOrigen,    // Mostrar transferencias enviadas como salidas
       saldo
     };
   });

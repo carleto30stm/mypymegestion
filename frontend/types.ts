@@ -57,11 +57,15 @@ export interface Gasto {
   medioDePago: '' | 'Mov. Banco' | 'Efectivo' | 'Transferencia' | 'Tarjeta Débito' | 'Tarjeta Crédito' | 'Cheque Propio' | 'Cheque Tercero' | 'FCI' | 'FT' | 'otro';
   clientes: string;
   detalleGastos: string;
-  tipoOperacion: 'entrada' | 'salida';
+  tipoOperacion: 'entrada' | 'salida' | 'transferencia';
   concepto?: 'sueldo' | 'adelanto' | 'hora_extra' | 'aguinaldo' | 'bonus' | 'otro';
   comentario: string;
   fechaStandBy?: string;
   entrada?: number;
   salida?: number;
-  banco: 'SANTANDER' | 'EFECTIVO' | 'PROVINCIA' | 'RESERVA' | 'FCI' | 'OTROS';
+  // Campos específicos para transferencias
+  cuentaOrigen?: 'SANTANDER' | 'EFECTIVO' | 'PROVINCIA' | 'RESERVA' | 'FCI' | 'OTROS';
+  cuentaDestino?: 'SANTANDER' | 'EFECTIVO' | 'PROVINCIA' | 'RESERVA' | 'FCI' | 'OTROS';
+  montoTransferencia?: number;
+  banco: 'SANTANDER' | 'EFECTIVO' | 'PROVINCIA' | 'RESERVA' | 'FCI';
 }

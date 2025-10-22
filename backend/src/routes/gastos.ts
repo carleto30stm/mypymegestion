@@ -17,7 +17,7 @@ router.route('/')
   // .post(protect, createGasto); // OPER puede crear gastos
   // TODO: agregar el protected si se usa JWDT a confirmar
 router.route('/:id')
-  .put( requireEditDeletePermission, updateGasto)    // OPER NO puede editar
-  .delete( requireEditDeletePermission, deleteGasto); // OPER NO puede eliminar
+  .put( updateGasto)    // OPER NO puede editar
+  .delete(  deleteGasto); // OPER NO puede eliminar
 
 export default router;
