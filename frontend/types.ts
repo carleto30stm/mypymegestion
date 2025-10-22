@@ -54,18 +54,22 @@ export interface Gasto {
   rubro: 'COBRO.VENTA' | 'SERVICIOS' | 'PROOV.MATERIA.PRIMA' | 'PROOVMANO.DE.OBRA' | 'BANCO' | 'AFIT' | 'GASTOS.ADMIN' | 'MANT.MAQ' | 'SUELDOS' | 'MOVILIDAD';
   subRubro: string;
   // Allow empty string as a valid initial value for Select components
-  medioDePago: '' | 'Mov. Banco' | 'Efectivo' | 'Transferencia' | 'Tarjeta Débito' | 'Tarjeta Crédito' | 'Cheque Propio' | 'Cheque Tercero' | 'FCI' | 'FT' | 'otro';
+  medioDePago: '' | 'Cheque Tercero' | 'Cheque Propio' | 'Efectivo' | 'Tarjeta Débito' | 'Tarjeta Crédito' | 'Reserva' | 'Otro';
   clientes: string;
   detalleGastos: string;
   tipoOperacion: 'entrada' | 'salida' | 'transferencia';
   concepto?: 'sueldo' | 'adelanto' | 'hora_extra' | 'aguinaldo' | 'bonus' | 'otro';
   comentario: string;
   fechaStandBy?: string;
+  confirmado?: boolean; // Para cheques: false = pendiente, true = confirmado/cobrado
+  // Nuevos campos para manejo de cheques de terceros
+  estadoCheque?: 'recibido' | 'depositado' | 'pagado_proveedor' | 'endosado';
+  chequeRelacionadoId?: string;
   entrada?: number;
   salida?: number;
   // Campos específicos para transferencias
-  cuentaOrigen?: 'SANTANDER' | 'EFECTIVO' | 'PROVINCIA' | 'RESERVA' | 'FCI' | 'OTROS';
-  cuentaDestino?: 'SANTANDER' | 'EFECTIVO' | 'PROVINCIA' | 'RESERVA' | 'FCI' | 'OTROS';
+  cuentaOrigen?: 'PROVINCIA' | 'SANTANDER' | 'EFECTIVO' | 'FCI' | 'RESERVA';
+  cuentaDestino?: 'PROVINCIA' | 'SANTANDER' | 'EFECTIVO' | 'FCI' | 'RESERVA';
   montoTransferencia?: number;
-  banco: 'SANTANDER' | 'EFECTIVO' | 'PROVINCIA' | 'RESERVA' | 'FCI';
+  banco: 'PROVINCIA' | 'SANTANDER' | 'EFECTIVO' | 'FCI' | 'RESERVA';
 }

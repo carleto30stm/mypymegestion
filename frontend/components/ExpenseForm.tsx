@@ -421,15 +421,13 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
                 label="Medio de Pago"
                 onChange={(e) => handleSelectChange('medioDePago', e.target.value)}
               >
-                <MenuItem value="Mov. Banco">Mov. Banco</MenuItem>
-                <MenuItem value="reserva">reserva</MenuItem>
-                <MenuItem value="CR.F">CR.F</MenuItem>
-                <MenuItem value="DLL.B">DLL.B</MenuItem>
-                <MenuItem value="FCI">FCI</MenuItem>
-                <MenuItem value="FT">FT</MenuItem>
-                <MenuItem value="Visa">Visa</MenuItem>
-                <MenuItem value="Amex">Amex</MenuItem>
-                <MenuItem value="otro">otro</MenuItem>
+                <MenuItem value="Cheque Tercero">Cheque Tercero</MenuItem>
+                <MenuItem value="Cheque Propio">Cheque Propio</MenuItem>
+                <MenuItem value="Efectivo">Efectivo</MenuItem>
+                <MenuItem value="Tarjeta Débito">Tarjeta Débito</MenuItem>
+                <MenuItem value="Tarjeta Crédito">Tarjeta Crédito</MenuItem>
+                <MenuItem value="Reserva">Reserva</MenuItem>
+                <MenuItem value="Otro">Otro</MenuItem>
               </Select>
             </FormControl>
           </Grid>
@@ -478,12 +476,11 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
                 label="Banco"
                 onChange={(e) => handleSelectChange('banco', e.target.value)}
               >
+                <MenuItem value="PROVINCIA">PROVINCIA</MenuItem>
                 <MenuItem value="SANTANDER">SANTANDER</MenuItem>
                 <MenuItem value="EFECTIVO">EFECTIVO</MenuItem>
-              <MenuItem value="PROVINCIA">PROVINCIA</MenuItem>
-              <MenuItem value="FCI">FCI</MenuItem>
-              <MenuItem value="CHEQUES 3ro">CHEQUES 3ro</MenuItem>
-              <MenuItem value="CHEQUE PRO.">CHEQUE PRO.</MenuItem>
+                <MenuItem value="FCI">FCI</MenuItem>
+                <MenuItem value="RESERVA">RESERVA</MenuItem>
             </Select>
           </FormControl>
         </Grid>
@@ -551,12 +548,11 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
                   label="Cuenta Origen"
                   onChange={(e) => handleSelectChange('cuentaOrigen', e.target.value)}
                 >
+                  <MenuItem value="PROVINCIA">PROVINCIA</MenuItem>
                   <MenuItem value="SANTANDER">SANTANDER</MenuItem>
                   <MenuItem value="EFECTIVO">EFECTIVO</MenuItem>
-                  <MenuItem value="PROVINCIA">PROVINCIA</MenuItem>
                   <MenuItem value="FCI">FCI</MenuItem>
-                  <MenuItem value="CHEQUES 3ro">CHEQUES 3ro</MenuItem>
-                  <MenuItem value="CHEQUE PRO.">CHEQUE PRO.</MenuItem>
+                  <MenuItem value="RESERVA">RESERVA</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
@@ -570,12 +566,11 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
                   label="Cuenta Destino"
                   onChange={(e) => handleSelectChange('cuentaDestino', e.target.value)}
                 >
+                  <MenuItem value="PROVINCIA">PROVINCIA</MenuItem>
                   <MenuItem value="SANTANDER">SANTANDER</MenuItem>
                   <MenuItem value="EFECTIVO">EFECTIVO</MenuItem>
-                  <MenuItem value="PROVINCIA">PROVINCIA</MenuItem>
                   <MenuItem value="FCI">FCI</MenuItem>
-                  <MenuItem value="CHEQUES 3ro">CHEQUES 3ro</MenuItem>
-                  <MenuItem value="CHEQUE PRO.">CHEQUE PRO.</MenuItem>
+                  <MenuItem value="RESERVA">RESERVA</MenuItem>
                 </Select>
               </FormControl>
             </Grid>

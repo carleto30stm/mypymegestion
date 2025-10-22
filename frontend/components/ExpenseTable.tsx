@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../redux/store';
 import { Gasto } from '../types';
-import { deleteGasto } from '../redux/slices/gastosSlice';
+import { deleteGasto, confirmarCheque } from '../redux/slices/gastosSlice';
 import { DataGrid, GridColDef, GridActionsCellItem } from '@mui/x-data-grid';
 import { 
   Box, 
@@ -10,10 +10,13 @@ import {
   Typography, 
   Dialog, 
   DialogTitle, 
-  DialogContent
+  DialogContent,
+  Button,
+  Chip
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ExpenseForm from './ExpenseForm';
 import { formatDate, formatCurrencyWithSymbol } from '../utils/formatters';
 
@@ -49,12 +52,12 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
   };
 
   const handleDeleteClick = (id: string) => {
-    if(window.confirm('¿Está seguro de que desea eliminar este registro?')) {
-        dispatch(deleteGasto(id));
-    }
+    dispatch(deleteGasto(id));
   };
-  
-  const handleCloseModal = () => {
+
+  const handleConfirmarCheque = (id: string) => {
+    dispatch(confirmarCheque(id));
+  };  const handleCloseModal = () => {
     setIsModalOpen(false);
     setTimeout(() => setGastoToEdit(null), 300); // Reset edit state after dialog closes
   }
@@ -77,20 +80,42 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
     { 
       field: 'statusStandBy', 
       headerName: 'Estado', 
-      width: 100,
+      width: 120,
       renderCell: (params) => {
         const gasto = params.row as Gasto;
+        
+        // Para cheques, mostrar estado de confirmación
+        if (gasto.medioDePago?.includes('Cheque')) {
+          if (gasto.confirmado) {
+            return <Chip 
+              icon={<CheckCircleIcon />} 
+              label="CONFIRMADO" 
+              color="success" 
+              size="small" 
+              variant="filled"
+            />;
+          } else {
+            return <Chip 
+              label="PENDIENTE" 
+              color="warning" 
+              size="small" 
+              variant="outlined"
+            />;
+          }
+        }
+        
+        // Para otros gastos, mantener la lógica de StandBy
         if (!gasto.fechaStandBy) {
-          return <span style={{ color: '#2e7d32', fontWeight: 'bold' }}>✅ ACTIVO</span>;
+          return <Chip label="ACTIVO" color="success" size="small" />;
         }
         
         const fechaStandBy = new Date(gasto.fechaStandBy).toISOString().split('T')[0];
         const isActive = fechaStandBy <= today;
         
         if (isActive) {
-          return <span style={{ color: '#2e7d32', fontWeight: 'bold' }}>✅ ACTIVO</span>;
+          return <Chip label="ACTIVO" color="success" size="small" />;
         } else {
-          return <span style={{ color: '#f57c00', fontWeight: 'bold' }}>⏳ STANDBY</span>;
+          return <Chip label="STANDBY" color="warning" size="small" />;
         }
       }
     },
@@ -143,23 +168,50 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
       width: 100,
       cellClassName: 'actions',
       getActions: ({ row }) => {
-        return [
-          <GridActionsCellItem
-            key="edit"
-            icon={<EditIcon />}
-            label="Edit"
-            className="textPrimary"
-            onClick={() => handleEditClick(row as Gasto)}
-            color="inherit"
-          />,
-          <GridActionsCellItem
-            key="delete"
-            icon={<DeleteIcon />}
-            label="Delete"
-            onClick={() => handleDeleteClick(row._id as string)}
-            color="inherit"
-          />,
-        ];
+        const gasto = row as Gasto;
+        const actions = [];
+        
+        // Botón de editar (solo si tiene permisos)
+        if (canEditDelete) {
+          actions.push(
+            <GridActionsCellItem
+              key="edit"
+              icon={<EditIcon />}
+              label="Edit"
+              className="textPrimary"
+              onClick={() => handleEditClick(gasto)}
+              color="inherit"
+            />
+          );
+        }
+        
+        // Botón de confirmar cheque (solo para cheques pendientes)
+        if (gasto.medioDePago?.includes('Cheque') && !gasto.confirmado) {
+          actions.push(
+            <GridActionsCellItem
+              key="confirm"
+              icon={<CheckCircleIcon />}
+              label="Confirmar Cheque"
+              onClick={() => handleConfirmarCheque(gasto._id as string)}
+              color="success"
+            />
+          );
+        }
+        
+        // Botón de eliminar (solo si tiene permisos)
+        if (canEditDelete) {
+          actions.push(
+            <GridActionsCellItem
+              key="delete"
+              icon={<DeleteIcon />}
+              label="Delete"
+              onClick={() => handleDeleteClick(gasto._id as string)}
+              color="inherit"
+            />
+          );
+        }
+        
+        return actions;
       },
     });
   }
@@ -194,7 +246,7 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
             </Typography>
             
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1, fontStyle: 'italic' }}>
-              💡 Los registros en STANDBY se muestran pero no se incluyen en cálculos hasta su fecha de activación
+              💡 Los registros en STANDBY se muestran pero no se incluyen en cálculos hasta su confirmación y depósito
             </Typography>
         </Box>
         <DataGrid

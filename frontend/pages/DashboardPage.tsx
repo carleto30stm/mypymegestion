@@ -16,6 +16,8 @@ import {
 import Sidebar from '../components/Sidebar';
 import ExpenseTable from '../components/ExpenseTable';
 import BankSummary from '../components/BankSummary';
+import PendingChecks from '../components/PendingChecks';
+import ChequesDisponibles from '../components/ChequesDisponibles';
 import { AppDispatch, RootState } from '../redux/store';
 import { fetchGastos } from '../redux/slices/gastosSlice';
 
@@ -24,6 +26,8 @@ const DashboardPage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showBankSummary, setShowBankSummary] = useState(true);
+  const [showPendingChecks, setShowPendingChecks] = useState(true);
+  const [showChequesDisponibles, setShowChequesDisponibles] = useState(true);
   const { error } = useSelector((state: RootState) => state.gastos);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
 
@@ -68,6 +72,8 @@ const DashboardPage: React.FC = () => {
   const toggleSidebar = () => setSidebarOpen((s) => !s);
   
   const toggleBankSummary = () => setShowBankSummary((s) => !s);
+  const togglePendingChecks = () => setShowPendingChecks((s) => !s);
+  const toggleChequesDisponibles = () => setShowChequesDisponibles((s) => !s);
 
   return (
     <Box sx={{ display: 'flex' }}>
@@ -77,6 +83,10 @@ const DashboardPage: React.FC = () => {
         onToggle={toggleSidebar}
         onToggleBankSummary={toggleBankSummary}
         showBankSummary={showBankSummary}
+        onTogglePendingChecks={togglePendingChecks}
+        showPendingChecks={showPendingChecks}
+        onToggleChequesDisponibles={toggleChequesDisponibles}
+        showChequesDisponibles={showChequesDisponibles}
       />
       <Box component="main" sx={{ flexGrow: 1, p: 3, height: '100vh', overflow: 'auto' }}>
         {/* Controles de filtro unificados */}
@@ -125,6 +135,24 @@ const DashboardPage: React.FC = () => {
             availableMonths={availableMonths}
           />
         )}
+        
+        {/* Componente de cheques pendientes */}
+        {showPendingChecks && (
+          <PendingChecks 
+            filterType={filterType}
+            selectedMonth={selectedMonth}
+            availableMonths={availableMonths}
+          />
+        )}
+
+        {showChequesDisponibles && (
+          <ChequesDisponibles 
+            filterType={filterType}
+            selectedMonth={selectedMonth}
+            availableMonths={availableMonths}
+          />
+        )}
+        
         <ExpenseTable 
           isModalOpen={isModalOpen}
           setIsModalOpen={setIsModalOpen}

@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import api from '../../services/api';
+import api, { gastosAPI } from '../../services/api';
 import { Gasto } from '../../types';
 
 interface GastosState {
@@ -53,6 +53,35 @@ export const deleteGasto = createAsyncThunk('/api/gastos/deleteGasto', async (ga
   }
 );
 
+export const confirmarCheque = createAsyncThunk(
+  'gastos/confirmarCheque',
+  async (chequeId: string, { rejectWithValue }) => {
+    try {
+      const response = await gastosAPI.confirmarCheque(chequeId);
+      return response;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to confirm check');
+    }
+  }
+);
+
+export const disponerCheque = createAsyncThunk(
+  'gastos/disponerCheque',
+  async ({ chequeId, tipoDisposicion, destino, detalleOperacion }: {
+    chequeId: string;
+    tipoDisposicion: 'depositar' | 'pagar_proveedor';
+    destino: string;
+    detalleOperacion: string;
+  }, { rejectWithValue }) => {
+    try {
+      const response = await gastosAPI.disponerCheque(chequeId, tipoDisposicion, destino, detalleOperacion);
+      return response;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to dispose check');
+    }
+  }
+);
+
 
 const gastosSlice = createSlice({
   name: 'gastos',
@@ -86,6 +115,18 @@ const gastosSlice = createSlice({
       // Delete
       .addCase(deleteGasto.fulfilled, (state, action: PayloadAction<string>) => {
         state.items = state.items.filter(item => item._id !== action.payload);
+      })
+      // Confirmar cheque
+      .addCase(confirmarCheque.fulfilled, (state, action: PayloadAction<Gasto>) => {
+        const index = state.items.findIndex(item => item._id === action.payload._id);
+        if (index !== -1) {
+          state.items[index] = action.payload;
+        }
+      })
+      // Disponer cheque - recargar todos los gastos ya que se crean nuevas entradas
+      .addCase(disponerCheque.fulfilled, (state, action) => {
+        // La acción devuelve múltiples operaciones, mejor recargar todo
+        // Esto se maneja desde el componente con fetchGastos()
       });
   },
 });

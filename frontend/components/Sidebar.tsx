@@ -20,6 +20,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import PeopleIcon from '@mui/icons-material/People';
+import ReceiptIcon from '@mui/icons-material/Receipt';
 
 export const drawerWidth = 240;
 export const drawerHandleWidth = 40;
@@ -30,6 +31,10 @@ interface SidebarProps {
   onToggle?: () => void;
   onToggleBankSummary?: () => void;
   showBankSummary?: boolean;
+  onTogglePendingChecks?: () => void;
+  showPendingChecks?: boolean;
+  onToggleChequesDisponibles?: () => void;
+  showChequesDisponibles?: boolean;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
@@ -37,7 +42,11 @@ const Sidebar: React.FC<SidebarProps> = ({
   isOpen = true, 
   onToggle, 
   onToggleBankSummary,
-  showBankSummary = true 
+  showBankSummary = true,
+  onTogglePendingChecks,
+  showPendingChecks = true,
+  onToggleChequesDisponibles,
+  showChequesDisponibles = true 
 }) => {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
@@ -56,8 +65,18 @@ const Sidebar: React.FC<SidebarProps> = ({
   const drawer = (
     <div>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 1 }}>
-            <Typography variant="h6" component="div" sx={{ pl: 1 }}>
-                Gestor App
+            <Typography 
+              variant="h4" 
+              component="div" 
+              sx={{ 
+                pl: 1,
+                fontWeight: 'bold',
+                color: '#FF8C00', // Naranja
+                fontFamily: '"Roboto", "Arial", sans-serif',
+                letterSpacing: '1px'
+              }}
+            >
+              KURT
             </Typography>
             {onToggle && (
               <IconButton onClick={onToggle} aria-label={isOpen ? 'Ocultar sidebar' : 'Mostrar sidebar'}>
@@ -119,6 +138,32 @@ const Sidebar: React.FC<SidebarProps> = ({
                   </ListItemIcon>
                   <ListItemText 
                     primary={showBankSummary ? "Ocultar Resumen Bancos" : "Mostrar Resumen Bancos"} 
+                  />
+                </ListItemButton>
+              </ListItem>
+            )}
+            {onTogglePendingChecks && (
+              <ListItem disablePadding>
+                <ListItemButton onClick={onTogglePendingChecks}>
+                  <ListItemIcon>
+                    <ReceiptIcon />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary={showPendingChecks ? "Ocultar Cheques Pendientes" : "Mostrar Cheques Pendientes"} 
+                  />
+                </ListItemButton>
+              </ListItem>
+            )}
+
+            {/* Toggle Cheques Disponibles */}
+            {onToggleChequesDisponibles && (
+              <ListItem disablePadding>
+                <ListItemButton onClick={onToggleChequesDisponibles}>
+                  <ListItemIcon>
+                    <ReceiptIcon color={showChequesDisponibles ? "primary" : "action"} />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary={showChequesDisponibles ? "Ocultar Cheques Disponibles" : "Mostrar Cheques Disponibles"} 
                   />
                 </ListItemButton>
               </ListItem>

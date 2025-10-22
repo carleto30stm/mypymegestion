@@ -55,16 +55,13 @@ const gastoSchema = new mongoose.Schema({
       return this.tipoOperacion !== 'transferencia';
     },
     enum: [
-      'Mov. Banco', 
-      'Efectivo', 
-      'Transferencia',
+      'Cheque Tercero',
+      'Cheque Propio', 
+      'Efectivo',
       'Tarjeta Débito',
       'Tarjeta Crédito',
-      'Cheque Propio',
-      'Cheque Tercero',
-      'FCI', 
-      'FT',
-      'otro'
+      'Reserva',
+      'Otro'
     ] 
   },
   clientes: { type: String },
@@ -82,19 +79,40 @@ const gastoSchema = new mongoose.Schema({
   },
   comentario: { type: String },
   fechaStandBy: { type: Date },
+  confirmado: { 
+    type: Boolean,
+    default: function(this: any) {
+      // Para cheques (medioDePago con 'Cheque'), default es false
+      // Para otros medios de pago, default es true
+      return !this.medioDePago || (!this.medioDePago.includes('Cheque'));
+    }
+  },
+  // Nuevos campos para manejo de cheques de terceros
+  estadoCheque: {
+    type: String,
+    enum: ['recibido', 'depositado', 'pagado_proveedor', 'endosado'],
+    default: function(this: any) {
+      return this.medioDePago === 'Cheque Tercero' ? 'recibido' : undefined;
+    }
+  },
+  chequeRelacionadoId: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'Gasto',
+    default: null // Se usa para vincular el movimiento de salida con la entrada original
+  },
   entrada: { type: Number, default: 0 },
   salida: { type: Number, default: 0 },
   // Campos específicos para transferencias
   cuentaOrigen: { 
     type: String,
-    enum: ['SANTANDER', 'EFECTIVO', 'PROVINCIA', 'FCI', 'CHEQUES 3ro', 'CHEQUE PRO.'],
+    enum: ['PROVINCIA', 'SANTANDER', 'EFECTIVO', 'FCI', 'RESERVA'],
     required: function(this: any) {
       return this.tipoOperacion === 'transferencia';
     }
   },
   cuentaDestino: { 
     type: String,
-    enum: ['SANTANDER', 'EFECTIVO', 'PROVINCIA', 'FCI', 'CHEQUES 3ro', 'CHEQUE PRO.'],
+    enum: ['PROVINCIA', 'SANTANDER', 'EFECTIVO', 'FCI', 'RESERVA'],
     required: function(this: any) {
       return this.tipoOperacion === 'transferencia';
     }
@@ -104,7 +122,16 @@ const gastoSchema = new mongoose.Schema({
     required: function(this: any) {
       return this.tipoOperacion === 'transferencia';
     },
-    min: [0.01, 'El monto de transferencia debe ser mayor a 0']
+    validate: {
+      validator: function(this: any, value: number) {
+        // Solo validar si es una transferencia
+        if (this.tipoOperacion === 'transferencia') {
+          return value && value > 0;
+        }
+        return true; // Para no transferencias, cualquier valor es válido
+      },
+      message: 'El monto de transferencia debe ser mayor a 0'
+    }
   },
   banco: { 
     type: String, 
@@ -113,12 +140,11 @@ const gastoSchema = new mongoose.Schema({
       return this.tipoOperacion !== 'transferencia';
     },
     enum: [
+      'PROVINCIA', 
       'SANTANDER', 
-      'EFECTIVO', 
-      'PROVINCIA',
+      'EFECTIVO',
       'FCI',
-      'CHEQUES 3ro',
-      'CHEQUE PRO.'
+      'RESERVA'
     ] 
   },
   // user: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'User' } // Opcional: para asociar gastos a usuarios

@@ -41,3 +41,22 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+// Funciones específicas para la API de gastos
+export const gastosAPI = {
+  // Confirmar un cheque
+  confirmarCheque: async (id: string) => {
+    const response = await api.patch(`/api/gastos/${id}/confirmar`);
+    return response.data;
+  },
+  
+  // Disponer de un cheque de tercero (depositarlo o pagarlo a proveedor)
+  disponerCheque: async (id: string, tipoDisposicion: 'depositar' | 'pagar_proveedor', destino: string, detalleOperacion: string) => {
+    const response = await api.post(`/api/gastos/${id}/disponer-cheque`, {
+      tipoDisposicion,
+      destino,
+      detalleOperacion
+    });
+    return response.data;
+  }
+};
