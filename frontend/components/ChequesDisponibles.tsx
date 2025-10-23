@@ -131,10 +131,17 @@ const ChequesDisponibles: React.FC<ChequesDisponiblesProps> = ({
 
   return (
     <Paper sx={{ p: 3, mt: 2 }}>
-      <Typography variant="h6" gutterBottom>
-        📝 Cheques Disponibles para Disposición ({chequesDisponibles.length})
-      </Typography>
-      
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h6" gutterBottom>
+          📝 Cheques Disponibles para Disposición
+        </Typography>
+        <Chip 
+            label={chequesDisponibles.length} 
+            color="warning" 
+            size="small" 
+            sx={{ ml: 2 }}
+        />
+      </Box> 
       <List>
         {chequesDisponibles.map((cheque, index) => (
           <React.Fragment key={cheque._id}>
