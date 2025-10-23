@@ -136,16 +136,39 @@ const gastoSchema = new mongoose.Schema({
   banco: { 
     type: String, 
     required: function(this: any) {
-      // Para transferencias, banco se usa como cuenta principal (origen)
-      return this.tipoOperacion !== 'transferencia';
+      // Para transferencias, no es requerido (usan cuentaOrigen/cuentaDestino)
+      if (this.tipoOperacion === 'transferencia') {
+        return false;
+      }
+      // Para Cheque Tercero, no es requerido (se define al confirmar/depositar)
+      if (this.medioDePago === 'Cheque Tercero') {
+        return false;
+      }
+      // Para otros casos, sí es requerido
+      return true;
     },
-    enum: [
-      'PROVINCIA', 
-      'SANTANDER', 
-      'EFECTIVO',
-      'FCI',
-      'RESERVA'
-    ] 
+    validate: {
+      validator: function(this: any, value: string) {
+        // Si el valor está vacío, solo validar si es requerido
+        if (!value || value === '') {
+          // Para transferencias, permitir vacío
+          if (this.tipoOperacion === 'transferencia') {
+            return true;
+          }
+          // Para Cheque Tercero, permitir vacío
+          if (this.medioDePago === 'Cheque Tercero') {
+            return true;
+          }
+          // Para otros casos, no permitir vacío
+          return false;
+        }
+        
+        // Si tiene valor, debe ser uno de los valores válidos
+        const validBancos = ['PROVINCIA', 'SANTANDER', 'EFECTIVO', 'FCI', 'RESERVA'];
+        return validBancos.includes(value);
+      },
+      message: 'Banco debe ser uno de los valores válidos: PROVINCIA, SANTANDER, EFECTIVO, FCI, RESERVA'
+    }
   },
   // user: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'User' } // Opcional: para asociar gastos a usuarios
 }, { timestamps: true });

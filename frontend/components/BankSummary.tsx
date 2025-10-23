@@ -107,7 +107,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
     return chequesFiltrados.filter(gasto => 
       gasto.medioDePago === 'Cheque Tercero' && // Solo Cheques Tercero 
       gasto.confirmado === true &&
-      BANCOS.includes(gasto.banco) // Cheques confirmados que están en cuentas de caja
+      gasto.estadoCheque === 'recibido' // Solo cheques en estado 'recibido' (no depositados ni dispuestos)
     );
   };
 
@@ -225,8 +225,8 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
           // Nota explicativa
           pdf.setFontSize(10);
           pdf.setTextColor(100, 100, 100);
-          pdf.text('💡 Los Cheques Tercero sin depositar no se incluyen en el total de caja disponible', 20, yPosition);
-          pdf.text('💡 Los Cheques Propios emitidos ya están descontados del banco correspondiente', 20, yPosition + 5);
+          pdf.text('NOTA: Los Cheques Tercero sin depositar no se incluyen en el total de caja disponible', 20, yPosition);
+          pdf.text('NOTA: Los Cheques Propios emitidos ya están descontados del banco correspondiente', 20, yPosition + 5);
           pdf.setTextColor(0, 0, 0);
           yPosition += 20;
         }
@@ -245,19 +245,19 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
           if (gasto.confirmado) {
             switch (gasto.estadoCheque) {
               case 'recibido':
-                estadoInfo = '✓ Confirmado';
+                estadoInfo = 'CONFIRMADO';
                 break;
               case 'depositado':
-                estadoInfo = '🏦 Depositado';
+                estadoInfo = 'DEPOSITADO';
                 break;
               case 'pagado_proveedor':
-                estadoInfo = '💳 Pagado';
+                estadoInfo = 'PAGADO';
                 break;
               default:
-                estadoInfo = '✓ Confirmado';
+                estadoInfo = 'CONFIRMADO';
             }
           } else {
-            estadoInfo = '⏳ Pendiente';
+            estadoInfo = 'PENDIENTE';
           }
         }
         
@@ -643,7 +643,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
               <TableRow key={cheque.banco} hover>
                 <TableCell component="th" scope="row">
                   <Typography variant="body2" fontWeight="medium" sx={{ color: 'warning.main' }}>
-                    📝 {cheque.banco}
+                    CHEQUE: {cheque.banco}
                   </Typography>
                 </TableCell>
                 <TableCell align="right">
@@ -680,7 +680,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
               <TableRow sx={{ backgroundColor: 'warning.50', borderTop: 1 }}>
                 <TableCell component="th" scope="row">
                   <Typography variant="body1" fontWeight="bold" sx={{ color: 'warning.main' }}>
-                    📝 SUBTOTAL CHEQUES TERCERO SIN DEPOSITAR
+                    SUBTOTAL CHEQUES TERCERO SIN DEPOSITAR
                   </Typography>
                 </TableCell>
                 <TableCell align="right">
@@ -755,7 +755,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
               <TableRow sx={{ backgroundColor: 'info.light', '& .MuiTableCell-root': { border: 0 } }}>
                 <TableCell colSpan={4}>
                   <Typography variant="body2" sx={{ color: 'info.main', textAlign: 'center', fontStyle: 'italic' }}>
-                    💡 Los cheques sin depositar ({formatCurrencyWithSymbol(totalesCheques.saldo)}) no se incluyen en el total disponible hasta que sean depositados
+                    NOTA: Los cheques sin depositar ({formatCurrencyWithSymbol(totalesCheques.saldo)}) no se incluyen en el total disponible hasta que sean depositados
                   </Typography>
                 </TableCell>
               </TableRow>
@@ -766,25 +766,25 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
 
       {/* Información adicional */}
       <Box sx={{ mt: 2, p: 2, backgroundColor: 'grey.50', borderRadius: 1 }}>
-        <Typography variant="body2" color="text.secondary">
-          📊 <strong>Gastos incluidos:</strong> {gastosActivos.length} de {gastos.length} registros totales
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+          Gastos incluidos: {gastosActivos.length} de {gastos.length} registros totales
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-          🏦 <strong>Total disponible en caja:</strong> {formatCurrencyWithSymbol(totalesBancos.saldo)}
+          Total disponible en caja: {formatCurrencyWithSymbol(totalesBancos.saldo)}
         </Typography>
         {totalesCheques.saldo !== 0 && (
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            📝 <strong>Cheques pendientes de depósito:</strong> {formatCurrencyWithSymbol(totalesCheques.saldo)}
+            Cheques pendientes de depósito: {formatCurrencyWithSymbol(totalesCheques.saldo)}
           </Typography>
         )}
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-          🗓️ <strong>Filtro:</strong> {filterType === 'total' ? 'Histórico completo' : `Mes de ${availableMonths.find(m => m.value === selectedMonth)?.label}`}
+          Filtro: {filterType === 'total' ? 'Histórico completo' : `Mes de ${availableMonths.find(m => m.value === selectedMonth)?.label}`}
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-          📅 <strong>Lógica Cheques:</strong> Solo se incluyen cheques confirmados manualmente (separados del flujo bancario)
+          Lógica Cheques: Solo se incluyen cheques confirmados manualmente (separados del flujo bancario)
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-          💰 <strong>Cálculo:</strong> Los cheques sin depositar no afectan el balance de caja disponible
+          Cálculo: Los cheques sin depositar no afectan el balance de caja disponible
         </Typography>
       </Box>
       </div>

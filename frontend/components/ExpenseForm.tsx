@@ -212,6 +212,19 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
       
       setFormData(updatedFormData);
       setValidationError('');
+    } else if (name === 'medioDePago') {
+      // Si selecciona Cheque Tercero, limpiar el banco (no es requerido)
+      const updatedFormData = {
+        ...formData,
+        medioDePago: value,
+      };
+      
+      if (value === 'Cheque Tercero') {
+        updatedFormData.banco = ''; // Limpiar banco para Cheque Tercero
+      }
+      
+      setFormData(updatedFormData);
+      setValidationError('');
     } else {
       setFormData(prev => ({ 
         ...prev, 
@@ -437,7 +450,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
         <Grid item xs={12} sm={6}>
           <TextField
             name="detalleGastos"
-            label="Detalle Gastos"
+            label="Detalle"
             value={formData.detalleGastos}
             onChange={handleInputChange}
             fullWidth
@@ -466,11 +479,11 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
           </Grid>
         )}
 
-        {/* Banco - Solo para NO transferencias */}
-        {formData.tipoOperacion !== 'transferencia' && (
+        {/* Banco - Solo para NO transferencias y NO Cheque Tercero */}
+        {formData.tipoOperacion !== 'transferencia' && formData.medioDePago !== 'Cheque Tercero' && (
           <Grid item xs={12} sm={6}>
             <FormControl fullWidth required>
-              <InputLabel>Banco</InputLabel>
+              <InputLabel>Caja</InputLabel>
               <Select
                 value={formData.banco}
                 label="Banco"
@@ -512,8 +525,9 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
           </Grid>
         )}
 
-        {/* Fecha StandBy - Solo para NO transferencias */}
-        {formData.tipoOperacion !== 'transferencia' && (
+        {/* Fecha StandBy - Solo para cheques */}
+        {formData.tipoOperacion !== 'transferencia' && 
+         (formData.medioDePago === 'Cheque Propio' || formData.medioDePago === 'Cheque Tercero') && (
           <Grid item xs={12} sm={6}>
             <TextField
               name="fechaStandBy"
@@ -523,6 +537,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
               onChange={handleInputChange}
               fullWidth
               InputLabelProps={{ shrink: true }}
+              helperText="Fecha en que el cheque será efectivo"
             />
           </Grid>
         )}
@@ -629,7 +644,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
               Cancelar
             </Button>
             <Button type="submit" variant="contained" color="primary">
-              {gastoToEdit ? 'Actualizar' : 'Crear'} Gasto
+              {gastoToEdit ? 'Actualizar' : 'Crear'}
             </Button>
           </Box>
         </Grid>
