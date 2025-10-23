@@ -150,7 +150,26 @@ router.post('/:id/disponer-cheque', async (req, res) => {
 });
 
 router.route('/:id')
-  .put( updateGasto)    // OPER NO puede editar
-  .delete(  deleteGasto); // OPER NO puede eliminar
+  .put(updateGasto)    // Cualquier usuario puede editar
+  .delete(deleteGasto); // Cualquier usuario puede eliminar
+
+// Ruta para cancelar gasto (oper_ad y admin)
+router.patch('/:id/cancel', async (req, res) => {
+  try {
+    const gasto = await Gasto.findByIdAndUpdate(
+      req.params.id,
+      { estado: 'cancelado' },
+      { new: true }
+    );
+    
+    if (!gasto) {
+      return res.status(404).json({ message: 'Gasto no encontrado' });
+    }
+    
+    res.json(gasto);
+  } catch (error) {
+    res.status(500).json({ message: 'Error al cancelar el gasto' });
+  }
+});
 
 export default router;

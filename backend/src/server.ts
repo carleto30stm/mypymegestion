@@ -2,7 +2,6 @@ import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import connectDB from './config/db.js';
-import { seedAdminUser } from './models/User.js';
 import authRoutes from './routes/auth.js';
 import gastosRoutes from './routes/gastos.js';
 import userRoutes from './routes/userRoutes.js';
@@ -17,10 +16,6 @@ const PORT = process.env.PORT || 3001;
 const start = async () => {
   try {
     const conn = await connectDB();
-
-    // Crear usuario admin si no existe
-    await seedAdminUser();
-
     // Configuración de CORS para Railway
     const allowedOrigins = [
       'http://localhost:5173',

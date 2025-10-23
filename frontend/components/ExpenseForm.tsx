@@ -3,9 +3,9 @@ import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../redux/store';
 import { createGasto, updateGasto } from '../redux/slices/gastosSlice';
 import { fetchEmployees } from '../redux/slices/employeesSlice';
+import { formatCurrency, parseCurrency } from '../utils/formatters';
 import { Gasto, subRubrosByRubro } from '../types';
 import { Grid, TextField, Button, Box, MenuItem, Select, InputLabel, FormControl, Alert } from '@mui/material';
-import { formatCurrency, parseCurrency } from '../utils/formatters';
 
 interface ExpenseFormProps {
   onClose: () => void;
@@ -41,24 +41,68 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
   const [salidaFormatted, setSalidaFormatted] = useState('');
   const [montoTransferenciaFormatted, setMontoTransferenciaFormatted] = useState('');
 
-  // Función para formatear el número mientras se escribe
+  // Función para formatear el número mientras se escribe (con decimales)
   const formatNumberInput = (value: string): string => {
-    // Remover todo excepto números
-    const numbers = value.replace(/[^\d]/g, '');
+    // Si el valor está vacío, retornar vacío
+    if (!value) return '';
     
-    if (numbers === '') return '';
+    // Permitir solo números y una coma
+    const cleanValue = value.replace(/[^\d,]/g, '');
     
-    // Convertir a número y formatear con puntos
-    const num = parseInt(numbers, 10);
-    return num.toLocaleString('es-AR');
+    // Si solo hay una coma al final, permitirla
+    if (cleanValue === ',') return '';
+    
+    // Dividir por la coma (separador decimal argentino)
+    const parts = cleanValue.split(',');
+    
+    // Solo permitir una coma
+    if (parts.length > 2) {
+      // Si hay más de una coma, tomar solo las primeras dos partes
+      parts.splice(2);
+    }
+    
+    // Parte entera
+    let integerPart = parts[0] || '';
+    
+    // Formatear la parte entera con puntos cada tres dígitos (solo si tiene valor)
+    if (integerPart.length > 0) {
+      const num = parseInt(integerPart, 10);
+      if (!isNaN(num) && num > 0) {
+        integerPart = num.toLocaleString('es-AR');
+      } else if (integerPart === '0') {
+        integerPart = '0';
+      }
+    }
+    
+    // Parte decimal (máximo 2 dígitos)
+    let decimalPart = parts[1];
+    if (decimalPart !== undefined) {
+      if (decimalPart.length > 2) {
+        decimalPart = decimalPart.substring(0, 2);
+      }
+      // Si hay parte decimal (incluso vacía), agregar la coma
+      return `${integerPart},${decimalPart}`;
+    }
+    
+    // Si termina con coma en el input original, mantenerla
+    if (value.endsWith(',') && parts.length === 2) {
+      return `${integerPart},`;
+    }
+    
+    return integerPart;
   };
 
-  // Función para obtener el valor numérico desde el formato visual
+  // Función para obtener el valor numérico desde el formato visual (con decimales)
   const getNumericValue = (formattedValue: string): number => {
     if (!formattedValue) return 0;
-    // Remover puntos y convertir a número
-    const cleanValue = formattedValue.replace(/\./g, '');
-    return parseInt(cleanValue, 10) || 0;
+    
+    // Convertir formato argentino a número: 1.000,50 -> 1000.50
+    const cleanValue = formattedValue
+      .replace(/\./g, '') // Remover puntos (separadores de miles)
+      .replace(',', '.'); // Cambiar coma por punto (decimales)
+    
+    const parsed = parseFloat(cleanValue);
+    return isNaN(parsed) ? 0 : parsed;
   };
 
   const [validationError, setValidationError] = useState('');
@@ -114,17 +158,17 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
         montoTransferencia: gastoToEdit.montoTransferencia?.toString() || '',
       });
       
-      // Formatear los valores existentes
+      // Formatear los valores existentes con decimales
       if (gastoToEdit.entrada && gastoToEdit.entrada > 0) {
-        setEntradaFormatted(gastoToEdit.entrada.toLocaleString('es-AR'));
+        setEntradaFormatted(formatCurrency(gastoToEdit.entrada));
       }
       
       if (gastoToEdit.salida && gastoToEdit.salida > 0) {
-        setSalidaFormatted(gastoToEdit.salida.toLocaleString('es-AR'));
+        setSalidaFormatted(formatCurrency(gastoToEdit.salida));
       }
 
       if (gastoToEdit.montoTransferencia && gastoToEdit.montoTransferencia > 0) {
-        setMontoTransferenciaFormatted(gastoToEdit.montoTransferencia.toLocaleString('es-AR'));
+        setMontoTransferenciaFormatted(formatCurrency(gastoToEdit.montoTransferencia));
       }
       
       // Limpiar error de validación al cargar un gasto para editar
@@ -600,6 +644,8 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
                 onChange={handleInputChange}
                 fullWidth
                 required
+                placeholder="Ej: 5.000,25"
+                helperText="Formato: 1.000,50 (usar coma para decimales)"
               />
             </Grid>
           </>
@@ -616,6 +662,8 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
                   onChange={handleInputChange}
                   fullWidth
                   required
+                  placeholder="Ej: 1.500,50"
+                  helperText="Formato: 1.000,50 (usar coma para decimales)"
                 />
               </Grid>
             )}
@@ -631,6 +679,8 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
                   onChange={handleInputChange}
                   fullWidth
                   required
+                  placeholder="Ej: 2.300,75"
+                  helperText="Formato: 1.000,50 (usar coma para decimales)"
                 />
               </Grid>
             )}

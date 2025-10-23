@@ -61,6 +61,7 @@ export interface Gasto {
   concepto?: 'sueldo' | 'adelanto' | 'hora_extra' | 'aguinaldo' | 'bonus' | 'otro';
   comentario: string;
   fechaStandBy?: string;
+  estado?: 'activo' | 'cancelado';
   confirmado?: boolean; // Para cheques: false = pendiente, true = confirmado/cobrado
   // Nuevos campos para manejo de cheques de terceros
   estadoCheque?: 'recibido' | 'depositado' | 'pagado_proveedor' | 'endosado';

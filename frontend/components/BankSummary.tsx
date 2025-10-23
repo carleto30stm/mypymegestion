@@ -70,6 +70,9 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
       });
     }
 
+    // Excluir gastos cancelados de los cálculos
+    gastosFiltrados = gastosFiltrados.filter(gasto => gasto.estado !== 'cancelado');
+
     // Filtrar solo gastos activos/confirmados:
     // 1. Para cheques: solo incluir los confirmados
     // 2. Para otros gastos con fechaStandBy: solo si la fecha StandBy es hoy o anterior
@@ -107,11 +110,32 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
     return chequesFiltrados.filter(gasto => 
       gasto.medioDePago === 'Cheque Tercero' && // Solo Cheques Tercero 
       gasto.confirmado === true &&
-      gasto.estadoCheque === 'recibido' // Solo cheques en estado 'recibido' (no depositados ni dispuestos)
+      gasto.estadoCheque === 'recibido' && // Solo cheques en estado 'recibido' (no depositados ni dispuestos)
+      gasto.estado !== 'cancelado' // Excluir cancelados
     );
   };
 
   const chequesConfirmados = getChequesConfirmadosSinDepositar();
+
+  // Función para obtener Cheques Propios pendientes de confirmación
+  const getChequesPropiosPendientes = () => {
+    let chequesFiltrados = gastos;
+    
+    if (filterType === 'month') {
+      chequesFiltrados = gastos.filter(gasto => {
+        const fechaGasto = new Date(gasto.fecha).toISOString().slice(0, 7);
+        return fechaGasto === selectedMonth;
+      });
+    }
+
+    return chequesFiltrados.filter(gasto => 
+      gasto.medioDePago === 'Cheque Propio' && // Solo Cheques Propios
+      gasto.confirmado === false && // Solo los pendientes de confirmación
+      gasto.estado !== 'cancelado' // Excluir cancelados
+    );
+  };
+
+  const chequesPropiosPendientes = getChequesPropiosPendientes();
 
   // Función para generar PDF
   const generatePDF = async () => {
@@ -177,7 +201,61 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
 
       yPosition = (pdf as any).lastAutoTable.finalY + 20;
 
-      // 2. Resumen de Cheques Tercero sin Depositar
+      // 2. Resumen de Cheques Propios Pendientes
+      if (totalesChequesPropisPendientes.saldo !== 0) {
+        pdf.setFontSize(14);
+        pdf.text('Cheques Propios Pendientes de Confirmación', 20, yPosition);
+        yPosition += 10;
+        
+        const chequePropioTableData = chequesPropiosBalances
+          .filter(cheque => cheque.saldo !== 0)
+          .map(cheque => [
+            `${cheque.banco} (Cheques Propios)`, // Banco específico
+            `$${cheque.entradas.toLocaleString('es-AR')}`,
+            `$${cheque.salidas.toLocaleString('es-AR')}`,
+            `$${cheque.saldo.toLocaleString('es-AR')}`
+          ]);
+        
+        if (chequePropioTableData.length > 0) {
+          autoTable(pdf, {
+            startY: yPosition,
+            head: [['Banco (Cheques Propios)', 'Emitidos', 'Confirmados', 'Pendientes']],
+            body: chequePropioTableData,
+            theme: 'grid',
+            styles: { fontSize: 10 },
+            headStyles: { fillColor: [255, 87, 34] } // Color naranja para cheques propios
+          });
+          
+          yPosition = (pdf as any).lastAutoTable.finalY + 10;
+
+          // Subtotal de cheques propios pendientes
+          autoTable(pdf, {
+            startY: yPosition,
+            body: [['TOTAL CHEQUES PROPIOS PENDIENTES', '', '', `$${totalesChequesPropisPendientes.saldo.toLocaleString('es-AR')}`]],
+            theme: 'plain',
+            styles: { 
+              fontSize: 12,
+              fontStyle: 'bold',
+              fillColor: [255, 243, 224] // Fondo naranja claro
+            },
+            columnStyles: {
+              0: { halign: 'left' },
+              3: { halign: 'right', textColor: [255, 87, 34] } // Naranja para cheques propios
+            }
+          });
+
+          yPosition = (pdf as any).lastAutoTable.finalY + 10;
+
+          // Nota explicativa
+          pdf.setFontSize(10);
+          pdf.setTextColor(100, 100, 100);
+          pdf.text('NOTA: Los Cheques Propios pendientes afectarán la caja al ser confirmados', 20, yPosition);
+          pdf.setTextColor(0, 0, 0);
+          yPosition += 15;
+        }
+      }
+
+      // 3. Resumen de Cheques Tercero sin Depositar
       if (totalesCheques.saldo !== 0) {
         pdf.setFontSize(14);
         pdf.text('Cheques Tercero Sin Depositar', 20, yPosition);
@@ -232,7 +310,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
         }
       }
       
-      // 3. Detalle de Transacciones (con estado de cheques)
+      // 4. Detalle de Transacciones (con estado de cheques)
       pdf.setFontSize(14);
       pdf.text('Detalle de Transacciones', 20, yPosition);
       yPosition += 10;
@@ -291,7 +369,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
 
       yPosition = (pdf as any).lastAutoTable.finalY + 20;
 
-      // 4. Resumen Ejecutivo Consolidado
+      // 5. Resumen Ejecutivo Consolidado
       pdf.setFontSize(14);
       pdf.text('Resumen Ejecutivo', 20, yPosition);
       yPosition += 10;
@@ -307,6 +385,23 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
         ]),
         ['SUBTOTAL CAJA', `$${totalesBancos.entradas.toLocaleString('es-AR')}`, `$${totalesBancos.salidas.toLocaleString('es-AR')}`, `$${totalesBancos.saldo.toLocaleString('es-AR')}`]
       ];
+
+      // Agregar cheques propios pendientes si existen
+      if (totalesChequesPropisPendientes.saldo !== 0) {
+        resumenData.push(
+          ['', '', '', ''], // Separador
+          ['Cheques Propios Pendientes', '', '', ''],
+          ...chequesPropiosBalances
+            .filter(cheque => cheque.saldo !== 0)
+            .map(cheque => [
+              `  ${cheque.banco} (Cheques Propios)`,
+              `$${cheque.entradas.toLocaleString('es-AR')}`,
+              `$${cheque.salidas.toLocaleString('es-AR')}`,
+              `$${cheque.saldo.toLocaleString('es-AR')}`
+            ]),
+          ['SUBTOTAL CHEQUES PROPIOS PENDIENTES', `$${totalesChequesPropisPendientes.entradas.toLocaleString('es-AR')}`, `$${totalesChequesPropisPendientes.salidas.toLocaleString('es-AR')}`, `$${totalesChequesPropisPendientes.saldo.toLocaleString('es-AR')}`]
+        );
+      }
 
       // Agregar cheques si existen
       if (totalesCheques.saldo !== 0) {
@@ -353,7 +448,9 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
             data.cell.styles.fontStyle = 'bold';
           }
           // Resaltar secciones
-          else if (data.cell.text[0] === 'Cuentas de Caja' || data.cell.text[0] === 'Cheques Tercero sin Depositar') {
+          else if (data.cell.text[0] === 'Cuentas de Caja' || 
+                   data.cell.text[0] === 'Cheques Propios Pendientes' ||
+                   data.cell.text[0] === 'Cheques Tercero sin Depositar') {
             data.cell.styles.fillColor = [108, 117, 125];
             data.cell.styles.textColor = [255, 255, 255];
             data.cell.styles.fontStyle = 'bold';
@@ -368,7 +465,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
 
       yPosition = (pdf as any).lastAutoTable.finalY + 20;
 
-      // 5. Información Adicional y Notas
+      // 6. Información Adicional y Notas
       pdf.setFontSize(14);
       pdf.text('Información Adicional', 20, yPosition);
       yPosition += 10;
@@ -376,8 +473,9 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
       // Información clave en tabla
       const infoData = [
         ['Total Disponible en Caja', `$${totalesBancos.saldo.toLocaleString('es-AR')}`],
+        ['Cheques Propios Pendientes', `$${totalesChequesPropisPendientes.saldo.toLocaleString('es-AR')}`],
         ['Cheques Tercero por Depositar', `$${totalesCheques.saldo.toLocaleString('es-AR')}`],
-        ['Patrimonio Total (Caja + Cheques)', `$${(totalesBancos.saldo + totalesCheques.saldo).toLocaleString('es-AR')}`]
+        ['Patrimonio Total (Caja + Todos los Cheques)', `$${(totalesBancos.saldo + totalesChequesPropisPendientes.saldo + totalesCheques.saldo).toLocaleString('es-AR')}`]
       ];
 
       autoTable(pdf, {
@@ -397,9 +495,12 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
             // Total disponible en verde
             data.cell.styles.textColor = [39, 174, 96];
           } else if (data.row.index === 1) {
-            // Cheques en naranja
-            data.cell.styles.textColor = [255, 140, 0];
+            // Cheques propios en naranja
+            data.cell.styles.textColor = [255, 87, 34];
           } else if (data.row.index === 2) {
+            // Cheques tercero en amarillo/naranja
+            data.cell.styles.textColor = [255, 140, 0];
+          } else if (data.row.index === 3) {
             // Total general en azul
             data.cell.styles.textColor = [52, 152, 219];
             data.cell.styles.fillColor = [240, 248, 255];
@@ -416,7 +517,8 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
       const notas = [
         '  NOTAS IMPORTANTES:',
         '• El "Total Disponible en Caja" representa dinero inmediatamente utilizable',
-        '• Los cheques confirmados requieren depósito para convertirse en caja disponible',
+        '• Los "Cheques Propios Pendientes" afectarán la caja al ser confirmados (salidas futuras)',
+        '• Los "Cheques Tercero" requieren depósito para convertirse en caja disponible',
         '• Los cheques pueden depositarse en bancos o utilizarse para pagos a proveedores',
         '• Estados de cheques: Pendiente | Confirmado | Depositado | Pagado'
       ];
@@ -493,6 +595,24 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
     };
   });
 
+  // Calcular saldos de Cheques Propios Pendientes por banco
+  const chequesPropiosBalances: BankBalance[] = BANCOS.map(banco => {
+    const chequesDelBanco = chequesPropiosPendientes.filter(gasto => 
+      gasto.medioDePago === 'Cheque Propio' && gasto.banco === banco
+    );
+    
+    const entradas = chequesDelBanco.reduce((sum, gasto) => sum + (gasto.entrada || 0), 0);
+    const salidas = chequesDelBanco.reduce((sum, gasto) => sum + (gasto.salida || 0), 0);
+    const saldo = entradas - salidas;
+
+    return {
+      banco,
+      entradas,
+      salidas,
+      saldo
+    };
+  }).filter(balance => balance.saldo !== 0); // Solo mostrar bancos con saldo
+
   // Calcular totales bancarios (sin cheques)
   const totalesBancos = bankBalances.reduce((acc, bank) => ({
     entradas: acc.entradas + bank.entradas,
@@ -502,6 +622,13 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
 
   // Calcular totales de cheques
   const totalesCheques = chequeBalances.reduce((acc, cheque) => ({
+    entradas: acc.entradas + cheque.entradas,
+    salidas: acc.salidas + cheque.salidas,
+    saldo: acc.saldo + cheque.saldo
+  }), { entradas: 0, salidas: 0, saldo: 0 });
+
+  // Calcular totales de cheques propios pendientes
+  const totalesChequesPropisPendientes = chequesPropiosBalances.reduce((acc, cheque) => ({
     entradas: acc.entradas + cheque.entradas,
     salidas: acc.salidas + cheque.salidas,
     saldo: acc.saldo + cheque.saldo
@@ -638,6 +765,75 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
               </TableCell>
             </TableRow>
 
+            {/* Filas de cheques propios pendientes */}
+            {chequesPropiosBalances.map((cheque) => (
+              <TableRow key={`propio-${cheque.banco}`} hover>
+                <TableCell component="th" scope="row">
+                  <Typography variant="body2" fontWeight="medium" sx={{ color: 'warning.main' }}>
+                    {cheque.banco} (Cheques Propios Pendientes)
+                  </Typography>
+                </TableCell>
+                <TableCell align="right">
+                  <Typography color="success.main">
+                    {formatCurrencyWithSymbol(cheque.entradas)}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right">
+                  <Typography color="error.main">
+                    {formatCurrencyWithSymbol(cheque.salidas)}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right">
+                  <Typography 
+                    variant="body2" 
+                    fontWeight="medium"
+                    sx={{ 
+                      color: cheque.saldo > 0 ? 'orange.main' : cheque.saldo < 0 ? 'error.main' : 'text.primary',
+                      backgroundColor: cheque.saldo > 0 ? 'orange.light' : cheque.saldo < 0 ? 'error.light' : 'grey.100',
+                      padding: '2px 6px',
+                      borderRadius: 1,
+                      display: 'inline-block',
+                      fontSize: '0.875rem'
+                    }}
+                  >
+                    {formatCurrencyWithSymbol(cheque.saldo)}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            ))}
+            
+            {/* Fila de subtotal cheques propios pendientes */}
+            {totalesChequesPropisPendientes.entradas > 0 || totalesChequesPropisPendientes.salidas > 0 ? (
+              <TableRow sx={{ backgroundColor: 'orange.50', borderTop: 1 }}>
+                <TableCell component="th" scope="row">
+                  <Typography variant="body1" fontWeight="bold" sx={{ color: 'orange.main' }}>
+                    SUBTOTAL CHEQUES PROPIOS PENDIENTES
+                  </Typography>
+                </TableCell>
+                <TableCell align="right">
+                  <Typography variant="body1" color="success.main" fontWeight="bold">
+                    {formatCurrencyWithSymbol(totalesChequesPropisPendientes.entradas)}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right">
+                  <Typography variant="body1" color="error.main" fontWeight="bold">
+                    {formatCurrencyWithSymbol(totalesChequesPropisPendientes.salidas)}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right">
+                  <Typography 
+                    variant="body1" 
+                    fontWeight="bold"
+                    sx={{ 
+                      color: totalesChequesPropisPendientes.saldo > 0 ? 'orange.main' : totalesChequesPropisPendientes.saldo < 0 ? 'error.main' : 'text.primary'
+                    }}
+                  >
+                    {formatCurrencyWithSymbol(totalesChequesPropisPendientes.saldo)}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            ) : null}
+
             {/* Filas de cheques sin depositar */}
             {chequeBalances.map((cheque) => (
               <TableRow key={cheque.banco} hover>
@@ -751,11 +947,14 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
             </TableRow>
             
             {/* Información adicional sobre cheques */}
-            {totalesCheques.saldo !== 0 && (
+            {(totalesCheques.saldo !== 0 || totalesChequesPropisPendientes.saldo !== 0) && (
               <TableRow sx={{ backgroundColor: 'info.light', '& .MuiTableCell-root': { border: 0 } }}>
                 <TableCell colSpan={4}>
                   <Typography variant="body2" sx={{ color: 'info.main', textAlign: 'center', fontStyle: 'italic' }}>
                     NOTA: Los cheques sin depositar ({formatCurrencyWithSymbol(totalesCheques.saldo)}) no se incluyen en el total disponible hasta que sean depositados
+                    {totalesChequesPropisPendientes.saldo !== 0 && (
+                      <span> • Los cheques propios pendientes ({formatCurrencyWithSymbol(totalesChequesPropisPendientes.saldo)}) afectarán la caja al ser confirmados</span>
+                    )}
                   </Typography>
                 </TableCell>
               </TableRow>
@@ -772,6 +971,11 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
           Total disponible en caja: {formatCurrencyWithSymbol(totalesBancos.saldo)}
         </Typography>
+        {totalesChequesPropisPendientes.saldo !== 0 && (
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Cheques propios pendientes: {formatCurrencyWithSymbol(totalesChequesPropisPendientes.saldo)}
+          </Typography>
+        )}
         {totalesCheques.saldo !== 0 && (
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
             Cheques pendientes de depósito: {formatCurrencyWithSymbol(totalesCheques.saldo)}

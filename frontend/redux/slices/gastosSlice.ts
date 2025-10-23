@@ -43,12 +43,27 @@ export const updateGasto = createAsyncThunk('/apigastos/updateGasto', async (gas
   }
 );
 
-export const deleteGasto = createAsyncThunk('/api/gastos/deleteGasto', async (gastoId: string, { rejectWithValue }) => {
+export const deleteGasto = createAsyncThunk(
+  'gastos/deleteGasto',
+  async (id: string, { rejectWithValue }) => {
     try {
-      await api.delete(`/api/gastos/${gastoId}`);
-      return gastoId;
+      await api.delete(`/api/gastos/${id}`);
+      return id;
     } catch (error: any) {
-      return rejectWithValue(error.response?.data?.message || 'Failed to delete expense');
+      return rejectWithValue(error.response?.data?.message || 'Failed to delete gasto');
+    }
+  }
+);
+
+// Nueva acción para cancelar gastos (oper_ad)
+export const cancelGasto = createAsyncThunk(
+  'gastos/cancelGasto',
+  async (id: string, { rejectWithValue }) => {
+    try {
+      const response = await api.patch(`/api/gastos/${id}/cancel`);
+      return response.data;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to cancel gasto');
     }
   }
 );
@@ -115,6 +130,13 @@ const gastosSlice = createSlice({
       // Delete
       .addCase(deleteGasto.fulfilled, (state, action: PayloadAction<string>) => {
         state.items = state.items.filter(item => item._id !== action.payload);
+      })
+      // Cancel
+      .addCase(cancelGasto.fulfilled, (state, action: PayloadAction<Gasto>) => {
+        const index = state.items.findIndex(item => item._id === action.payload._id);
+        if (index !== -1) {
+          state.items[index] = action.payload;
+        }
       })
       // Confirmar cheque
       .addCase(confirmarCheque.fulfilled, (state, action: PayloadAction<Gasto>) => {

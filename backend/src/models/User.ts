@@ -48,34 +48,4 @@ userSchema.methods.matchPassword = async function (enteredPassword: string) {
 
 // Fix: Type the model with the IUser interface.
 const User = mongoose.model<IUser>('User', userSchema);
-
-// Función para crear un usuario admin si no existe ninguno
-export const seedAdminUser = async () => {
-    try {
-        const userCount = await User.countDocuments();
-        if (userCount === 0) {
-            console.log('No users found, creating admin user...');
-            await User.create({
-                username: 'admin',
-                password: 'password',
-                userType: 'admin'
-            });
-            console.log('Admin user created with credentials: admin / password');
-        }
-    } catch (error) {
-    // Detectar si el error es por autenticación en MongoDB y mostrar guía útil
-    const errMsg = (error && (error as any).message) ? (error as any).message : String(error);
-    if (errMsg.toLowerCase().includes('requires authentication') || errMsg.toLowerCase().includes('not authorized')) {
-      console.error('Error seeding admin user: la base de datos requiere autenticación.');
-      console.error('Soluciones posibles:');
-      console.error('- Proveer un MONGO_URI con usuario y contraseña (p. ej. mongodb://user:pass@host:27017/db?authSource=admin)');
-      console.error("- Crear un usuario con privilegios en la BD antes de ejecutar la aplicación (usa mongosh o la interfaz de administración)");
-      console.error(`Detalle del error: ${errMsg}`);
-    } else {
-      console.error('Error seeding admin user:', error);
-    }
-    }
-}
-
-
 export default User;

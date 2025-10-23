@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useDispatch } from 'react-redux';
 import { AppDispatch } from '../redux/store';
 import { addEmployee, updateEmployee } from '../redux/slices/employeesSlice';
+import { formatCurrency } from '../utils/formatters';
 import { Employee } from '../types';
 import {
   TextField,
@@ -37,6 +38,73 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
     observaciones: ''
   });
 
+  // Estado separado para el valor formateado del sueldo
+  const [sueldoFormatted, setSueldoFormatted] = useState('');
+
+  // Función para formatear el número mientras se escribe (con decimales)
+  const formatNumberInput = (value: string): string => {
+    // Si el valor está vacío, retornar vacío
+    if (!value) return '';
+    
+    // Permitir solo números y una coma
+    const cleanValue = value.replace(/[^\d,]/g, '');
+    
+    // Si solo hay una coma al final, permitirla
+    if (cleanValue === ',') return '';
+    
+    // Dividir por la coma (separador decimal argentino)
+    const parts = cleanValue.split(',');
+    
+    // Solo permitir una coma
+    if (parts.length > 2) {
+      // Si hay más de una coma, tomar solo las primeras dos partes
+      parts.splice(2);
+    }
+    
+    // Parte entera
+    let integerPart = parts[0] || '';
+    
+    // Formatear la parte entera con puntos cada tres dígitos (solo si tiene valor)
+    if (integerPart.length > 0) {
+      const num = parseInt(integerPart, 10);
+      if (!isNaN(num) && num > 0) {
+        integerPart = num.toLocaleString('es-AR');
+      } else if (integerPart === '0') {
+        integerPart = '0';
+      }
+    }
+    
+    // Parte decimal (máximo 2 dígitos)
+    let decimalPart = parts[1];
+    if (decimalPart !== undefined) {
+      if (decimalPart.length > 2) {
+        decimalPart = decimalPart.substring(0, 2);
+      }
+      // Si hay parte decimal (incluso vacía), agregar la coma
+      return `${integerPart},${decimalPart}`;
+    }
+    
+    // Si termina con coma en el input original, mantenerla
+    if (value.endsWith(',') && parts.length === 2) {
+      return `${integerPart},`;
+    }
+    
+    return integerPart;
+  };
+
+  // Función para obtener el valor numérico desde el formato visual (con decimales)
+  const getNumericValue = (formattedValue: string): number => {
+    if (!formattedValue) return 0;
+    
+    // Convertir formato argentino a número: 1.000,50 -> 1000.50
+    const cleanValue = formattedValue
+      .replace(/\./g, '') // Remover puntos (separadores de miles)
+      .replace(',', '.'); // Cambiar coma por punto (decimales)
+    
+    const parsed = parseFloat(cleanValue);
+    return isNaN(parsed) ? 0 : parsed;
+  };
+
   useEffect(() => {
     if (employee) {
       setFormData({
@@ -51,6 +119,11 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
         telefono: employee.telefono || '',
         observaciones: employee.observaciones || ''
       });
+      
+      // Formatear el sueldo existente con decimales
+      if (employee.sueldoBase && employee.sueldoBase > 0) {
+        setSueldoFormatted(formatCurrency(employee.sueldoBase));
+      }
     } else {
       setFormData({
         nombre: '',
@@ -64,16 +137,31 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
         telefono: '',
         observaciones: ''
       });
+      setSueldoFormatted('');
     }
   }, [employee]);
 
   const handleChange = (field: keyof typeof formData) => (
     event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | { target: { value: unknown } }
   ) => {
-    const value = event.target.value;
+    const value = event.target.value as string;
+    
+    // Manejar campo sueldo con formato especial
+    if (field === 'sueldoBase') {
+      const formatted = formatNumberInput(value);
+      setSueldoFormatted(formatted);
+      const numericValue = getNumericValue(formatted);
+      setFormData(prev => ({
+        ...prev,
+        sueldoBase: numericValue
+      }));
+      return;
+    }
+    
+    // Para otros campos, comportamiento normal
     setFormData(prev => ({
       ...prev,
-      [field]: field === 'sueldoBase' ? Number(value) : value
+      [field]: value
     }));
   };
 
@@ -154,11 +242,13 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
           <Grid item xs={12} sm={6}>
             <TextField
               label="Sueldo Base"
-              type="number"
-              value={formData.sueldoBase}
+              type="text"
+              value={sueldoFormatted}
               onChange={handleChange('sueldoBase')}
               fullWidth
               required
+              placeholder="Ej: 150.000,50"
+              helperText="Formato: 1.000,50 (usar coma para decimales)"
               InputProps={{
                 startAdornment: <InputAdornment position="start">$</InputAdornment>,
               }}

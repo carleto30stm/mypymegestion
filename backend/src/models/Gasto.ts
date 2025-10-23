@@ -79,6 +79,11 @@ const gastoSchema = new mongoose.Schema({
   },
   comentario: { type: String },
   fechaStandBy: { type: Date },
+  estado: {
+    type: String,
+    enum: ['activo', 'cancelado'],
+    default: 'activo'
+  },
   confirmado: { 
     type: Boolean,
     default: function(this: any) {

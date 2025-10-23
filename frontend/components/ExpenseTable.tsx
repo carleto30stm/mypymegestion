@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../redux/store';
 import { Gasto } from '../types';
-import { deleteGasto, confirmarCheque } from '../redux/slices/gastosSlice';
+import { deleteGasto, confirmarCheque, cancelGasto } from '../redux/slices/gastosSlice';
 import { DataGrid, GridColDef, GridActionsCellItem } from '@mui/x-data-grid';
 import { 
   Box, 
@@ -11,11 +11,13 @@ import {
   Dialog, 
   DialogTitle, 
   DialogContent,
+  DialogActions,
   Button,
   Chip
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
+import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ExpenseForm from './ExpenseForm';
 import { formatDate, formatCurrencyWithSymbol } from '../utils/formatters';
@@ -38,12 +40,19 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
   const { items: gastos, status } = useSelector((state: RootState) => state.gastos);
   const { user } = useSelector((state: RootState) => state.auth);
   const [gastoToEdit, setGastoToEdit] = useState<Gasto | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [gastoToDelete, setGastoToDelete] = useState<Gasto | null>(null);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [gastoToCancel, setGastoToCancel] = useState<Gasto | null>(null);
   
   // Obtener fecha de hoy en formato YYYY-MM-DD
   const today = new Date().toISOString().split('T')[0];
   
-  // Verificar si el usuario puede editar/eliminar (OPER NO puede)
-  const canEditDelete = user?.userType !== 'oper';
+  // Verificar permisos según el tipo de usuario
+  const canEdit = user?.userType !== 'oper'; // admin y oper_ad pueden editar
+  const canDelete = user?.userType === 'admin'; // solo admin puede eliminar
+  const canCancel = user?.userType === 'oper_ad'; // solo oper_ad puede cancelar
+  const showActions = user?.userType !== 'oper'; // oper no ve la columna de acciones
   
 
   const handleEditClick = (gasto: Gasto) => {
@@ -51,8 +60,40 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
     setIsModalOpen(true);
   };
 
-  const handleDeleteClick = (id: string) => {
-    dispatch(deleteGasto(id));
+  const handleDeleteClick = (gasto: Gasto) => {
+    setGastoToDelete(gasto);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleCancelClick = (gasto: Gasto) => {
+    setGastoToCancel(gasto);
+    setCancelConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (gastoToDelete) {
+      dispatch(deleteGasto(gastoToDelete._id as string));
+      setDeleteConfirmOpen(false);
+      setGastoToDelete(null);
+    }
+  };
+
+  const handleConfirmCancel = () => {
+    if (gastoToCancel) {
+      dispatch(cancelGasto(gastoToCancel._id as string));
+      setCancelConfirmOpen(false);
+      setGastoToCancel(null);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setDeleteConfirmOpen(false);
+    setGastoToDelete(null);
+  };
+
+  const handleCancelCancelAction = () => {
+    setCancelConfirmOpen(false);
+    setGastoToCancel(null);
   };
 
   const handleConfirmarCheque = (id: string) => {
@@ -83,6 +124,17 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
       width: 120,
       renderCell: (params) => {
         const gasto = params.row as Gasto;
+        
+        // Verificar si está cancelado
+        if (gasto.estado === 'cancelado') {
+          return <Chip 
+            icon={<CancelIcon />} 
+            label="CANCELADO" 
+            color="error" 
+            size="small" 
+            variant="filled"
+          />;
+        }
         
         // Para cheques, mostrar estado de confirmación
         if (gasto.medioDePago?.includes('Cheque')) {
@@ -159,20 +211,37 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
       } },
   ];
 
-  // Solo agregar columna de acciones si el usuario puede editar/eliminar
-  if (canEditDelete) {
+  // Solo agregar columna de acciones si el usuario puede ver acciones
+  if (showActions) {
     columns.push({
       field: 'actions',
       type: 'actions',
       headerName: 'Acciones',
-      width: 100,
+      width: 120,
       cellClassName: 'actions',
       getActions: ({ row }) => {
         const gasto = row as Gasto;
-        const actions = [];
+        const actions: React.ReactElement[] = [];
         
-        // Botón de editar (solo si tiene permisos)
-        if (canEditDelete) {
+        // Para gastos cancelados, solo mostrar botón de eliminar si es admin
+        if (gasto.estado === 'cancelado') {
+          if (canDelete) { // Solo admin puede eliminar registros cancelados
+            actions.push(
+              <GridActionsCellItem
+                key="delete"
+                icon={<DeleteIcon />}
+                label="Eliminar"
+                onClick={() => handleDeleteClick(gasto)}
+                color="error"
+              />
+            );
+          }
+          return actions;
+        }
+        
+        // Para gastos activos, mostrar todas las acciones según permisos
+        // Botón de editar (admin y oper_ad)
+        if (canEdit) {
           actions.push(
             <GridActionsCellItem
               key="edit"
@@ -198,15 +267,28 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
           );
         }
         
-        // Botón de eliminar (solo si tiene permisos)
-        if (canEditDelete) {
+        // Botón de eliminar (solo admin)
+        if (canDelete) {
           actions.push(
             <GridActionsCellItem
               key="delete"
               icon={<DeleteIcon />}
-              label="Delete"
-              onClick={() => handleDeleteClick(gasto._id as string)}
-              color="inherit"
+              label="Eliminar"
+              onClick={() => handleDeleteClick(gasto)}
+              color="error"
+            />
+          );
+        }
+        
+        // Botón de cancelar (solo oper_ad)
+        if (canCancel) {
+          actions.push(
+            <GridActionsCellItem
+              key="cancel"
+              icon={<CancelIcon />}
+              label="Cancelar"
+              onClick={() => handleCancelClick(gasto)}
+              color="warning"
             />
           );
         }
@@ -268,6 +350,124 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
             <DialogContent>
                 <ExpenseForm onClose={handleCloseModal} gastoToEdit={gastoToEdit}/>
             </DialogContent>
+        </Dialog>
+        
+        {/* Modal de confirmación para eliminar */}
+        <Dialog
+          open={deleteConfirmOpen}
+          onClose={handleCancelDelete}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>Confirmar Eliminación</DialogTitle>
+          <DialogContent>
+            <Typography>
+              ¿Estás seguro de que deseas eliminar este registro?
+            </Typography>
+            {gastoToDelete && (
+              <Box sx={{ mt: 2, p: 2, backgroundColor: 'grey.100', borderRadius: 1 }}>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  <strong>Fecha:</strong> {formatDate(gastoToDelete.fecha)}
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  <strong>Rubro:</strong> {gastoToDelete.rubro}
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  <strong>Detalle:</strong> {gastoToDelete.detalleGastos}
+                </Typography>
+                {gastoToDelete.entrada && gastoToDelete.entrada > 0 && (
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    <strong>Entrada:</strong> {formatCurrencyWithSymbol(gastoToDelete.entrada)}
+                  </Typography>
+                )}
+                {gastoToDelete.salida && gastoToDelete.salida > 0 && (
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    <strong>Salida:</strong> {formatCurrencyWithSymbol(gastoToDelete.salida)}
+                  </Typography>
+                )}
+                {gastoToDelete.montoTransferencia && gastoToDelete.montoTransferencia > 0 && (
+                  <Typography variant="body2">
+                    <strong>Transferencia:</strong> {formatCurrencyWithSymbol(gastoToDelete.montoTransferencia)}
+                  </Typography>
+                )}
+              </Box>
+            )}
+            <Typography variant="body2" color="error" sx={{ mt: 2, fontWeight: 'bold' }}>
+              Esta acción no se puede deshacer.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCancelDelete} color="primary">
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleConfirmDelete} 
+              color="error" 
+              variant="contained"
+              autoFocus
+            >
+              Eliminar
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Modal de confirmación para cancelar */}
+        <Dialog
+          open={cancelConfirmOpen}
+          onClose={handleCancelCancelAction}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>Confirmar Cancelación</DialogTitle>
+          <DialogContent>
+            <Typography>
+              ¿Estás seguro de que deseas cancelar este registro?
+            </Typography>
+            {gastoToCancel && (
+              <Box sx={{ mt: 2, p: 2, backgroundColor: 'warning.light', borderRadius: 1 }}>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  <strong>Fecha:</strong> {formatDate(gastoToCancel.fecha)}
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  <strong>Rubro:</strong> {gastoToCancel.rubro}
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  <strong>Detalle:</strong> {gastoToCancel.detalleGastos}
+                </Typography>
+                {gastoToCancel.entrada && gastoToCancel.entrada > 0 && (
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    <strong>Entrada:</strong> {formatCurrencyWithSymbol(gastoToCancel.entrada)}
+                  </Typography>
+                )}
+                {gastoToCancel.salida && gastoToCancel.salida > 0 && (
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    <strong>Salida:</strong> {formatCurrencyWithSymbol(gastoToCancel.salida)}
+                  </Typography>
+                )}
+                {gastoToCancel.montoTransferencia && gastoToCancel.montoTransferencia > 0 && (
+                  <Typography variant="body2">
+                    <strong>Transferencia:</strong> {formatCurrencyWithSymbol(gastoToCancel.montoTransferencia)}
+                  </Typography>
+                )}
+              </Box>
+            )}
+            <Typography variant="body2" color="warning.main" sx={{ mt: 2, fontWeight: 'bold' }}>
+              El registro se marcará como cancelado y no será incluido en los cálculos.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCancelCancelAction} color="primary">
+              No cancelar
+            </Button>
+            <Button 
+              onClick={handleConfirmCancel} 
+              color="warning" 
+              variant="contained"
+              autoFocus
+            >
+              Cancelar registro
+            </Button>
+          </DialogActions>
         </Dialog>
     </Paper>
   );
