@@ -156,9 +156,18 @@ router.route('/:id')
 // Ruta para cancelar gasto (oper_ad y admin)
 router.patch('/:id/cancel', async (req, res) => {
   try {
+    const { comentario } = req.body;
+    
+    const updateData: any = { estado: 'cancelado' };
+    
+    // Si se proporciona un comentario, actualizar también ese campo
+    if (comentario) {
+      updateData.comentario = comentario;
+    }
+    
     const gasto = await Gasto.findByIdAndUpdate(
       req.params.id,
-      { estado: 'cancelado' },
+      updateData,
       { new: true }
     );
     
@@ -169,6 +178,34 @@ router.patch('/:id/cancel', async (req, res) => {
     res.json(gasto);
   } catch (error) {
     res.status(500).json({ message: 'Error al cancelar el gasto' });
+  }
+});
+
+// Ruta para reactivar gasto (solo admin)
+router.patch('/:id/reactivate', async (req, res) => {
+  try {
+    const { comentario } = req.body;
+    
+    const updateData: any = { estado: 'activo' };
+    
+    // Si se proporciona un comentario, actualizar también ese campo
+    if (comentario) {
+      updateData.comentario = comentario;
+    }
+    
+    const gasto = await Gasto.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true }
+    );
+    
+    if (!gasto) {
+      return res.status(404).json({ message: 'Gasto no encontrado' });
+    }
+    
+    res.json(gasto);
+  } catch (error) {
+    res.status(500).json({ message: 'Error al reactivar el gasto' });
   }
 });
 

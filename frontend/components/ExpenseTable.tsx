@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../redux/store';
 import { Gasto } from '../types';
-import { deleteGasto, confirmarCheque, cancelGasto } from '../redux/slices/gastosSlice';
+import { deleteGasto, confirmarCheque, cancelGasto, reactivateGasto } from '../redux/slices/gastosSlice';
 import { DataGrid, GridColDef, GridActionsCellItem } from '@mui/x-data-grid';
 import { 
   Box, 
@@ -13,14 +13,17 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  Chip
+  Chip,
+  TextField
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import RestoreIcon from '@mui/icons-material/Restore';
 import ExpenseForm from './ExpenseForm';
 import { formatDate, formatCurrencyWithSymbol } from '../utils/formatters';
+import { useAuthDebug } from '../hooks/useAuthDebug';
 
 interface ExpenseTableProps {
     isModalOpen: boolean;
@@ -39,11 +42,16 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
   const dispatch = useDispatch<AppDispatch>();
   const { items: gastos, status } = useSelector((state: RootState) => state.gastos);
   const { user } = useSelector((state: RootState) => state.auth);
+  const authDebug = useAuthDebug();
   const [gastoToEdit, setGastoToEdit] = useState<Gasto | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [gastoToDelete, setGastoToDelete] = useState<Gasto | null>(null);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
   const [gastoToCancel, setGastoToCancel] = useState<Gasto | null>(null);
+  const [comentarioCancelacion, setComentarioCancelacion] = useState('');
+  const [reactivateConfirmOpen, setReactivateConfirmOpen] = useState(false);
+  const [gastoToReactivate, setGastoToReactivate] = useState<Gasto | null>(null);
+  const [comentarioReactivacion, setComentarioReactivacion] = useState('');
   
   // Obtener fecha de hoy en formato YYYY-MM-DD
   const today = new Date().toISOString().split('T')[0];
@@ -53,6 +61,23 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
   const canDelete = user?.userType === 'admin'; // solo admin puede eliminar
   const canCancel = user?.userType === 'oper_ad'; // solo oper_ad puede cancelar
   const showActions = user?.userType !== 'oper'; // oper no ve la columna de acciones
+  
+  // Log de debug para permisos de usuario - solo en desarrollo
+  if (process.env.NODE_ENV === 'development') {
+    console.log('👤 [USER PERMISSIONS DEBUG] Usuario actual:', {
+      username: user?.username,
+      userType: user?.userType,
+      permissions: {
+        canEdit,
+        canDelete, 
+        canCancel,
+        showActions
+      }
+    });
+    
+    // También usar el hook de debug
+    authDebug.logCurrentUser();
+  }
   
 
   const handleEditClick = (gasto: Gasto) => {
@@ -67,7 +92,14 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
 
   const handleCancelClick = (gasto: Gasto) => {
     setGastoToCancel(gasto);
+    setComentarioCancelacion(''); // Limpiar comentario anterior
     setCancelConfirmOpen(true);
+  };
+
+  const handleReactivateClick = (gasto: Gasto) => {
+    setGastoToReactivate(gasto);
+    setComentarioReactivacion(''); // Limpiar comentario anterior
+    setReactivateConfirmOpen(true);
   };
 
   const handleConfirmDelete = () => {
@@ -79,10 +111,36 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
   };
 
   const handleConfirmCancel = () => {
-    if (gastoToCancel) {
-      dispatch(cancelGasto(gastoToCancel._id as string));
+    if (gastoToCancel && comentarioCancelacion.trim()) {
+      // Agregar el comentario de cancelación al comentario existente
+      const comentarioFinal = gastoToCancel.comentario 
+        ? `${gastoToCancel.comentario} | CANCELADO: ${comentarioCancelacion.trim()}`
+        : `CANCELADO: ${comentarioCancelacion.trim()}`;
+      
+      dispatch(cancelGasto({
+        id: gastoToCancel._id as string,
+        comentario: comentarioFinal
+      }));
       setCancelConfirmOpen(false);
       setGastoToCancel(null);
+      setComentarioCancelacion('');
+    }
+  };
+
+  const handleConfirmReactivate = () => {
+    if (gastoToReactivate && comentarioReactivacion.trim()) {
+      // Agregar el comentario de reactivación al comentario existente
+      const comentarioFinal = gastoToReactivate.comentario 
+        ? `${gastoToReactivate.comentario} | REACTIVADO: ${comentarioReactivacion.trim()}`
+        : `REACTIVADO: ${comentarioReactivacion.trim()}`;
+      
+      dispatch(reactivateGasto({
+        id: gastoToReactivate._id as string,
+        comentario: comentarioFinal
+      }));
+      setReactivateConfirmOpen(false);
+      setGastoToReactivate(null);
+      setComentarioReactivacion('');
     }
   };
 
@@ -94,6 +152,13 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
   const handleCancelCancelAction = () => {
     setCancelConfirmOpen(false);
     setGastoToCancel(null);
+    setComentarioCancelacion(''); // Limpiar comentario al cancelar
+  };
+
+  const handleCancelReactivateAction = () => {
+    setReactivateConfirmOpen(false);
+    setGastoToReactivate(null);
+    setComentarioReactivacion(''); // Limpiar comentario al cancelar
   };
 
   const handleConfirmarCheque = (id: string) => {
@@ -225,7 +290,16 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
         
         // Para gastos cancelados, solo mostrar botón de eliminar si es admin
         if (gasto.estado === 'cancelado') {
-          if (canDelete) { // Solo admin puede eliminar registros cancelados
+          if (canDelete) { // Solo admin puede eliminar y reactivar registros cancelados
+            actions.push(
+              <GridActionsCellItem
+                key="reactivate"
+                icon={<RestoreIcon />}
+                label="Reactivar"
+                onClick={() => handleReactivateClick(gasto)}
+                color="success"
+              />
+            );
             actions.push(
               <GridActionsCellItem
                 key="delete"
@@ -330,6 +404,29 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1, fontStyle: 'italic' }}>
               💡 Los registros en STANDBY se muestran pero no se incluyen en cálculos hasta su confirmación y depósito
             </Typography>
+            
+            {/* Botón de debug solo en desarrollo */}
+            {process.env.NODE_ENV === 'development' && (
+              <Box sx={{ mt: 1, display: 'flex', gap: 1, alignItems: 'center' }}>
+                <Button 
+                  size="small" 
+                  onClick={authDebug.logFullAuthState}
+                  sx={{ fontSize: '0.7rem' }}
+                  variant="outlined"
+                  color="info"
+                >
+                  🐛 Debug Auth State
+                </Button>
+                
+                {/* Mostrar información de expiración del token */}
+                {authDebug.tokenExpiration && (
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                    🕐 Sesión expira: {new Date(authDebug.tokenExpiration).toLocaleTimeString()} 
+                    ({authDebug.getTokenInfo()?.formattedTime || 'calculando...'} restantes)
+                  </Typography>
+                )}
+              </Box>
+            )}
         </Box>
         <DataGrid
             rows={gastosFiltered.map(g => ({...g, id: g._id}))}
@@ -420,7 +517,7 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
         >
           <DialogTitle>Confirmar Cancelación</DialogTitle>
           <DialogContent>
-            <Typography>
+            <Typography sx={{ mb: 2 }}>
               ¿Estás seguro de que deseas cancelar este registro?
             </Typography>
             {gastoToCancel && (
@@ -451,6 +548,21 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
                 )}
               </Box>
             )}
+            
+            {/* Campo de comentario obligatorio */}
+            <TextField
+              fullWidth
+              multiline
+              rows={3}
+              label="Motivo de cancelación (obligatorio)"
+              value={comentarioCancelacion}
+              onChange={(e) => setComentarioCancelacion(e.target.value)}
+              error={!comentarioCancelacion.trim()}
+              helperText={!comentarioCancelacion.trim() ? 'El motivo de cancelación es obligatorio' : ''}
+              sx={{ mt: 2 }}
+              placeholder="Ingresa el motivo por el cual se cancela este registro..."
+            />
+            
             <Typography variant="body2" color="warning.main" sx={{ mt: 2, fontWeight: 'bold' }}>
               El registro se marcará como cancelado y no será incluido en los cálculos.
             </Typography>
@@ -463,9 +575,85 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
               onClick={handleConfirmCancel} 
               color="warning" 
               variant="contained"
+              disabled={!comentarioCancelacion.trim()}
               autoFocus
             >
               Cancelar registro
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Modal de confirmación para reactivar */}
+        <Dialog
+          open={reactivateConfirmOpen}
+          onClose={handleCancelReactivateAction}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>Confirmar Reactivación</DialogTitle>
+          <DialogContent>
+            <Typography sx={{ mb: 2 }}>
+              ¿Estás seguro de que deseas reactivar este registro cancelado?
+            </Typography>
+            {gastoToReactivate && (
+              <Box sx={{ mt: 2, p: 2, backgroundColor: 'success.light', borderRadius: 1 }}>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  <strong>Fecha:</strong> {formatDate(gastoToReactivate.fecha)}
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  <strong>Rubro:</strong> {gastoToReactivate.rubro}
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  <strong>Detalle:</strong> {gastoToReactivate.detalleGastos}
+                </Typography>
+                {gastoToReactivate.entrada && gastoToReactivate.entrada > 0 && (
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    <strong>Entrada:</strong> {formatCurrencyWithSymbol(gastoToReactivate.entrada)}
+                  </Typography>
+                )}
+                {gastoToReactivate.salida && gastoToReactivate.salida > 0 && (
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    <strong>Salida:</strong> {formatCurrencyWithSymbol(gastoToReactivate.salida)}
+                  </Typography>
+                )}
+                {gastoToReactivate.montoTransferencia && gastoToReactivate.montoTransferencia > 0 && (
+                  <Typography variant="body2">
+                    <strong>Transferencia:</strong> {formatCurrencyWithSymbol(gastoToReactivate.montoTransferencia)}
+                  </Typography>
+                )}
+              </Box>
+            )}
+            
+            {/* Campo de comentario obligatorio */}
+            <TextField
+              fullWidth
+              multiline
+              rows={3}
+              label="Motivo de reactivación (obligatorio)"
+              value={comentarioReactivacion}
+              onChange={(e) => setComentarioReactivacion(e.target.value)}
+              error={!comentarioReactivacion.trim()}
+              helperText={!comentarioReactivacion.trim() ? 'El motivo de reactivación es obligatorio' : ''}
+              sx={{ mt: 2 }}
+              placeholder="Ingresa el motivo por el cual se reactiva este registro..."
+            />
+            
+            <Typography variant="body2" color="success.main" sx={{ mt: 2, fontWeight: 'bold' }}>
+              El registro se marcará como activo y volverá a ser incluido en los cálculos.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCancelReactivateAction} color="primary">
+              No reactivar
+            </Button>
+            <Button 
+              onClick={handleConfirmReactivate} 
+              color="success" 
+              variant="contained"
+              disabled={!comentarioReactivacion.trim()}
+              autoFocus
+            >
+              Reactivar registro
             </Button>
           </DialogActions>
         </Dialog>

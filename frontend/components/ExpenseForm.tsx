@@ -426,7 +426,8 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
                   <MenuItem value="BANCO">BANCO</MenuItem>
                   <MenuItem value="MANT.MAQ">MANT.MAQ</MenuItem>
                   <MenuItem value="SUELDOS">SUELDOS</MenuItem>
-                  <MenuItem value="AFIT">AFIT</MenuItem>
+                  <MenuItem value="GASTOS ADMINISTRATIVOS">GASTOS ADMINISTRATIVOS</MenuItem>
+                  <MenuItem value="ARCA">ARCA</MenuItem>
                   <MenuItem value="MOVILIDAD">MOVILIDAD</MenuItem>
                 </Select>
               </FormControl>

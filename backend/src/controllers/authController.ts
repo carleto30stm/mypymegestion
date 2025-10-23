@@ -4,10 +4,10 @@ import type { Request as ExpressRequest, Response as ExpressResponse } from 'exp
 import User, {type  IUser } from '../models/User.js';
 import jwt from 'jsonwebtoken';
 
-// Función para generar JWT token
+// Función para generar JWT token con expiración de 12 horas
 const generateToken = (id: string) => {
   return jwt.sign({ id }, process.env.JWT_SECRET || 'secret', {
-    expiresIn: '30d',
+    expiresIn: '12h', // Cambio: De 30 días a 12 horas
   });
 };
 

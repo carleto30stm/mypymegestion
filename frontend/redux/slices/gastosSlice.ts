@@ -58,12 +58,25 @@ export const deleteGasto = createAsyncThunk(
 // Nueva acción para cancelar gastos (oper_ad)
 export const cancelGasto = createAsyncThunk(
   'gastos/cancelGasto',
-  async (id: string, { rejectWithValue }) => {
+  async ({ id, comentario }: { id: string; comentario: string }, { rejectWithValue }) => {
     try {
-      const response = await api.patch(`/api/gastos/${id}/cancel`);
+      const response = await api.patch(`/api/gastos/${id}/cancel`, { comentario });
       return response.data;
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.message || 'Failed to cancel gasto');
+    }
+  }
+);
+
+// Nueva acción para reactivar gastos (solo admin)
+export const reactivateGasto = createAsyncThunk(
+  'gastos/reactivateGasto',
+  async ({ id, comentario }: { id: string; comentario: string }, { rejectWithValue }) => {
+    try {
+      const response = await api.patch(`/api/gastos/${id}/reactivate`, { comentario });
+      return response.data;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to reactivate gasto');
     }
   }
 );
@@ -133,6 +146,13 @@ const gastosSlice = createSlice({
       })
       // Cancel
       .addCase(cancelGasto.fulfilled, (state, action: PayloadAction<Gasto>) => {
+        const index = state.items.findIndex(item => item._id === action.payload._id);
+        if (index !== -1) {
+          state.items[index] = action.payload;
+        }
+      })
+      // Reactivate
+      .addCase(reactivateGasto.fulfilled, (state, action: PayloadAction<Gasto>) => {
         const index = state.items.findIndex(item => item._id === action.payload._id);
         if (index !== -1) {
           state.items[index] = action.payload;

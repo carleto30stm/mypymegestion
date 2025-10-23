@@ -5,9 +5,14 @@ import { RootState } from './redux/store';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import EmployeesPage from './pages/EmployeesPage';
+import { useTokenExpiration } from './hooks/useTokenExpiration';
 
 const PrivateRoute: React.FC = () => {
     const { isAuthenticated } = useSelector((state: RootState) => state.auth);
+    
+    // Activar verificación de expiración de token
+    useTokenExpiration();
+    
     return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
 };
 
