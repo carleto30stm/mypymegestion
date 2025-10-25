@@ -11,11 +11,12 @@ interface AuthState {
   error: string | null;
 }
 
-// Log inicial del estado de autenticación
+
+// Log inicial del estado de autenticación y usuario persistido
 const existingToken = localStorage.getItem('token');
 const existingExpiration = localStorage.getItem('tokenExpiration');
+const existingUser = localStorage.getItem('user');
 
-// Verificar si el token ha expirado
 const now = Date.now();
 const isTokenExpired = existingExpiration ? now > parseInt(existingExpiration) : false;
 
@@ -24,18 +25,29 @@ console.log('🔍 [AUTH DEBUG] Estado inicial de autenticación:', {
   tokenLength: existingToken?.length || 0,
   tokenExpired: isTokenExpired,
   expirationTime: existingExpiration ? new Date(parseInt(existingExpiration)).toLocaleString() : null,
-  isAuthenticated: !!existingToken && !isTokenExpired
+  isAuthenticated: !!existingToken && !isTokenExpired,
+  userPersisted: !!existingUser
 });
 
-// Si el token ha expirado, limpiar localStorage
 if (isTokenExpired) {
   localStorage.removeItem('token');
   localStorage.removeItem('tokenExpiration');
+  localStorage.removeItem('user');
   console.log('🚨 [AUTH DEBUG] Token expirado - removiendo del localStorage');
 }
 
+let parsedUser: User | null = null;
+if (existingUser && !isTokenExpired) {
+  try {
+    parsedUser = JSON.parse(existingUser);
+  } catch (e) {
+    parsedUser = null;
+    console.error('❌ [AUTH DEBUG] Error al parsear usuario persistido:', e);
+  }
+}
+
 const initialState: AuthState = {
-  user: null,
+  user: parsedUser,
   token: isTokenExpired ? null : existingToken,
   tokenExpiration: isTokenExpired ? null : (existingExpiration ? parseInt(existingExpiration) : null),
   isAuthenticated: !!existingToken && !isTokenExpired,
@@ -111,7 +123,7 @@ const authSlice = createSlice({
       .addCase(login.fulfilled, (state, action: PayloadAction<{ user: User; token: string }>) => {
         // Calcular cuándo expira el token (12 horas desde ahora)
         const expirationTime = Date.now() + (12 * 60 * 60 * 1000); // 12 horas en millisegundos
-        
+
         console.log('✅ [AUTH DEBUG] Login exitoso:', {
           username: action.payload.user.username,
           userType: action.payload.user.userType,
@@ -119,16 +131,17 @@ const authSlice = createSlice({
           tokenPresent: !!action.payload.token,
           expirationTime: new Date(expirationTime).toLocaleString()
         });
-        
+
         state.status = 'succeeded';
         state.isAuthenticated = true;
         state.user = action.payload.user;
         state.token = action.payload.token;
         state.tokenExpiration = expirationTime;
-        
+
         // Guardar en localStorage
         localStorage.setItem('tokenExpiration', expirationTime.toString());
-        
+        localStorage.setItem('user', JSON.stringify(action.payload.user));
+
         console.log('✅ [AUTH DEBUG] Estado actualizado - Usuario activo:', {
           username: state.user.username,
           userType: state.user.userType,

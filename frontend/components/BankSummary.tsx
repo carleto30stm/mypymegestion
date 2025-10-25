@@ -722,7 +722,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
                     fontWeight="medium"
                     sx={{ 
                       color: bank.saldo > 0 ? 'success.main' : bank.saldo < 0 ? 'error.main' : 'text.primary',
-                      backgroundColor: bank.saldo > 0 ? 'success.light' : bank.saldo < 0 ? 'error.light' : 'grey.100',
+                      backgroundColor: bank.saldo > 0 ? 'success' : bank.saldo < 0 ? 'error' : 'grey.100',
                       padding: '2px 6px',
                       borderRadius: 1,
                       display: 'inline-block',
@@ -950,7 +950,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
             {(totalesCheques.saldo !== 0 || totalesChequesPropisPendientes.saldo !== 0) && (
               <TableRow sx={{ backgroundColor: 'info.light', '& .MuiTableCell-root': { border: 0 } }}>
                 <TableCell colSpan={4}>
-                  <Typography variant="body2" sx={{ color: 'info.main', textAlign: 'center', fontStyle: 'italic' }}>
+                  <Typography variant="body2" sx={{ color: 'info', textAlign: 'center', fontStyle: 'italic' }}>
                     NOTA: Los cheques sin depositar ({formatCurrencyWithSymbol(totalesCheques.saldo)}) no se incluyen en el total disponible hasta que sean depositados
                     {totalesChequesPropisPendientes.saldo !== 0 && (
                       <span> • Los cheques propios pendientes ({formatCurrencyWithSymbol(totalesChequesPropisPendientes.saldo)}) afectarán la caja al ser confirmados</span>
