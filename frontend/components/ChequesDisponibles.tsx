@@ -160,13 +160,20 @@ const ChequesDisponibles: React.FC<ChequesDisponiblesProps> = ({
                   </Box>
                 }
                 secondary={
-                  <Box>
+                  <Box sx={{ mt: 1 }}>
                     <Typography variant="body2" color="text.secondary">
-                      {cheque.detalleGastos}
+                      <strong>Fecha:</strong> {formatDate(cheque.fecha)} | 
+                      <strong> Cliente:</strong> {cheque.clientes} | 
+                      <strong> Banco:</strong> {cheque.banco}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Recibido: {formatDate(cheque.fecha)} • Banco: {cheque.banco}
+                    <Typography variant="body2" color="text.secondary">
+                       <strong>Rubro:</strong> {cheque.rubro} - {cheque.subRubro}
                     </Typography>
+                     {cheque.fechaStandBy && (
+                    <Typography variant="body2" color="text.secondary">
+                         <strong>Fecha StandBy:</strong> {formatDate(cheque.fechaStandBy)}
+                    </Typography>
+                     )}
                   </Box>
                 }
               />
