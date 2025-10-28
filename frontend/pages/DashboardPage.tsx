@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useOutletContext } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
@@ -13,7 +14,6 @@ import {
   MenuItem,
   Typography
 } from '@mui/material';
-import Sidebar from '../components/Sidebar';
 import ExpenseTable from '../components/ExpenseTable';
 import BankSummary from '../components/BankSummary';
 import PendingChecks from '../components/PendingChecks';
@@ -21,15 +21,28 @@ import ChequesDisponibles from '../components/ChequesDisponibles';
 import { AppDispatch, RootState } from '../redux/store';
 import { fetchGastos } from '../redux/slices/gastosSlice';
 
+// Tipo para el contexto del Layout
+interface LayoutContextType {
+  showBankSummary: boolean;
+  showPendingChecks: boolean;
+  showChequesDisponibles: boolean;
+  onToggleBankSummary: () => void;
+  onTogglePendingChecks: () => void;
+  onToggleChequesDisponibles: () => void;
+}
+
 const DashboardPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [showBankSummary, setShowBankSummary] = useState(true);
-  const [showPendingChecks, setShowPendingChecks] = useState(true);
-  const [showChequesDisponibles, setShowChequesDisponibles] = useState(true);
   const { error } = useSelector((state: RootState) => state.gastos);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
+  
+  // Obtener estados del Layout a través del contexto
+  const { 
+    showBankSummary, 
+    showPendingChecks, 
+    showChequesDisponibles 
+  } = useOutletContext<LayoutContextType>();
 
   // Estados para filtros unificados
   const [filterType, setFilterType] = useState<'total' | 'month'>('month');
@@ -68,27 +81,25 @@ const DashboardPage: React.FC = () => {
   const handleAddNew = () => {
     setIsModalOpen(true);
   }
-
-  const toggleSidebar = () => setSidebarOpen((s) => !s);
   
-  const toggleBankSummary = () => setShowBankSummary((s) => !s);
-  const togglePendingChecks = () => setShowPendingChecks((s) => !s);
-  const toggleChequesDisponibles = () => setShowChequesDisponibles((s) => !s);
+  // Event listener para el modal desde el sidebar
+  useEffect(() => {
+    const handleOpenModal = () => setIsModalOpen(true);
+    window.addEventListener('openAddModal', handleOpenModal);
+    return () => window.removeEventListener('openAddModal', handleOpenModal);
+  }, []);
 
   return (
-    <Box sx={{ display: 'flex' }}>
-      <Sidebar 
-        onAddNew={handleAddNew} 
-        isOpen={sidebarOpen} 
-        onToggle={toggleSidebar}
-        onToggleBankSummary={toggleBankSummary}
-        showBankSummary={showBankSummary}
-        onTogglePendingChecks={togglePendingChecks}
-        showPendingChecks={showPendingChecks}
-        onToggleChequesDisponibles={toggleChequesDisponibles}
-        showChequesDisponibles={showChequesDisponibles}
-      />
-      <Box component="main" sx={{ flexGrow: 1, p: 3, height: '100vh', overflow: 'auto' }}>
+    <>
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          backgroundColor: '#f5f5f5',
+          minHeight: '100vh',
+          p: 2
+        }}
+      >
         {/* Controles de filtro unificados */}
         <Paper sx={{ p: 2, mb: 2 }}>
           <Typography variant="h6" gutterBottom>
@@ -166,7 +177,7 @@ const DashboardPage: React.FC = () => {
           {error}
         </Alert>
       </Snackbar>
-    </Box>
+    </>
   );
 };
 

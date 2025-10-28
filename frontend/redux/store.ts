@@ -3,6 +3,7 @@ import { createLogger } from 'redux-logger';
 import authReducer from './slices/authSlice';
 import gastosReducer from './slices/gastosSlice';
 import employeesReducer from './slices/employeesSlice';
+import horasExtraReducer from './slices/horasExtraSlice';
 
 // Configurar el logger solo en desarrollo
 const logger = createLogger({
@@ -19,6 +20,7 @@ export const store = configureStore({
     auth: authReducer,
     gastos: gastosReducer,
     employees: employeesReducer,
+    horasExtra: horasExtraReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

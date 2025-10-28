@@ -130,15 +130,35 @@ const gastosSlice = createSlice({
         state.error = action.payload as string;
       })
       // Create
+      .addCase(createGasto.pending, (state) => {
+        state.status = 'loading';
+        state.error = null;
+      })
       .addCase(createGasto.fulfilled, (state, action: PayloadAction<Gasto>) => {
+        state.status = 'succeeded';
         state.items.push(action.payload);
+        state.error = null;
+      })
+      .addCase(createGasto.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = action.payload as string;
       })
       // Update
+      .addCase(updateGasto.pending, (state) => {
+        state.status = 'loading';
+        state.error = null;
+      })
       .addCase(updateGasto.fulfilled, (state, action: PayloadAction<Gasto>) => {
+        state.status = 'succeeded';
         const index = state.items.findIndex(item => item._id === action.payload._id);
         if (index !== -1) {
           state.items[index] = action.payload;
         }
+        state.error = null;
+      })
+      .addCase(updateGasto.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = action.payload as string;
       })
       // Delete
       .addCase(deleteGasto.fulfilled, (state, action: PayloadAction<string>) => {

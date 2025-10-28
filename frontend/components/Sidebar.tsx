@@ -21,6 +21,8 @@ import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import PeopleIcon from '@mui/icons-material/People';
 import ReceiptIcon from '@mui/icons-material/Receipt';
+import ScheduleIcon from '@mui/icons-material/Schedule';
+import AssessmentIcon from '@mui/icons-material/Assessment';
 
 export const drawerWidth = 240;
 export const drawerHandleWidth = 40;
@@ -90,8 +92,8 @@ const Sidebar: React.FC<SidebarProps> = ({
       <List>
         <ListItem disablePadding>
           <ListItemButton 
-            onClick={() => navigate('/dashboard')}
-            selected={location.pathname === '/dashboard'}
+            onClick={() => navigate('/')}
+            selected={location.pathname === '/' || location.pathname === '/dashboard' || location.pathname === '/gastos'}
           >
             <ListItemIcon>
               <DashboardIcon />
@@ -113,11 +115,39 @@ const Sidebar: React.FC<SidebarProps> = ({
             </ListItemButton>
           </ListItem>
         )}
+        
+        {canViewEmployees && (
+          <ListItem disablePadding>
+            <ListItemButton 
+              onClick={() => navigate('/horas-extra')}
+              selected={location.pathname === '/horas-extra'}
+            >
+              <ListItemIcon>
+                <ScheduleIcon />
+              </ListItemIcon>
+              <ListItemText primary="Horas Extra" />
+            </ListItemButton>
+          </ListItem>
+        )}
+        
+        {canViewEmployees && (
+          <ListItem disablePadding>
+            <ListItemButton 
+              onClick={() => navigate('/reports')}
+              selected={location.pathname === '/reports'}
+            >
+              <ListItemIcon>
+                <AssessmentIcon />
+              </ListItemIcon>
+              <ListItemText primary="Reportes Contables" />
+            </ListItemButton>
+          </ListItem>
+        )}
       </List>
       <Divider />
       
       {/* Acciones específicas del dashboard */}
-      {location.pathname === '/dashboard' && (
+      {(location.pathname === '/' || location.pathname === '/dashboard' || location.pathname === '/gastos') && (
         <>
           <List>
             {canCreate && onAddNew && (

@@ -106,7 +106,10 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
           .filter(gasto => gasto.concepto === 'bonus')
           .reduce((sum, gasto) => sum + (gasto.salida || 0), 0);
 
-        const saldoPendiente = employee.sueldoBase - totalPagado;
+        // Calcular saldo pendiente solo con adelantos y sueldos regulares
+        // Horas extra, aguinaldos y bonus NO afectan el sueldo base
+        const pagosContraBasicos = sueldos + adelantos;
+        const saldoPendiente = employee.sueldoBase - pagosContraBasicos;
 
         return {
           employeeId: employee._id || '',
@@ -173,7 +176,8 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
       <Alert severity="info" sx={{ mb: 2 }}>
         <Typography variant="body2">
           <strong>Información:</strong> Los datos se calculan automáticamente desde los registros de gastos 
-          en el rubro "SUELDOS". Los totales pagados incluyen todos los pagos registrados para cada empleado.
+          en el rubro "SUELDOS". El saldo pendiente se calcula solo con sueldos regulares y adelantos. 
+          Las horas extra, aguinaldos y bonus son pagos adicionales que NO afectan el sueldo base.
         </Typography>
       </Alert>
 
@@ -342,10 +346,10 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
       {/* Información adicional */}
       <Box sx={{ mt: 2, p: 2, backgroundColor: 'grey.50', borderRadius: 1 }}>
         <Typography variant="body2" color="text.secondary">
-          📊 <strong>Cálculo:</strong> Total Pagado se obtiene de la suma de salidas en gastos de SUELDOS que coincidan con el nombre del empleado
+          📊 <strong>Saldo Pendiente:</strong> Se calcula como Sueldo Base - (Sueldos + Adelantos). Las horas extra, aguinaldos y bonus NO afectan el cálculo del sueldo base.
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-          💰 <strong>Adelantos:</strong> Se identifican por la palabra "adelanto" en el detalle del gasto
+          💰 <strong>Pagos Adicionales:</strong> Horas extra, aguinaldos y bonus son compensaciones adicionales independientes del sueldo base
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
           🔍 <strong>Filtro:</strong> {filterType === 'total' ? 'Histórico completo' : `Período: ${monthName}`}

@@ -32,6 +32,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
     puesto: '',
     fechaIngreso: new Date().toISOString().split('T')[0],
     sueldoBase: 0,
+    hora: 0,
     estado: 'activo',
     email: '',
     telefono: '',
@@ -40,6 +41,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
 
   // Estado separado para el valor formateado del sueldo
   const [sueldoFormatted, setSueldoFormatted] = useState('');
+  const [horaFormatted, setHoraFormatted] = useState('');
 
   // Función para formatear el número mientras se escribe (con decimales)
   const formatNumberInput = (value: string): string => {
@@ -94,15 +96,19 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
 
   // Función para obtener el valor numérico desde el formato visual (con decimales)
   const getNumericValue = (formattedValue: string): number => {
-    if (!formattedValue) return 0;
-    
-    // Convertir formato argentino a número: 1.000,50 -> 1000.50
-    const cleanValue = formattedValue
-      .replace(/\./g, '') // Remover puntos (separadores de miles)
-      .replace(',', '.'); // Cambiar coma por punto (decimales)
-    
-    const parsed = parseFloat(cleanValue);
-    return isNaN(parsed) ? 0 : parsed;
+    // Si el valor está vacío, solo una coma, solo un punto, o no es numérico, retornar 0
+    if (!formattedValue || formattedValue === ',' || formattedValue === '.') return 0;
+    // Si tiene coma, es decimal argentino
+    if (formattedValue.includes(',')) {
+      const cleanValue = formattedValue.replace(/\./g, '').replace(',', '.');
+      const parsed = parseFloat(cleanValue);
+      return isNaN(parsed) ? 0 : parsed;
+    } else {
+      // Si no tiene coma, tomar como entero (remover puntos)
+      const cleanValue = formattedValue.replace(/\./g, '');
+      const parsed = parseInt(cleanValue, 10);
+      return isNaN(parsed) ? 0 : parsed;
+    }
   };
 
   useEffect(() => {
@@ -114,6 +120,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
         puesto: employee.puesto,
         fechaIngreso: employee.fechaIngreso,
         sueldoBase: employee.sueldoBase,
+        hora: employee.hora,
         estado: employee.estado,
         email: employee.email || '',
         telefono: employee.telefono || '',
@@ -124,6 +131,11 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
       if (employee.sueldoBase && employee.sueldoBase > 0) {
         setSueldoFormatted(formatCurrency(employee.sueldoBase));
       }
+      
+      // Formatear la hora existente con decimales
+      if (employee.hora && employee.hora > 0) {
+        setHoraFormatted(formatCurrency(employee.hora));
+      }
     } else {
       setFormData({
         nombre: '',
@@ -132,12 +144,14 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
         puesto: '',
         fechaIngreso: new Date().toISOString().split('T')[0],
         sueldoBase: 0,
+        hora: 0,
         estado: 'activo',
         email: '',
         telefono: '',
         observaciones: ''
       });
       setSueldoFormatted('');
+      setHoraFormatted('');
     }
   }, [employee]);
 
@@ -154,6 +168,17 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
       setFormData(prev => ({
         ...prev,
         sueldoBase: numericValue
+      }));
+      return;
+      
+      // Manejar campo hora con formato especial
+    } else if (field === 'hora') {
+      const formatted = formatNumberInput(value);
+      setHoraFormatted(formatted);
+      const numericValue = getNumericValue(formatted);
+      setFormData(prev => ({
+        ...prev,
+        hora: numericValue
       }));
       return;
     }
@@ -245,6 +270,21 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
               type="text"
               value={sueldoFormatted}
               onChange={handleChange('sueldoBase')}
+              fullWidth
+              required
+              placeholder="Ej: 150.000,50"
+              helperText="Formato: 1.000,50 (usar coma para decimales)"
+              InputProps={{
+                startAdornment: <InputAdornment position="start">$</InputAdornment>,
+              }}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              label="Valor Hora"
+              type="text"
+              value={horaFormatted}
+              onChange={handleChange('hora')}
               fullWidth
               required
               placeholder="Ej: 150.000,50"

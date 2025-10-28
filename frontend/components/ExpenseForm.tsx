@@ -5,7 +5,7 @@ import { createGasto, updateGasto } from '../redux/slices/gastosSlice';
 import { fetchEmployees } from '../redux/slices/employeesSlice';
 import { formatCurrency, parseCurrency } from '../utils/formatters';
 import { Gasto, subRubrosByRubro } from '../types';
-import { Grid, TextField, Button, Box, MenuItem, Select, InputLabel, FormControl, Alert } from '@mui/material';
+import { Grid, TextField, Button, Box, MenuItem, Select, InputLabel, FormControl, Alert, Snackbar, CircularProgress } from '@mui/material';
 
 interface ExpenseFormProps {
   onClose: () => void;
@@ -15,6 +15,66 @@ interface ExpenseFormProps {
 const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
   const dispatch = useDispatch<AppDispatch>();
   const { items: employees } = useSelector((state: RootState) => state.employees);
+  const { status, error } = useSelector((state: RootState) => state.gastos);
+
+  // Estados para notificaciones
+  const [notification, setNotification] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error' | 'info' | 'warning';
+  }>({
+    open: false,
+    message: '',
+    severity: 'info'
+  });
+
+  // Estado para controlar si se acaba de completar una operación
+  const [operationCompleted, setOperationCompleted] = useState(false);
+
+  // Función para mostrar notificaciones
+  const showNotification = (message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') => {
+    setNotification({
+      open: true,
+      message,
+      severity
+    });
+  };
+
+  // Función para cerrar notificaciones
+  const handleCloseNotification = () => {
+    setNotification(prev => ({ ...prev, open: false }));
+  };
+
+  // Efecto para manejar estados del slice de gastos
+  useEffect(() => {
+    if (status === 'succeeded' && operationCompleted) {
+      showNotification(
+        gastoToEdit ? 'Gasto actualizado exitosamente' : 'Gasto registrado exitosamente',
+        'success'
+      );
+      // Resetear el estado de operación completada
+      setOperationCompleted(false);
+      // Cerrar el modal después de un éxito
+      setTimeout(() => {
+        onClose();
+      }, 1500);
+    } else if (status === 'failed' && error && operationCompleted) {
+      showNotification(`Error: ${error}`, 'error');
+      // Resetear el estado de operación completada
+      setOperationCompleted(false);
+    }
+  }, [status, error, gastoToEdit, onClose, operationCompleted]);
+
+  // Efecto para resetear estados cuando se abre el formulario
+  useEffect(() => {
+    // Resetear notificación y estado de operación al abrir el formulario
+    setNotification({
+      open: false,
+      message: '',
+      severity: 'info'
+    });
+    setOperationCompleted(false);
+  }, []); // Solo se ejecuta al montar el componente
 
   const [formData, setFormData] = useState({
     fecha: '',
@@ -34,6 +94,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
     cuentaOrigen: '',
     cuentaDestino: '',
     montoTransferencia: '',
+    horasExtra: '', // Nuevo campo para cantidad de horas extra
   });
 
   // Estados separados para los valores formateados
@@ -156,6 +217,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
         cuentaOrigen: gastoToEdit.cuentaOrigen || '',
         cuentaDestino: gastoToEdit.cuentaDestino || '',
         montoTransferencia: gastoToEdit.montoTransferencia?.toString() || '',
+        horasExtra: '', // Resetear horas extra al editar
       });
       
       // Formatear los valores existentes con decimales
@@ -206,7 +268,14 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
       setValidationError('');
       return;
     }
-    
+
+    // Horas extra: solo permitir números enteros positivos
+    if (name === 'horasExtra') {
+      const cleanValue = value.replace(/[^\d]/g, '');
+      setFormData(prev => ({ ...prev, horasExtra: cleanValue }));
+      return;
+    }
+
     // Para otros campos, comportamiento normal
     setFormData(prev => ({
       ...prev,
@@ -279,7 +348,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Para transferencias solo validar fecha y detalle
     if (formData.tipoOperacion === 'transferencia') {
       if (!formData.fecha || !formData.detalleGastos) {
@@ -288,8 +357,8 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
       }
     } else {
       // Para entrada y salida validar todos los campos
-      if (!formData.rubro || !formData.detalleGastos || !formData.fecha) {
-        alert("Rubro, fecha y Detalle son campos requeridos.");
+      if (!formData.rubro || !formData.detalleGastos || !formData.fecha || !formData.medioDePago) {
+        alert("Rubro, fecha, medio de pago y Detalle son campos requeridos.");
         return;
       }
     }
@@ -297,6 +366,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
     const entradaValue = Number(formData.entrada) || 0;
     const salidaValue = Number(formData.salida) || 0;
     const montoTransferenciaValue = Number(formData.montoTransferencia) || 0;
+    const horasExtraValue = Number(formData.horasExtra) || 0;
 
     // Validar según el tipo de operación
     if (formData.tipoOperacion === 'entrada') {
@@ -305,27 +375,34 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
         return;
       }
     } else if (formData.tipoOperacion === 'salida') {
-      if (salidaValue <= 0) {
-        setValidationError('Debe ingresar un monto válido para la salida');
-        return;
+      // Si es SUELDOS y concepto hora_extra, validar horas extra en lugar de salida
+      if (formData.rubro === 'SUELDOS' && formData.concepto === 'hora_extra') {
+        if (horasExtraValue <= 0) {
+          setValidationError('Debe ingresar la cantidad de horas extra');
+          return;
+        }
+      } else {
+        // Para otros casos, validar salida normalmente
+        if (salidaValue <= 0) {
+          setValidationError('Debe ingresar un monto válido para la salida');
+          return;
+        }
       }
     } else if (formData.tipoOperacion === 'transferencia') {
       if (!formData.cuentaOrigen || !formData.cuentaDestino) {
         setValidationError('Debe seleccionar tanto la cuenta origen como la cuenta destino');
         return;
       }
-      
       if (formData.cuentaOrigen === formData.cuentaDestino) {
         setValidationError('La cuenta origen y destino no pueden ser iguales');
         return;
       }
-      
       if (montoTransferenciaValue <= 0) {
         setValidationError('Debe ingresar un monto válido para la transferencia');
         return;
       }
     }
-    
+
     // Construir payload según el tipo de operación
     const payload: any = {
       fecha: formData.fecha,
@@ -347,19 +424,35 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
       payload.subRubro = formData.subRubro;
       payload.medioDePago = formData.medioDePago;
       payload.banco = formData.banco;
-      payload.clientes = formData.clientes;
       payload.concepto = formData.concepto;
+      // Solo agregar clientes si no es SUELDOS
+      if (formData.rubro !== 'SUELDOS') {
+        payload.clientes = formData.clientes;
+      }
+      // Si es SUELDOS y concepto hora_extra, agregar horasExtra y calcular salida
+      if (formData.rubro === 'SUELDOS' && formData.concepto === 'hora_extra') {
+        payload.horasExtra = horasExtraValue;
+        // Buscar empleado por subRubro (apellido, nombre)
+        const empleado = employees.find(emp => `${emp.apellido}, ${emp.nombre}` === formData.subRubro);
+        if (empleado) {
+          // Calcular monto: cantidad * valor hora * 1.5
+          const montoHoraExtra = horasExtraValue * (empleado.hora * 1.5);
+          payload.salida = montoHoraExtra;
+        }
+      }
     }
-    
+
     if (gastoToEdit && gastoToEdit._id) {
       dispatch(updateGasto({ _id: gastoToEdit._id, ...payload } as any));
     } else {
       dispatch(createGasto(payload as any));
     }
-    
+
+    // Marcar que se inició una operación
+    setOperationCompleted(true);
+
     // Limpiar error de validación
     setValidationError('');
-    onClose();
   };
 
   const handleClose = () => {
@@ -515,7 +608,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
               >
                 <MenuItem value="sueldo">Sueldo</MenuItem>
                 <MenuItem value="adelanto">Adelanto</MenuItem>
-                <MenuItem value="hora_extra">Hora Extra</MenuItem>
+                {/* <MenuItem value="hora_extra">Hora Extra</MenuItem> */}
                 <MenuItem value="aguinaldo">Aguinaldo</MenuItem>
                 <MenuItem value="bonus">Bonus</MenuItem>
                 <MenuItem value="otro">Otro</MenuItem>
@@ -544,8 +637,8 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
         </Grid>
         )}
         
-        {/* Clientes - Solo para NO transferencias */}
-        {formData.tipoOperacion !== 'transferencia' && (
+        {/* Clientes - Solo para NO transferencias y NO SUELDOS */}
+        {formData.tipoOperacion !== 'transferencia' && formData.rubro !== 'SUELDOS' && (
           <Grid item xs={12} sm={6}>
             <TextField
               name="clientes"
@@ -566,6 +659,23 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
               value={formData.comentario}
               onChange={handleInputChange}
               fullWidth
+            />
+          </Grid>
+        )}
+
+        {/* Horas Extra - Solo para SUELDOS y concepto hora_extra */}
+        {formData.rubro === 'SUELDOS' && formData.concepto === 'hora_extra' && (
+          <Grid item xs={12} sm={6}>
+            <TextField
+              name="horasExtra"
+              label="Horas Extra"
+              type="number"
+              value={formData.horasExtra}
+              onChange={handleInputChange}
+              fullWidth
+              required
+              inputProps={{ min: 1 }}
+              helperText="Cantidad de horas extra realizadas por el empleado"
             />
           </Grid>
         )}
@@ -694,12 +804,36 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
             <Button onClick={handleClose} color="secondary">
               Cancelar
             </Button>
-            <Button type="submit" variant="contained" color="primary">
-              {gastoToEdit ? 'Actualizar' : 'Crear'}
+            <Button type="submit" variant="contained" color="primary" disabled={status === 'loading'}>
+              {status === 'loading' ? (
+                <>
+                  <CircularProgress size={20} sx={{ mr: 1 }} />
+                  {gastoToEdit ? 'Actualizando...' : 'Creando...'}
+                </>
+              ) : (
+                gastoToEdit ? 'Actualizar' : 'Crear'
+              )}
             </Button>
           </Box>
         </Grid>
       </Grid>
+
+      {/* Snackbar para notificaciones */}
+      <Snackbar
+        open={notification.open}
+        autoHideDuration={4000}
+        onClose={handleCloseNotification}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={handleCloseNotification}
+          severity={notification.severity}
+          sx={{ width: '100%' }}
+          variant="filled"
+        >
+          {notification.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

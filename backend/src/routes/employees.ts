@@ -57,6 +57,7 @@ router.post('/', async (req, res) => {
       puesto,
       fechaIngreso,
       sueldoBase,
+      hora,
       estado,
       email,
       telefono,
@@ -64,9 +65,9 @@ router.post('/', async (req, res) => {
     } = req.body;
 
     // Validación básica
-    if (!nombre || !apellido || !documento || !puesto || !fechaIngreso || sueldoBase === undefined) {
+    if (!nombre || !apellido || !hora || !documento || !puesto || !fechaIngreso || sueldoBase === undefined) {
       return res.status(400).json({ 
-        message: 'Campos requeridos: nombre, apellido, documento, puesto, fechaIngreso, sueldoBase' 
+        message: 'Campos requeridos: nombre, apellido, documento, puesto, fechaIngreso, sueldoBase, hora' 
       });
     }
 
@@ -85,6 +86,7 @@ router.post('/', async (req, res) => {
       puesto: puesto.trim(),
       fechaIngreso,
       sueldoBase: Number(sueldoBase),
+      hora: Number(hora),
       estado: estado || 'activo',
       email: email?.trim(),
       telefono: telefono?.trim(),
@@ -131,6 +133,7 @@ router.put('/:id', async (req, res) => {
       puesto,
       fechaIngreso,
       sueldoBase,
+      hora,
       estado,
       email,
       telefono,
@@ -170,6 +173,7 @@ router.put('/:id', async (req, res) => {
     employee.puesto = puesto.trim();
     employee.fechaIngreso = fechaIngreso;
     employee.sueldoBase = Number(sueldoBase);
+    employee.hora = Number(hora);
     employee.estado = estado || 'activo';
     employee.email = email?.trim();
     employee.telefono = telefono?.trim();

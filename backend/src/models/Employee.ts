@@ -7,6 +7,7 @@ export interface IEmployee extends mongoose.Document {
   puesto: string;
   fechaIngreso: string;
   sueldoBase: number;
+  hora: number;
   estado: 'activo' | 'inactivo';
   email?: string;
   telefono?: string;
@@ -49,6 +50,11 @@ const employeeSchema = new mongoose.Schema<IEmployee>({
     type: Number,
     required: [true, 'El sueldo base es requerido'],
     min: [0, 'El sueldo base debe ser mayor a 0']
+  },
+  hora: {
+    type: Number,
+    required: [true, 'la hora es requerido'],
+    min: [0, 'la hora debe ser mayor a 0']
   },
   estado: {
     type: String,

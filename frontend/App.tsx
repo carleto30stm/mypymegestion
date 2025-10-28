@@ -5,6 +5,9 @@ import { RootState } from './redux/store';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import EmployeesPage from './pages/EmployeesPage';
+import HorasExtraPage from './pages/HorasExtraPage';
+import ReportsPage from './pages/ReportsPage';
+import Layout from './components/Layout';
 import { useTokenExpiration } from './hooks/useTokenExpiration';
 
 const PrivateRoute: React.FC = () => {
@@ -13,7 +16,7 @@ const PrivateRoute: React.FC = () => {
     // Activar verificación de expiración de token
     useTokenExpiration();
     
-    return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
+    return isAuthenticated ? <Layout /> : <Navigate to="/login" replace />;
 };
 
 const App: React.FC = () => {
@@ -21,10 +24,14 @@ const App: React.FC = () => {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route element={<PrivateRoute />}>
+          <Route path="/" element={<DashboardPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/gastos" element={<DashboardPage />} />
           <Route path="/employees" element={<EmployeesPage />} />
+          <Route path="/horas-extra" element={<HorasExtraPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
         </Route>
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
   );
 };

@@ -13,6 +13,7 @@ export interface Employee {
   puesto: string;
   fechaIngreso: string;
   sueldoBase: number;
+  hora: number;
   estado: 'activo' | 'inactivo';
   email?: string;
   telefono?: string;
@@ -31,7 +32,24 @@ export interface EmployeePayroll {
   sueldos: number;      // Sueldos regulares (concepto = 'sueldo')
   aguinaldos: number;   // Aguinaldos (concepto = 'aguinaldo')
   bonus: number;        // Bonus (concepto = 'bonus')
-  saldoPendiente: number; // sueldoBase - totalPagado
+  saldoPendiente: number; // sueldoBase - (sueldos + adelantos) - Los pagos extra (horas extra, aguinaldos, bonus) no afectan el sueldo base
+}
+
+// Interface para registro de horas extras
+export interface HoraExtra {
+  _id?: string;
+  empleadoId: string;
+  empleadoNombre: string;
+  empleadoApellido: string;
+  fecha: string;
+  cantidadHoras: number;
+  valorHora: number;
+  montoTotal: number;
+  descripcion?: string;
+  estado: 'registrada' | 'pagada' | 'cancelada';
+  fechaCreacion: string;
+  fechaPago?: string;
+  gastoRelacionadoId?: string; // ID del gasto cuando se paga
 }
 
 // SubRubros mapping
