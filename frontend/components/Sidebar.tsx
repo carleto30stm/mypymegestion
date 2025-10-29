@@ -24,6 +24,9 @@ import ReceiptIcon from '@mui/icons-material/Receipt';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import AssignmentIcon from '@mui/icons-material/Assignment';
+import InventoryIcon from '@mui/icons-material/Inventory';
+import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
+import HistoryIcon from '@mui/icons-material/History';
 
 export const drawerWidth = 240;
 export const drawerHandleWidth = 40;
@@ -158,6 +161,58 @@ const Sidebar: React.FC<SidebarProps> = ({
             </ListItemButton>
           </ListItem>
         )}
+      </List>
+      <Divider />
+      
+      {/* Sección de Ventas */}
+      <List>
+        <ListItem disablePadding>
+          <ListItemButton 
+            onClick={() => navigate('/productos')}
+            selected={location.pathname === '/productos'}
+          >
+            <ListItemIcon>
+              <InventoryIcon />
+            </ListItemIcon>
+            <ListItemText primary="Productos" />
+          </ListItemButton>
+        </ListItem>
+        
+        <ListItem disablePadding>
+          <ListItemButton 
+            onClick={() => navigate('/clientes')}
+            selected={location.pathname === '/clientes'}
+          >
+            <ListItemIcon>
+              <PeopleIcon />
+            </ListItemIcon>
+            <ListItemText primary="Clientes" />
+          </ListItemButton>
+        </ListItem>
+        
+        <ListItem disablePadding>
+          <ListItemButton 
+            onClick={() => navigate('/ventas')}
+            selected={location.pathname === '/ventas'}
+          >
+            <ListItemIcon>
+              <PointOfSaleIcon />
+            </ListItemIcon>
+            <ListItemText primary="Nueva Venta" />
+          </ListItemButton>
+        </ListItem>
+        
+        <ListItem disablePadding>
+          <ListItemButton 
+            onClick={() => navigate('/historial-ventas')}
+            selected={location.pathname === '/historial-ventas'}
+          >
+            <ListItemIcon>
+              <HistoryIcon />
+            </ListItemIcon>
+            <ListItemText primary="Historial Ventas" />
+          </ListItemButton>
+        </ListItem>
       </List>
       <Divider />
       

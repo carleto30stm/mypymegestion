@@ -8,6 +8,9 @@ import userRoutes from './routes/userRoutes.js';
 import employeesRoutes from './routes/employees.js';
 import horasExtraRoutes from './routes/horasExtra.js';
 import liquidacionRoutes from './routes/liquidacion.js';
+import productosRoutes from './routes/productos.js';
+import clientesRoutes from './routes/clientes.js';
+import ventasRoutes from './routes/ventas.js';
 
 dotenv.config();
 
@@ -69,6 +72,9 @@ const start = async () => {
     app.use('/api/employees', employeesRoutes);
     app.use('/api/horas-extra', horasExtraRoutes);
     app.use('/api/liquidacion', liquidacionRoutes);
+    app.use('/api/productos', productosRoutes);
+    app.use('/api/clientes', clientesRoutes);
+    app.use('/api/ventas', ventasRoutes);
 
     const env = process.env.NODE_ENV || 'development';
     app.listen(PORT, () => {

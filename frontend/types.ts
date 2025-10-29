@@ -113,6 +113,15 @@ export const subRubrosByRubro: Record<string, string[]> = {
   'MOVILIDAD': ['COMBUSTIBLE', 'PEAJES', 'ESTACIONAMIENTO','MECANICO','SERVICE']
 };
 
+// Bancos disponibles
+export const BANCOS = ['PROVINCIA', 'SANTANDER', 'EFECTIVO', 'FCI', 'RESERVA'] as const;
+
+// Unidades de medida para productos
+export const UNIDADES_MEDIDA = ['unidad', 'Kilo', 'Metro', 'Litro', 'Caja', 'Paquete'] as const;
+
+// Medios de pago para ventas
+export const MEDIOS_PAGO_VENTAS = ['Efectivo', 'Transferencia', 'Tarjeta Débito', 'Tarjeta Crédito', 'Cheque Tercero', 'Cuenta Corriente', 'Mixto'] as const;
+
 export interface Gasto {
   _id?: string;
   fecha: string;
@@ -138,4 +147,110 @@ export interface Gasto {
   cuentaDestino?: 'PROVINCIA' | 'SANTANDER' | 'EFECTIVO' | 'FCI' | 'RESERVA';
   montoTransferencia?: number;
   banco: 'PROVINCIA' | 'SANTANDER' | 'EFECTIVO' | 'FCI' | 'RESERVA';
+}
+
+// ========== SISTEMA DE VENTAS E INVENTARIO ==========
+
+// Interface para productos
+export interface Producto {
+  _id?: string;
+  codigo: string;
+  nombre: string;
+  descripcion?: string;
+  categoria: string;
+  precioCompra: number;
+  precioVenta: number;
+  stock: number;
+  stockMinimo: number;
+  unidadMedida: 'unidad' | 'kilo' | 'metro' | 'litro' | 'caja' | 'paquete';
+  proveedor?: string;
+  imagen?: string;
+  estado: 'activo' | 'inactivo';
+  fechaCreacion?: string;
+  fechaActualizacion?: string;
+  // Virtuals (calculados por el backend)
+  stockBajo?: boolean;
+  margenGanancia?: number;
+}
+
+// Interface para clientes
+export interface Cliente {
+  _id?: string;
+  tipoDocumento: 'DNI' | 'CUIT' | 'CUIL' | 'Pasaporte';
+  numeroDocumento: string;
+  razonSocial?: string;
+  nombre: string;
+  apellido?: string;
+  email?: string;
+  telefono?: string;
+  direccion?: string;
+  ciudad?: string;
+  provincia?: string;
+  codigoPostal?: string;
+  condicionIVA: 'Responsable Inscripto' | 'Monotributista' | 'Exento' | 'Consumidor Final';
+  saldoCuenta: number;
+  limiteCredito: number;
+  estado: 'activo' | 'inactivo' | 'moroso';
+  observaciones?: string;
+  fechaCreacion?: string;
+  fechaActualizacion?: string;
+  ultimaCompra?: string;
+  // Virtuals (calculados por el backend)
+  nombreCompleto?: string;
+  puedeComprarCredito?: boolean;
+}
+
+// Interface para item de venta
+export interface ItemVenta {
+  productoId: string;
+  codigoProducto: string;
+  nombreProducto: string;
+  cantidad: number;
+  precioUnitario: number;
+  subtotal: number;
+  descuento: number;
+  total: number;
+}
+
+// Interface para venta
+export interface Venta {
+  _id?: string;
+  numeroVenta?: string;
+  fecha: string;
+  clienteId: string;
+  nombreCliente: string;
+  documentoCliente: string;
+  items: ItemVenta[];
+  subtotal: number;
+  descuentoTotal: number;
+  iva: number;
+  total: number;
+  medioPago: typeof MEDIOS_PAGO_VENTAS[number];
+  detallesPago?: string;
+  banco?: typeof BANCOS[number];
+  estado: 'pendiente' | 'confirmada' | 'anulada' | 'parcial';
+  observaciones?: string;
+  vendedor: string;
+  gastoRelacionadoId?: string;
+  fechaCreacion?: string;
+  fechaActualizacion?: string;
+  fechaAnulacion?: string;
+  motivoAnulacion?: string;
+}
+
+// Interface para estadísticas de ventas
+export interface EstadisticasVentas {
+  totalVentas: number;
+  montoTotal: number;
+  montoPromedio: number;
+  ventasPorEstado: Array<{
+    _id: string;
+    cantidad: number;
+    total: number;
+  }>;
+  ventasPorMedioPago: Array<{
+    _id: string;
+    cantidad: number;
+    total: number;
+  }>;
 }

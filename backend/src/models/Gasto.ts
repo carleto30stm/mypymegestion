@@ -1,17 +1,6 @@
 import mongoose from 'mongoose';
+import { cajas, medioDePagos, subRubrosByRubro } from '../Types/Types.js';
 
-// Define valid subRubros for each rubro
-const subRubrosByRubro: Record<string, string[]> = {
-  'SERVICIOS': ['ELECTRICIDAD', 'PROGRAMACION', 'AGUA', 'GAS', 'Servicios de Internet/Telecomunicaciones', 'JARDIN','LIMPIEZA'],
-  'COBRO.VENTA': ['DEVOLUCION', 'COBRO', 'ADEUDADO', 'FLETE', 'COMISION', 'AJUSTE',],
-  'PROOV.MATERIA.PRIMA': ['ALAMBRE INDUSTRIA', 'ALAMBRE RAUP', 'EMBALAJE', 'POLIESTIRENO', 'FUNDICION', 'PORTARRETRATOS', 'LLAVEROS Y PORTA' ],
-  'PROOVMANO.DE.OBRA': ['PORTA RETRATOS', 'SIN/FINES', 'INYECCION DE PLASTICO', 'TRIANGULOS', 'ARGOLLAS', 'GALVANO CADENAS', 'GALVANO CABEZALES', 'ARMADORAS'],
-  'BANCO': ['MOVIMIENTOS AJUSTE', 'MOV.BANC', 'AJUSTE DE BANCO','AJUSTE CAJA'],
-  'ARCA': ['IVA'],
-  'GASTOS ADMINISTRATIVOS': ['HONORARIOS', 'IMPUESTO BANCARIOS', 'IMPUESTO TARJETAS', 'VEPS', 'PLAN DE PAGO', 'MONOTRIBUTO', 'II.BB/SIRCREB', 'MANT. CTA.', 'CONSULTORIAS'],
-  'MANT.MAQ': ['MECANICO', 'MATERIALES', 'TORNERO','MAQ. NUEVA'],
-  'MOVILIDAD': ['COMBUSTIBLE', 'PEAJES', 'ESTACIONAMIENTO','MECANICO','SERVICE']
-};
 
 const gastoSchema = new mongoose.Schema({
   fecha: { type: Date, required: true },
@@ -41,11 +30,15 @@ const gastoSchema = new mongoose.Schema({
           return true;
         }
         
-        // Para otros rubros, usar la validación estática
+        // Para otros rubros, usar la validación desde la constante importada
         const validSubRubros = subRubrosByRubro[this.rubro] || [];
         return validSubRubros.includes(value);
       },
-      message: 'SubRubro no válido para el rubro seleccionado'
+      message: function(this: any) {
+        // Mensaje dinámico que muestra los subRubros válidos para el rubro actual
+        const validSubRubros = subRubrosByRubro[this.rubro] || [];
+        return `SubRubro '${this.value}' no es válido para el rubro '${this.rubro}'. Valores válidos: ${validSubRubros.join(', ')}`;
+      }
     }
   },
   medioDePago: { 
@@ -53,16 +46,7 @@ const gastoSchema = new mongoose.Schema({
     required: function(this: any) {
       return this.tipoOperacion !== 'transferencia';
     },
-    enum: [
-      'Cheque Tercero',
-      'Cheque Propio', 
-      'Efectivo',
-      'Transferencia',
-      'Tarjeta Débito',
-      'Tarjeta Crédito',
-      'Reserva',
-      'Otro'
-    ] 
+    enum: medioDePagos
   },
   clientes: { type: String },
   detalleGastos: { type: String, required: true },
@@ -110,14 +94,14 @@ const gastoSchema = new mongoose.Schema({
   // Campos específicos para transferencias
   cuentaOrigen: { 
     type: String,
-    enum: ['PROVINCIA', 'SANTANDER', 'EFECTIVO', 'FCI', 'RESERVA'],
+    enum: cajas,
     required: function(this: any) {
       return this.tipoOperacion === 'transferencia';
     }
   },
   cuentaDestino: { 
     type: String,
-    enum: ['PROVINCIA', 'SANTANDER', 'EFECTIVO', 'FCI', 'RESERVA'],
+    enum: cajas,
     required: function(this: any) {
       return this.tipoOperacion === 'transferencia';
     }
@@ -169,10 +153,9 @@ const gastoSchema = new mongoose.Schema({
         }
         
         // Si tiene valor, debe ser uno de los valores válidos
-        const validBancos = ['PROVINCIA', 'SANTANDER', 'EFECTIVO', 'FCI', 'RESERVA'];
-        return validBancos.includes(value);
+        return (cajas as readonly string[]).includes(value);
       },
-      message: 'Banco debe ser uno de los valores válidos: PROVINCIA, SANTANDER, EFECTIVO, FCI, RESERVA'
+      message: () => `Banco debe ser uno de los valores válidos: ${cajas.join(', ')}`
     }
   },
   // user: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'User' } // Opcional: para asociar gastos a usuarios
@@ -182,4 +165,5 @@ const gastoSchema = new mongoose.Schema({
 const Gasto = mongoose.model('Gasto', gastoSchema);
 
 export default Gasto;
-export { subRubrosByRubro };
+// subRubrosByRubro ahora se exporta directamente desde Types.ts
+// export { subRubrosByRubro };
