@@ -23,6 +23,7 @@ import PeopleIcon from '@mui/icons-material/People';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import AssessmentIcon from '@mui/icons-material/Assessment';
+import AssignmentIcon from '@mui/icons-material/Assignment';
 
 export const drawerWidth = 240;
 export const drawerHandleWidth = 40;
@@ -119,6 +120,20 @@ const Sidebar: React.FC<SidebarProps> = ({
         {canViewEmployees && (
           <ListItem disablePadding>
             <ListItemButton 
+              onClick={() => navigate('/liquidacion')}
+              selected={location.pathname === '/liquidacion'}
+            >
+              <ListItemIcon>
+                <AssignmentIcon />
+              </ListItemIcon>
+              <ListItemText primary="Liquidación" />
+            </ListItemButton>
+          </ListItem>
+        )}
+        {/* TODO: Rehabilitar ruta de horas extra cuando esté lista */}
+        {/* {canViewEmployees && (
+          <ListItem disablePadding>
+            <ListItemButton 
               onClick={() => navigate('/horas-extra')}
               selected={location.pathname === '/horas-extra'}
             >
@@ -128,7 +143,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               <ListItemText primary="Horas Extra" />
             </ListItemButton>
           </ListItem>
-        )}
+        )} */}
         
         {canViewEmployees && (
           <ListItem disablePadding>

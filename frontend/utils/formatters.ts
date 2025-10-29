@@ -52,6 +52,32 @@ export const formatDate = (dateString: string | Date): string => {
 };
 
 /**
+ * Formatea una fecha para mostrar sin problemas de zona horaria
+ * Usa UTC para evitar que reste un día
+ * @param dateString - Fecha en formato ISO o Date string
+ * @returns Fecha formateada para mostrar (ej: "1 ene 2024")
+ */
+export const formatDateForDisplay = (dateString: string | Date): string => {
+  if (!dateString) return '';
+  
+  try {
+    // Si es string con formato YYYY-MM-DD, parsearlo manualmente para evitar zona horaria
+    if (typeof dateString === 'string' && dateString.match(/^\d{4}-\d{2}-\d{2}/)) {
+      const [year, month, day] = dateString.split('T')[0].split('-');
+      const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+    
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return '';
+    
+    return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+  } catch (error) {
+    return '';
+  }
+};
+
+/**
  * Convierte una fecha del formato dd/mm/yyyy al formato ISO (yyyy-mm-dd)
  * @param dateString - Fecha en formato dd/mm/yyyy
  * @returns Fecha en formato ISO

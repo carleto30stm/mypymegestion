@@ -4,6 +4,7 @@ import authReducer from './slices/authSlice';
 import gastosReducer from './slices/gastosSlice';
 import employeesReducer from './slices/employeesSlice';
 import horasExtraReducer from './slices/horasExtraSlice';
+import liquidacionReducer from './slices/liquidacionSlice';
 
 // Configurar el logger solo en desarrollo
 const logger = createLogger({
@@ -21,6 +22,7 @@ export const store = configureStore({
     gastos: gastosReducer,
     employees: employeesReducer,
     horasExtra: horasExtraReducer,
+    liquidacion: liquidacionReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

@@ -52,6 +52,53 @@ export interface HoraExtra {
   gastoRelacionadoId?: string; // ID del gasto cuando se paga
 }
 
+// Interfaces para liquidación de sueldos
+export interface HoraExtraResumen {
+  horaExtraId: string;
+  fecha: string;
+  cantidadHoras: number;
+  valorHora: number;
+  montoTotal: number;
+  descripcion?: string;
+}
+
+export interface LiquidacionEmpleado {
+  empleadoId: string;
+  empleadoNombre: string;
+  empleadoApellido: string;
+  sueldoBase: number;
+  horasExtra: HoraExtraResumen[];
+  totalHorasExtra: number;
+  adelantos: number;
+  aguinaldos: number;
+  bonus: number;
+  descuentos: number;
+  totalAPagar: number;
+  estado: 'pendiente' | 'pagado' | 'cancelado';
+  gastosRelacionados: string[];
+  reciboGenerado?: string;
+  fechaPago?: string;
+  observaciones?: string;
+  medioDePago?: '' | 'Cheque Tercero' | 'Cheque Propio' | 'Efectivo' | 'Transferencia' | 'Tarjeta Débito' | 'Tarjeta Crédito' | 'Reserva' | 'Otro';
+  banco?: 'PROVINCIA' | 'SANTANDER' | 'EFECTIVO' | 'FCI' | 'RESERVA';
+}
+
+export interface LiquidacionPeriodo {
+  _id?: string;
+  nombre: string;
+  fechaInicio: string;
+  fechaFin: string;
+  tipo: 'quincenal' | 'mensual';
+  estado: 'abierto' | 'en_revision' | 'cerrado';
+  liquidaciones: LiquidacionEmpleado[];
+  totalGeneral: number;
+  fechaCierre?: string;
+  cerradoPor?: string;
+  observaciones?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 // SubRubros mapping
 export const subRubrosByRubro: Record<string, string[]> = {
   'SERVICIOS': ['ELECTRICIDAD', 'PROGRAMACION', 'AGUA', 'GAS', 'Servicios de Internet/Telecomunicaciones', 'JARDIN','LIMPIEZA','OTROS'],
