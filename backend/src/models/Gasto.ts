@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 
 // Define valid subRubros for each rubro
 const subRubrosByRubro: Record<string, string[]> = {
-  'SERVICIOS': ['EDENOR', 'PROGRAMACION', 'AGUA', 'GAS', 'RED NET', 'NIC AR', 'JARDIN','LIMPIEZA','OTROS'],
+  'SERVICIOS': ['ELECTRICIDAD', 'PROGRAMACION', 'AGUA', 'GAS', 'Servicios de Internet/Telecomunicaciones', 'JARDIN','LIMPIEZA','OTROS'],
   'COBRO.VENTA': ['DEVOLUCION', 'COBRO', 'ADEUDADO', 'FLETE', 'COMISION', 'AJUSTE','OTROS'],
   'PROOV.MATERIA.PRIMA': ['ALAMBRE INDUSTRIA', 'ALAMBRE RAUP', 'EMBALAJE', 'POLIESTIRENO', 'FUNDICION', 'PORTARRETRATOS', 'LLAVEROS Y PORTA', 'OTROS'],
   'PROOVMANO.DE.OBRA': ['PORTA RETRATOS', 'SIN/FINES', 'INYECCION DE PLASTICO', 'TRIANGULOS', 'ARGOLLAS', 'GALVANO CADENAS', 'GALVANO CABEZALES', 'ARMADORAS','OTROS'],
@@ -57,6 +57,7 @@ const gastoSchema = new mongoose.Schema({
       'Cheque Tercero',
       'Cheque Propio', 
       'Efectivo',
+      'Transferencia',
       'Tarjeta Débito',
       'Tarjeta Crédito',
       'Reserva',

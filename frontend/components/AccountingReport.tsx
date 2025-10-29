@@ -311,14 +311,14 @@ const AccountingReport: React.FC = () => {
 
   const getFixedExpenseCategory = (gasto: Gasto): string => {
     switch (gasto.subRubro) {
-      case 'EDENOR':
+      case 'ELECTRICIDAD':
         return 'Energía Eléctrica';
       case 'AGUA':
         return 'Servicios de Agua';
       case 'GAS':
         return 'Gas Natural';
       case 'RED NET':
-      case 'NIC AR':
+      case 'Servicios de Internet/Telecomunicaciones':
         return 'Servicios de Internet/Telecomunicaciones';
       case 'PROGRAMACION':
         return 'Servicios de Programación/IT';

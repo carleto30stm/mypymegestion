@@ -98,7 +98,6 @@ const employeeSchema = new mongoose.Schema<IEmployee>({
 });
 
 // Índices para búsqueda eficiente
-employeeSchema.index({ documento: 1 });
 employeeSchema.index({ estado: 1 });
 employeeSchema.index({ apellido: 1, nombre: 1 });
 
