@@ -104,7 +104,7 @@ Content-Type: application/json
 {
   "fecha": "2025-10-19",
   "rubro": "SERVICIOS",
-  "subRubro": "EDENOR",
+  "subRubro": "ELECTRICIDAD",
   "medioDePago": "Mov. Banco",
   "clientes": "Cliente Test",
   "detalleGastos": "Pago de luz",

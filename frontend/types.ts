@@ -54,7 +54,7 @@ export interface HoraExtra {
 
 // SubRubros mapping
 export const subRubrosByRubro: Record<string, string[]> = {
-  'SERVICIOS': ['EDENOR', 'PROGRAMACION', 'AGUA', 'GAS', 'RED NET', 'NIC AR', 'JARDIN','LIMPIEZA','OTROS'],
+  'SERVICIOS': ['ELECTRICIDAD', 'PROGRAMACION', 'AGUA', 'GAS', 'Servicios de Internet/Telecomunicaciones', 'JARDIN','LIMPIEZA','OTROS'],
   'COBRO.VENTA': ['DEVOLUCION', 'COBRO', 'ADEUDADO', 'FLETE', 'COMISION', 'AJUSTE','OTROS'],
   'PROOV.MATERIA.PRIMA': ['ALAMBRE INDUSTRIA', 'ALAMBRE RAUP', 'EMBALAJE', 'POLIESTIRENO', 'FUNDICION', 'PORTARRETRATOS', 'LLAVEROS Y PORTA', 'OTROS'],
   'PROOVMANO.DE.OBRA': ['PORTA RETRATOS', 'SIN/FINES', 'INYECCION DE PLASTICO', 'TRIANGULOS', 'ARGOLLAS', 'GALVANO CADENAS', 'GALVANO CABEZALES', 'ARMADORAS','OTROS'],
@@ -72,7 +72,7 @@ export interface Gasto {
   rubro: 'COBRO.VENTA' | 'SERVICIOS' | 'PROOV.MATERIA.PRIMA' | 'PROOVMANO.DE.OBRA' | 'BANCO' | 'ARCA' | 'GASTOS.ADMIN' | 'GASTOS ADMINISTRATIVOS' | 'MANT.MAQ' | 'SUELDOS' | 'MOVILIDAD';
   subRubro: string;
   // Allow empty string as a valid initial value for Select components
-  medioDePago: '' | 'Cheque Tercero' | 'Cheque Propio' | 'Efectivo' | 'Tarjeta Débito' | 'Tarjeta Crédito' | 'Reserva' | 'Otro';
+  medioDePago: '' | 'Cheque Tercero' | 'Cheque Propio' | 'Efectivo' | 'Transferencia'| 'Tarjeta Débito' | 'Tarjeta Crédito' | 'Reserva' | 'Otro';
   clientes: string;
   detalleGastos: string;
   tipoOperacion: 'entrada' | 'salida' | 'transferencia';

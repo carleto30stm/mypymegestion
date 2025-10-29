@@ -92,6 +92,7 @@ const PagarHoraExtraModal: React.FC<PagarHoraExtraModalProps> = ({
                 onChange={(e) => handleChange('medioDePago', e.target.value)}
               >
                 <MenuItem value="Efectivo">Efectivo</MenuItem>
+                <MenuItem value="Transferencia">Transferencia</MenuItem>
                 <MenuItem value="Cheque Propio">Cheque Propio</MenuItem>
                 <MenuItem value="Tarjeta Débito">Tarjeta Débito</MenuItem>
                 <MenuItem value="Tarjeta Crédito">Tarjeta Crédito</MenuItem>

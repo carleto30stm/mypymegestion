@@ -575,6 +575,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
                 <MenuItem value="Cheque Tercero">Cheque Tercero</MenuItem>
                 <MenuItem value="Cheque Propio">Cheque Propio</MenuItem>
                 <MenuItem value="Efectivo">Efectivo</MenuItem>
+                <MenuItem value="Transferencia">Transferencia</MenuItem>
                 <MenuItem value="Tarjeta Débito">Tarjeta Débito</MenuItem>
                 <MenuItem value="Tarjeta Crédito">Tarjeta Crédito</MenuItem>
                 <MenuItem value="Reserva">Reserva</MenuItem>
