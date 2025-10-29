@@ -24,13 +24,13 @@ import {
   TextField
 } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
-import { AppDispatch, RootState } from '../redux/store';
-import { LiquidacionPeriodo } from '../types';
-import { fetchHorasExtra } from '../redux/slices/horasExtraSlice';
-import { agregarHorasExtra, fetchPeriodoById } from '../redux/slices/liquidacionSlice';
-import { fetchGastos } from '../redux/slices/gastosSlice';
-import { formatCurrency } from '../utils/formatters';
-import HoraExtraForm from './HoraExtraForm';
+import { AppDispatch, RootState } from '../../redux/store';
+import { LiquidacionPeriodo } from '../../types';
+import { fetchHorasExtra } from '../../redux/slices/horasExtraSlice';
+import { agregarHorasExtra, fetchPeriodoById } from '../../redux/slices/liquidacionSlice';
+import { fetchGastos } from '../../redux/slices/gastosSlice';
+import { formatCurrency } from '../../utils/formatters';
+import HoraExtraForm from '../form/HoraExtraForm';
 
 interface HorasExtraTabProps {
   periodo: LiquidacionPeriodo;

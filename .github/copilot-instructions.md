@@ -63,3 +63,5 @@ Breve: este proyecto es una aplicación fullstack (React + Vite en frontend, Nod
   - No asumir que `localStorage` siempre contiene `user` — `authSlice` parsea y valida; el agente debe respetar esa convención.
 
 Si quieres, actualizo este archivo con ejemplos concretos de endpoints (ej: rutas en `backend/src/routes/gastos.ts`) o añado sección de debugging paso a paso. ¿Hay algo que te gustaría ampliar o cambiar?
+usa los archivos recientemente editados como referencia para entender mejor los cambios realizados.
+usa los archivos de barril index.ts para hacer las importaciones

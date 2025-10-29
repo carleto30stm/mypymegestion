@@ -14,8 +14,8 @@ import {
   Typography,
   Alert
 } from '@mui/material';
-import { formatCurrency } from '../utils/formatters';
-import { HoraExtra } from '../types';
+import { formatCurrency } from '../../utils/formatters';
+import { HoraExtra } from '../../types';
 
 interface PagarHoraExtraModalProps {
   open: boolean;

@@ -20,11 +20,11 @@ import {
   CardContent
 } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
-import { AppDispatch, RootState } from '../redux/store';
-import { LiquidacionPeriodo } from '../types';
-import { registrarAdelanto, fetchPeriodoById } from '../redux/slices/liquidacionSlice';
-import { fetchGastos } from '../redux/slices/gastosSlice';
-import { formatCurrency } from '../utils/formatters';
+import { AppDispatch, RootState } from '../../redux/store';
+import { LiquidacionPeriodo } from '../../types';
+import { registrarAdelanto, fetchPeriodoById } from '../../redux/slices/liquidacionSlice';
+import { fetchGastos } from '../../redux/slices/gastosSlice';
+import { formatCurrency } from '../../utils/formatters';
 
 interface AdelantosTabProps {
   periodo: LiquidacionPeriodo;

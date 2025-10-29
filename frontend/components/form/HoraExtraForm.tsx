@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { AppDispatch, RootState } from '../redux/store';
-import { addHoraExtra, updateHoraExtra } from '../redux/slices/horasExtraSlice';
-import { fetchEmployees } from '../redux/slices/employeesSlice';
-import { formatCurrency } from '../utils/formatters';
-import { HoraExtra } from '../types';
+import { AppDispatch, RootState } from '../../redux/store';
+import { addHoraExtra, updateHoraExtra } from '../../redux/slices/horasExtraSlice';
+import { fetchEmployees } from '../../redux/slices/employeesSlice';
+import { formatCurrency } from '../../utils/formatters';
+import { HoraExtra } from '../../types';
 import {
   TextField,
   Button,

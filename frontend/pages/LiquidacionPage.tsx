@@ -42,8 +42,8 @@ import {
 } from '../redux/slices/liquidacionSlice';
 import { formatCurrency, formatDateForDisplay } from '../utils/formatters';
 import ResumenLiquidacion from '../components/ResumenLiquidacion';
-import HorasExtraTab from '../components/HorasExtraTab';
-import AdelantosTab from '../components/AdelantosTab';
+import HorasExtraTab from '../components/table/HorasExtraTab';
+import AdelantosTab from '../components/table/AdelantosTab';
 
 interface TabPanelProps {
   children?: React.ReactNode;

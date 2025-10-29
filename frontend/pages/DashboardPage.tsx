@@ -14,7 +14,7 @@ import {
   MenuItem,
   Typography
 } from '@mui/material';
-import ExpenseTable from '../components/ExpenseTable';
+import ExpenseTable from '../components/table/ExpenseTable';
 import BankSummary from '../components/BankSummary';
 import PendingChecks from '../components/PendingChecks';
 import ChequesDisponibles from '../components/ChequesDisponibles';

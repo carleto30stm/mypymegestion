@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { AppDispatch, RootState } from '../redux/store';
-import { createGasto, updateGasto } from '../redux/slices/gastosSlice';
-import { fetchEmployees } from '../redux/slices/employeesSlice';
-import { formatCurrency, parseCurrency } from '../utils/formatters';
-import { Gasto, subRubrosByRubro } from '../types';
+import { AppDispatch, RootState } from '../../redux/store';
+import { createGasto, updateGasto } from '../../redux/slices/gastosSlice';
+import { fetchEmployees } from '../../redux/slices/employeesSlice';
+import { formatCurrency, parseCurrency } from '../../utils/formatters';
+import { Gasto, subRubrosByRubro } from '../../types';
 import { Grid, TextField, Button, Box, MenuItem, Select, InputLabel, FormControl, Alert, Snackbar, CircularProgress } from '@mui/material';
 
 interface ExpenseFormProps {

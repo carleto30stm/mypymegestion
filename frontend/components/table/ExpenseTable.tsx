@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { RootState, AppDispatch } from '../redux/store';
-import { Gasto } from '../types';
-import { deleteGasto, confirmarCheque, cancelGasto, reactivateGasto } from '../redux/slices/gastosSlice';
+import { RootState, AppDispatch } from '../../redux/store';
+import { Gasto } from '../../types';
+import { deleteGasto, confirmarCheque, cancelGasto, reactivateGasto } from '../../redux/slices/gastosSlice';
 import { DataGrid, GridColDef, GridActionsCellItem } from '@mui/x-data-grid';
 import { 
   Box, 
@@ -21,9 +21,9 @@ import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RestoreIcon from '@mui/icons-material/Restore';
-import ExpenseForm from './ExpenseForm';
-import { formatDate, formatCurrencyWithSymbol } from '../utils/formatters';
-import { useAuthDebug } from '../hooks/useAuthDebug';
+import ExpenseForm from '../form/ExpenseForm';
+import { formatDate, formatCurrencyWithSymbol } from '../../utils/formatters';
+import { useAuthDebug } from '../../hooks/useAuthDebug';
 
 interface ExpenseTableProps {
     isModalOpen: boolean;

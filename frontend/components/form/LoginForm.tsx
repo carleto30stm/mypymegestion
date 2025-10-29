@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { AppDispatch, RootState } from '../redux/store';
-import { login } from '../redux/slices/authSlice';
+import { AppDispatch, RootState } from '../../redux/store';
+import { login } from '../../redux/slices/authSlice';
 import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import Box from '@mui/material/Box';

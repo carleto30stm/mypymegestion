@@ -8,7 +8,7 @@ import {
   DialogTitle
 } from '@mui/material';
 import { Add as AddIcon, Schedule as ScheduleIcon } from '@mui/icons-material';
-import HoraExtraForm from '../components/HoraExtraForm';
+import HoraExtraForm from '../components/form/HoraExtraForm';
 import HorasExtraTable from '../components/HorasExtraTable';
 import { HoraExtra } from '../types';
 
