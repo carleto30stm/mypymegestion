@@ -190,13 +190,13 @@ export const crearVenta = async (req: ExpressRequest, res: ExpressResponse) => {
         if (medioPago !== 'Cuenta Corriente') {
             // Determinar subRubro según medio de pago
             let subRubro = 'COBRO';
-            if (medioPago === 'Efectivo') subRubro = 'COBRO';
-            else if (medioPago === 'Transferencia') subRubro = 'COBRO';
-            else if (medioPago === 'Tarjeta Débito' || medioPago === 'Tarjeta Crédito') subRubro = 'COBRO';
-            else if (medioPago === 'Cheque Tercero') subRubro = 'COBRO';
+            if (medioPago === 'EFECTIVO') subRubro = 'COBRO';
+            else if (medioPago === 'TRANSFERENCIA') subRubro = 'COBRO';
+            else if (medioPago === 'TARJETA DÉBITO' || medioPago === 'TARJETA CRÉDITO') subRubro = 'COBRO';
+            else if (medioPago === 'CHEQUE TERCERO') subRubro = 'COBRO';
 
             // Para cheques de terceros, no confirmar automáticamente (queda pendiente)
-            const esChequeTercero = medioPago === 'Cheque Tercero';
+            const esChequeTercero = medioPago === 'CHEQUE TERCERO';
 
             const nuevoGasto = new Gasto({
                 fecha: nuevaVenta.fecha,
@@ -274,7 +274,7 @@ export const anularVenta = async (req: ExpressRequest, res: ExpressResponse) => 
         }
 
         // Si es cuenta corriente, revertir saldo del cliente
-        if (venta.medioPago === 'Cuenta Corriente') {
+        if (venta.medioPago === 'CUENTA CORRIENTE') {
             const cliente = await Cliente.findById(venta.clienteId).session(session);
             if (cliente) {
                 cliente.saldoCuenta -= venta.total;
@@ -348,7 +348,7 @@ export const registrarPago = async (req: ExpressRequest, res: ExpressResponse) =
             return res.status(400).json({ message: 'No se puede registrar pago en una venta anulada' });
         }
 
-        if (venta.medioPago !== 'Cuenta Corriente' && venta.estado !== 'parcial') {
+        if (venta.medioPago !== 'CUENTA CORRIENTE' && venta.estado !== 'parcial') {
             await session.abortTransaction();
             return res.status(400).json({ 
                 message: 'Esta venta no tiene saldo pendiente' 

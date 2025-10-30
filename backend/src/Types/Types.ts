@@ -1,3 +1,4 @@
+
 // Define valid subRubros for each rubro
 export const subRubrosByRubro: Record<string, string[]> = {
   'SERVICIOS': ['ELECTRICIDAD', 'PROGRAMACION', 'AGUA', 'GAS', 'Servicios de Internet/Telecomunicaciones', 'JARDIN','LIMPIEZA'],
@@ -11,16 +12,19 @@ export const subRubrosByRubro: Record<string, string[]> = {
   'MOVILIDAD': ['COMBUSTIBLE', 'PEAJES', 'ESTACIONAMIENTO','MECANICO','SERVICE']
 };
 
-export const medioDePagos = [
-      'Cheque Tercero',
-      'Cheque Propio', 
-      'Efectivo',
-      'Transferencia',
-      'Tarjeta Débito',
-      'Tarjeta Crédito',
-      'Reserva',
-      'Cuenta Corriente'
+export const MEDIO_PAGO = [
+      'CHEQUE TERCERO',
+      'CHEQUE PROPIO', 
+      'EFECTIVO',
+      'TRANSFERENCIA',
+      'TARJETA DÉBITO',
+      'TARJETA CRÉDITO',
+      'RESERVA',
+      'CUENTA CORRIENTE'
     ] as const;
 
 // Bancos disponibles
-export const cajas = ['PROVINCIA', 'SANTANDER', 'EFECTIVO', 'FCI', 'RESERVA'] as const;
+export const CAJAS = ['PROVINCIA', 'SANTANDER', 'EFECTIVO', 'FCI', 'RESERVA'] as const;
+
+export const UNIDADES_MEDIDA = ['UNIDAD', 'KG', 'LITRO', 'METRO', 'CAJA', 'PAQUETE'] as const;
+

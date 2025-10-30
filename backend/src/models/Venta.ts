@@ -1,7 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
-import { cajas, medioDePagos } from '../Types/Types.js';
-type MedioPago = typeof medioDePagos[number];
-type Cajas = typeof cajas[number];
+import { CAJAS, MEDIO_PAGO } from '../Types/Types.js';
+type MedioPago = typeof MEDIO_PAGO[number];
+type Cajas = typeof CAJAS[number];
 
 // Interface para item de venta
 export interface IItemVenta {
@@ -143,8 +143,8 @@ const VentaSchema = new Schema({
   medioPago: {
     type: String,
     required: [true, 'El medio de pago es requerido'],
-    enum: medioDePagos,
-    default: 'Efectivo'
+    enum: MEDIO_PAGO,
+    default: 'EFECTIVO'
   },
   detallesPago: {
     type: String,

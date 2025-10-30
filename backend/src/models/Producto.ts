@@ -1,5 +1,5 @@
 import mongoose, { Document } from 'mongoose';
-
+import { UNIDADES_MEDIDA } from '../Types/Types.js';
 export interface IProducto extends Document {
   codigo: string;
   nombre: string;
@@ -9,7 +9,7 @@ export interface IProducto extends Document {
   precioVenta: number;
   stock: number;
   stockMinimo: number;
-  unidadMedida: 'unidad' | 'kg' | 'litro' | 'metro' | 'caja' | 'paquete';
+  unidadMedida: typeof UNIDADES_MEDIDA[number];
   proveedor?: string;
   imagen?: string;
   estado: 'activo' | 'inactivo';
@@ -74,8 +74,8 @@ const productoSchema = new mongoose.Schema<IProducto>({
   unidadMedida: {
     type: String,
     required: [true, 'La unidad de medida es requerida'],
-    enum: ['unidad', 'kg', 'litro', 'metro', 'caja', 'paquete'],
-    default: 'unidad'
+    enum: UNIDADES_MEDIDA,
+    default: 'UNIDAD'
   },
   proveedor: {
     type: String,

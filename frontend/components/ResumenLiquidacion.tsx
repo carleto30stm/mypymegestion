@@ -55,7 +55,7 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
   const [openLiquidar, setOpenLiquidar] = useState(false);
   const [selectedEmpleado, setSelectedEmpleado] = useState<LiquidacionEmpleado | null>(null);
   const [observaciones, setObservaciones] = useState('');
-  const [medioDePago, setMedioDePago] = useState<string>('Transferencia');
+  const [medioDePago, setMedioDePago] = useState<string>('TRANSFERENCIA');
   const [banco, setBanco] = useState<string>('PROVINCIA');
   const [openCerrar, setOpenCerrar] = useState(false);
   const [observacionesCierre, setObservacionesCierre] = useState('');
@@ -92,7 +92,7 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
   const handleOpenLiquidar = (empleado: LiquidacionEmpleado) => {
     setSelectedEmpleado(empleado);
     setObservaciones('');
-    setMedioDePago('Transferencia');
+    setMedioDePago('TRANSFERENCIA');
     setBanco('PROVINCIA');
     setOpenLiquidar(true);
   };
@@ -479,12 +479,13 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
                     onChange={(e) => setMedioDePago(e.target.value)}
                     label="Medio de Pago"
                   >
-                    <MenuItem value="Efectivo">Efectivo</MenuItem>
-                    <MenuItem value="Transferencia">Transferencia</MenuItem>
-                    <MenuItem value="Cheque Propio">Cheque Propio</MenuItem>
-                    <MenuItem value="Cheque Tercero">Cheque Tercero</MenuItem>
-                    <MenuItem value="Tarjeta Débito">Tarjeta Débito</MenuItem>
-                    <MenuItem value="Tarjeta Crédito">Tarjeta Crédito</MenuItem>
+                    <MenuItem value="CHEQUE TERCERO">Cheque Tercero</MenuItem>
+                    <MenuItem value="CHEQUE PROPIO">Cheque Propio</MenuItem>
+                    <MenuItem value="EFECTIVO">Efectivo</MenuItem>
+                    <MenuItem value="TARJETA DÉBITO">Tarjeta Débito</MenuItem>
+                    <MenuItem value="TARJETA CRÉDITO">Tarjeta Crédito</MenuItem>
+                    <MenuItem value="TRANSFERENCIA">Transferencia</MenuItem>
+                    <MenuItem value="RESERVA">Reserva</MenuItem>
                   </Select>
                 </FormControl>
 

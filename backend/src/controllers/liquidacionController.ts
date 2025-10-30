@@ -136,7 +136,7 @@ export const agregarHorasExtra = async (req: Request, res: Response) => {
       fecha: new Date(),
       rubro: 'SUELDOS',
       subRubro: `${liquidacion.empleadoApellido}, ${liquidacion.empleadoNombre}`,
-      medioDePago: 'Efectivo', // Valor por defecto, se puede cambiar al liquidar
+      medioDePago: 'EFECTIVO', // Valor por defecto, se puede cambiar al liquidar
       clientes: `${liquidacion.empleadoApellido}, ${liquidacion.empleadoNombre}`,
       detalleGastos: `Hora extra - ${horaExtra.cantidadHoras} horas - ${periodo.nombre}`,
       tipoOperacion: 'salida',
@@ -184,7 +184,7 @@ export const agregarHorasExtra = async (req: Request, res: Response) => {
 // Registrar adelanto
 export const registrarAdelanto = async (req: Request, res: Response) => {
   try {
-    const { periodoId, empleadoId, monto, observaciones } = req.body;
+    const { periodoId, empleadoId, monto, banco, observaciones } = req.body;
 
     const periodo = await LiquidacionPeriodo.findById(periodoId);
     if (!periodo) {
@@ -208,12 +208,15 @@ export const registrarAdelanto = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'Liquidación no encontrada' });
     }
 
+    // Validar banco
+    const bancoFinal = banco || 'EFECTIVO';
+
     // Crear gasto de adelanto inmediatamente para que aparezca en nómina
     const gastoAdelanto = new Gasto({
       fecha: new Date(),
       rubro: 'SUELDOS',
       subRubro: `${liquidacion.empleadoApellido}, ${liquidacion.empleadoNombre}`,
-      medioDePago: 'Efectivo', // Valor por defecto
+      medioDePago: 'EFECTIVO', // Siempre efectivo ya que es un adelanto
       clientes: `${liquidacion.empleadoApellido}, ${liquidacion.empleadoNombre}`,
       detalleGastos: `Adelanto de sueldo - ${periodo.nombre}`,
       tipoOperacion: 'salida',
@@ -221,7 +224,7 @@ export const registrarAdelanto = async (req: Request, res: Response) => {
       comentario: observaciones || `Adelanto registrado en período: ${periodo.nombre}`,
       salida: monto,
       entrada: 0,
-      banco: 'EFECTIVO',
+      banco: bancoFinal, // Caja/banco de donde sale el adelanto
       estado: 'activo',
       confirmado: true // Los adelantos son efectivos inmediatamente
     });
@@ -280,7 +283,7 @@ export const liquidarEmpleado = async (req: Request, res: Response) => {
     }
 
     // Validar campos obligatorios
-    const medioFinal = medioDePago || 'Efectivo';
+    const medioFinal = medioDePago || 'EFECTIVO';
     const bancoFinal = banco || 'EFECTIVO';
 
     // Crear gasto del sueldo base (lo que falta por pagar después de adelantos)

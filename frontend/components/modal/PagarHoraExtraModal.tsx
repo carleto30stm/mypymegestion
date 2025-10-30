@@ -31,7 +31,7 @@ const PagarHoraExtraModal: React.FC<PagarHoraExtraModalProps> = ({
   onConfirm
 }) => {
   const [formData, setFormData] = useState({
-    medioDePago: 'Efectivo',
+    medioDePago: 'EFECTIVO',
     banco: 'EFECTIVO',
     comentario: ''
   });
@@ -47,7 +47,7 @@ const PagarHoraExtraModal: React.FC<PagarHoraExtraModalProps> = ({
 
   const handleCancel = () => {
     setFormData({
-      medioDePago: 'Efectivo',
+      medioDePago: 'EFECTIVO',
       banco: 'EFECTIVO',
       comentario: ''
     });
@@ -91,12 +91,12 @@ const PagarHoraExtraModal: React.FC<PagarHoraExtraModalProps> = ({
                 label="Medio de Pago"
                 onChange={(e) => handleChange('medioDePago', e.target.value)}
               >
-                <MenuItem value="Efectivo">Efectivo</MenuItem>
-                <MenuItem value="Transferencia">Transferencia</MenuItem>
-                <MenuItem value="Cheque Propio">Cheque Propio</MenuItem>
-                <MenuItem value="Tarjeta Débito">Tarjeta Débito</MenuItem>
-                <MenuItem value="Tarjeta Crédito">Tarjeta Crédito</MenuItem>
-                <MenuItem value="Transferencia">Transferencia</MenuItem>
+                <MenuItem value="EFECTIVO">Efectivo</MenuItem>
+                <MenuItem value="TRANSFERENCIA">Transferencia</MenuItem>
+                <MenuItem value="CHEQUE PROPIO">Cheque Propio</MenuItem>
+                <MenuItem value="TARJETA DÉBITO">Tarjeta Débito</MenuItem>
+                <MenuItem value="TARJETA CRÉDITO">Tarjeta Crédito</MenuItem>
+                <MenuItem value="TRANSFERENCIA">Transferencia</MenuItem>
               </Select>
             </FormControl>
 

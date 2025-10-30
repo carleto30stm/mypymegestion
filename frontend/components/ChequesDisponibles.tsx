@@ -29,15 +29,20 @@ import { fetchGastos } from '../redux/slices/gastosSlice';
 import { gastosAPI } from '../services/api';
 
 interface ChequesDisponiblesProps {
-  filterType: 'total' | 'month';
+  filterType: 'today' | 'month' | 'quarter' | 'semester' | 'year' | 'total';
   selectedMonth: string;
+  selectedQuarter: string;
+  selectedSemester: string;
+  selectedYear: string;
   availableMonths: Array<{ value: string; label: string }>;
 }
 
 const ChequesDisponibles: React.FC<ChequesDisponiblesProps> = ({ 
   filterType, 
-  selectedMonth, 
-  availableMonths 
+  selectedMonth,
+  selectedQuarter,
+  selectedSemester,
+  selectedYear
 }) => {
   const dispatch = useDispatch<AppDispatch>();
   const { items: gastos } = useSelector((state: RootState) => state.gastos);
@@ -49,21 +54,48 @@ const ChequesDisponibles: React.FC<ChequesDisponiblesProps> = ({
   const [detalleOperacion, setDetalleOperacion] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Función helper para determinar si una fecha coincide con el filtro
+  const matchesFilter = (fecha: Date): boolean => {
+    const fechaStr = fecha.toISOString();
+    const today = new Date().toISOString().split('T')[0];
+    
+    switch (filterType) {
+      case 'today':
+        return fechaStr.split('T')[0] === today;
+      case 'month':
+        return fechaStr.slice(0, 7) === selectedMonth;
+      case 'quarter': {
+        const [year, quarter] = selectedQuarter.split('-Q');
+        const fechaYear = fecha.getFullYear();
+        const fechaQuarter = Math.floor(fecha.getMonth() / 3) + 1;
+        return fechaYear === parseInt(year) && fechaQuarter === parseInt(quarter);
+      }
+      case 'semester': {
+        const [year, semester] = selectedSemester.split('-S');
+        const fechaYear = fecha.getFullYear();
+        const fechaSemester = fecha.getMonth() < 6 ? 1 : 2;
+        return fechaYear === parseInt(year) && fechaSemester === parseInt(semester);
+      }
+      case 'year':
+        return fecha.getFullYear() === parseInt(selectedYear);
+      case 'total':
+      default:
+        return true;
+    }
+  };
+
   // Función para filtrar cheques disponibles para disposición
   const getChequesDisponibles = () => {
     // Filtrar cheques de tercero confirmados y en estado 'recibido'
     let chequesDisponibles = gastos.filter(gasto => 
-      gasto.medioDePago === 'Cheque Tercero' && 
+      gasto.medioDePago === 'CHEQUE TERCERO' && 
       gasto.confirmado === true &&
       (!gasto.estadoCheque || gasto.estadoCheque === 'recibido')
     );
 
     // Aplicar filtro de fecha
-    if (filterType === 'month') {
-      chequesDisponibles = chequesDisponibles.filter(gasto => {
-        const fechaGasto = new Date(gasto.fecha).toISOString().slice(0, 7);
-        return fechaGasto === selectedMonth;
-      });
+    if (filterType !== 'total') {
+      chequesDisponibles = chequesDisponibles.filter(gasto => matchesFilter(new Date(gasto.fecha)));
     }
 
     return chequesDisponibles;

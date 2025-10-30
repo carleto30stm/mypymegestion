@@ -16,10 +16,14 @@ import {
 } from '@mui/material';
 import { formatCurrency, formatCurrencyWithSymbol, formatDate } from '../utils/formatters';
 import { Download as DownloadIcon } from '@mui/icons-material';
+import { BANCOS } from '../types';
 
 interface BankSummaryProps {
-  filterType: 'total' | 'month';
+  filterType: 'today' | 'month' | 'quarter' | 'semester' | 'year' | 'total';
   selectedMonth: string;
+  selectedQuarter: string;
+  selectedSemester: string;
+  selectedYear: string;
   availableMonths: Array<{ value: string; label: string }>;
 }
 
@@ -31,10 +35,14 @@ interface BankBalance {
 }
 
 // Lista de cuentas de caja disponibles
-const BANCOS = ['PROVINCIA', 'SANTANDER', 'EFECTIVO', 'FCI', 'RESERVA'];
-const MEDIOS_PAGO_CHEQUES = ['Cheque Tercero', 'Cheque Propio']; // Cheque Propio afecta caja, Cheque Tercero se maneja por separado
 
-const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) => {
+const BankSummary: React.FC<BankSummaryProps> = ({ 
+  filterType, 
+  selectedMonth, 
+  selectedQuarter, 
+  selectedSemester, 
+  selectedYear 
+}) => {
   const { items: gastos } = useSelector((state: RootState) => state.gastos);
   
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
@@ -58,16 +66,48 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
     };
   });
 
-    // Función para filtrar gastos según el tipo de filtro
+  // Función helper para determinar si una fecha coincide con el filtro
+  const matchesFilter = (fecha: Date): boolean => {
+    const fechaStr = fecha.toISOString();
+    const today = new Date().toISOString().split('T')[0];
+    
+    switch (filterType) {
+      case 'today':
+        return fechaStr.split('T')[0] === today;
+      
+      case 'month':
+        return fechaStr.slice(0, 7) === selectedMonth;
+      
+      case 'quarter': {
+        const [year, quarter] = selectedQuarter.split('-Q');
+        const fechaYear = fecha.getFullYear();
+        const fechaQuarter = Math.floor(fecha.getMonth() / 3) + 1;
+        return fechaYear === parseInt(year) && fechaQuarter === parseInt(quarter);
+      }
+      
+      case 'semester': {
+        const [year, semester] = selectedSemester.split('-S');
+        const fechaYear = fecha.getFullYear();
+        const fechaSemester = fecha.getMonth() < 6 ? 1 : 2;
+        return fechaYear === parseInt(year) && fechaSemester === parseInt(semester);
+      }
+      
+      case 'year':
+        return fecha.getFullYear() === parseInt(selectedYear);
+      
+      case 'total':
+      default:
+        return true;
+    }
+  };
+
+  // Función para filtrar gastos según el tipo de filtro
   const getFilteredGastos = () => {
     // Filtrar gastos según el tipo de filtro de fecha
     let gastosFiltrados = gastos;
     
-    if (filterType === 'month') {
-      gastosFiltrados = gastos.filter(gasto => {
-        const fechaGasto = new Date(gasto.fecha).toISOString().slice(0, 7); // YYYY-MM
-        return fechaGasto === selectedMonth;
-      });
+    if (filterType !== 'total') {
+      gastosFiltrados = gastos.filter(gasto => matchesFilter(new Date(gasto.fecha)));
     }
 
     // Excluir gastos cancelados de los cálculos
@@ -79,7 +119,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
     // 3. Para gastos sin fechaStandBy: incluir siempre
     return gastosFiltrados.filter(gasto => {
       // Si es un cheque, solo incluir si está confirmado
-      if (gasto.medioDePago?.includes('Cheque')) {
+      if (gasto.medioDePago?.toUpperCase().includes('CHEQUE')) {
         return gasto.confirmado === true;
       }
       
@@ -100,15 +140,12 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
   const getChequesConfirmadosSinDepositar = () => {
     let chequesFiltrados = gastos;
     
-    if (filterType === 'month') {
-      chequesFiltrados = gastos.filter(gasto => {
-        const fechaGasto = new Date(gasto.fecha).toISOString().slice(0, 7);
-        return fechaGasto === selectedMonth;
-      });
+    if (filterType !== 'total') {
+      chequesFiltrados = gastos.filter(gasto => matchesFilter(new Date(gasto.fecha)));
     }
 
     return chequesFiltrados.filter(gasto => 
-      gasto.medioDePago === 'Cheque Tercero' && // Solo Cheques Tercero 
+      gasto.medioDePago === 'CHEQUE TERCERO' && // Solo Cheques Tercero 
       gasto.confirmado === true &&
       gasto.estadoCheque === 'recibido' && // Solo cheques en estado 'recibido' (no depositados ni dispuestos)
       gasto.estado !== 'cancelado' // Excluir cancelados
@@ -121,21 +158,41 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
   const getChequesPropiosPendientes = () => {
     let chequesFiltrados = gastos;
     
-    if (filterType === 'month') {
-      chequesFiltrados = gastos.filter(gasto => {
-        const fechaGasto = new Date(gasto.fecha).toISOString().slice(0, 7);
-        return fechaGasto === selectedMonth;
-      });
+    if (filterType !== 'total') {
+      chequesFiltrados = gastos.filter(gasto => matchesFilter(new Date(gasto.fecha)));
     }
 
     return chequesFiltrados.filter(gasto => 
-      gasto.medioDePago === 'Cheque Propio' && // Solo Cheques Propios
+      gasto.medioDePago === 'CHEQUE PROPIO' && // Solo Cheques Propios
       gasto.confirmado === false && // Solo los pendientes de confirmación
       gasto.estado !== 'cancelado' // Excluir cancelados
     );
   };
 
   const chequesPropiosPendientes = getChequesPropiosPendientes();
+
+  // Función para obtener el nombre del período según el tipo de filtro
+  const getPeriodName = (): string => {
+    switch (filterType) {
+      case 'today':
+        return new Date().toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' });
+      case 'month':
+        return new Date(selectedMonth + '-01').toLocaleDateString('es-ES', { year: 'numeric', month: 'long' });
+      case 'quarter': {
+        const [year, quarter] = selectedQuarter.split('-Q');
+        return `Trimestre ${quarter} - ${year}`;
+      }
+      case 'semester': {
+        const [year, semester] = selectedSemester.split('-S');
+        return `Semestre ${semester} - ${year}`;
+      }
+      case 'year':
+        return `Año ${selectedYear}`;
+      case 'total':
+      default:
+        return 'Histórico Total';
+    }
+  };
 
   // Función para generar PDF
   const generatePDF = async () => {
@@ -146,16 +203,14 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
       const autoTable = (await import('jspdf-autotable')).default;
       
       const pdf = new jsPDF('p', 'mm', 'a4');
-      const monthName = filterType === 'month' ? 
-        new Date(selectedMonth + '-01').toLocaleDateString('es-ES', { year: 'numeric', month: 'long' }) :
-        'Histórico Total';
+      const periodName = getPeriodName();
       
       // Título del documento
       pdf.setFontSize(18);
       pdf.text('Reporte de Caja y Cheques', 20, 20);
       
       pdf.setFontSize(12);
-      pdf.text(`Período: ${monthName}`, 20, 30);
+      pdf.text(`Período: ${periodName}`, 20, 30);
       pdf.text(`Fecha de generación: ${new Date().toLocaleDateString('es-ES')}`, 20, 40);
       
       let yPosition = 50;
@@ -319,7 +374,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
         let estadoInfo = '';
         
         // Agregar información de estado para cheques
-        if (gasto.medioDePago?.includes('Cheque')) {
+        if (gasto.medioDePago?.toUpperCase().includes('CHEQUE')) {
           if (gasto.confirmado) {
             switch (gasto.estadoCheque) {
               case 'recibido':
@@ -537,7 +592,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
 
       pdf.setTextColor(0, 0, 0); // Restaurar color negro
 
-      pdf.save(`Reporte_Financiero_${monthName.replace(/ /g, '_')}.pdf`);
+      pdf.save(`Reporte_Financiero_${periodName.replace(/ /g, '_')}.pdf`);
       
     } catch (error) {
       console.error('Error generando PDF:', error);
@@ -551,7 +606,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
   const bankBalances: BankBalance[] = BANCOS.map(banco => {
     // Filtrar gastos del banco excluyendo SOLO Cheques Tercero (no los propios)
     const gastosDelBanco = gastosActivos.filter(gasto => 
-      gasto.banco === banco && gasto.medioDePago !== 'Cheque Tercero'
+      gasto.banco === banco && gasto.medioDePago !== 'CHEQUE TERCERO'
     );
     
     // Calcular entradas y salidas normales (incluye Cheques Propios)
@@ -580,7 +635,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
   });
 
   // Calcular saldos de Cheques Tercero sin depositar (solo cheques recibidos)
-  const chequeBalances: BankBalance[] = ['Cheque Tercero'].map(medioPago => {
+  const chequeBalances: BankBalance[] = ['CHEQUE TERCERO'].map(medioPago => {
     const chequesCategoria = chequesConfirmados.filter(gasto => gasto.medioDePago === medioPago);
     
     const entradas = chequesCategoria.reduce((sum, gasto) => sum + (gasto.entrada || 0), 0);
@@ -598,7 +653,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
   // Calcular saldos de Cheques Propios Pendientes por banco
   const chequesPropiosBalances: BankBalance[] = BANCOS.map(banco => {
     const chequesDelBanco = chequesPropiosPendientes.filter(gasto => 
-      gasto.medioDePago === 'Cheque Propio' && gasto.banco === banco
+      gasto.medioDePago === 'CHEQUE PROPIO' && gasto.banco === banco
     );
     
     const entradas = chequesDelBanco.reduce((sum, gasto) => sum + (gasto.entrada || 0), 0);
@@ -678,9 +733,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({ filterType, selectedMonth }) 
             Resumen de Caja y Cheques
           </Typography>
           <Typography variant="h6" color="text.secondary">
-            {filterType === 'month' 
-              ? `${availableMonths.find(m => m.value === selectedMonth)?.label}` 
-              : 'Histórico Completo'}
+            {getPeriodName()}
           </Typography>
           <Typography variant="body2" color="text.secondary">
             Generado el {formatDate(new Date())} a las {new Date().toLocaleTimeString('es-ES')}

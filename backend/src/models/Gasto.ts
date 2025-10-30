@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { cajas, medioDePagos, subRubrosByRubro } from '../Types/Types.js';
+import { CAJAS, MEDIO_PAGO, subRubrosByRubro } from '../Types/Types.js';
 
 
 const gastoSchema = new mongoose.Schema({
@@ -46,7 +46,7 @@ const gastoSchema = new mongoose.Schema({
     required: function(this: any) {
       return this.tipoOperacion !== 'transferencia';
     },
-    enum: medioDePagos
+    enum: MEDIO_PAGO
   },
   clientes: { type: String },
   detalleGastos: { type: String, required: true },
@@ -71,17 +71,21 @@ const gastoSchema = new mongoose.Schema({
   confirmado: { 
     type: Boolean,
     default: function(this: any) {
-      // Para cheques (medioDePago con 'Cheque'), default es false
+      // Para cheques (tanto terceros como propios), default es false
       // Para otros medios de pago, default es true
-      return !this.medioDePago || (!this.medioDePago.includes('Cheque'));
+      if (!this.medioDePago) return true;
+      const esCheque = this.medioDePago.toUpperCase().includes('CHEQUE');
+      return !esCheque;
     }
   },
-  // Nuevos campos para manejo de cheques de terceros
+  // Nuevos campos para manejo de cheques
   estadoCheque: {
     type: String,
     enum: ['recibido', 'depositado', 'pagado_proveedor', 'endosado'],
     default: function(this: any) {
-      return this.medioDePago === 'Cheque Tercero' ? 'recibido' : undefined;
+      // Para cheques terceros, estado inicial es 'recibido'
+      // Para cheques propios, no se setea estado (undefined) ya que se emiten
+      return this.medioDePago === 'CHEQUE TERCERO' ? 'recibido' : undefined;
     }
   },
   chequeRelacionadoId: { 
@@ -94,14 +98,14 @@ const gastoSchema = new mongoose.Schema({
   // Campos específicos para transferencias
   cuentaOrigen: { 
     type: String,
-    enum: cajas,
+    enum: CAJAS,
     required: function(this: any) {
       return this.tipoOperacion === 'transferencia';
     }
   },
   cuentaDestino: { 
     type: String,
-    enum: cajas,
+    enum: CAJAS,
     required: function(this: any) {
       return this.tipoOperacion === 'transferencia';
     }
@@ -129,8 +133,8 @@ const gastoSchema = new mongoose.Schema({
       if (this.tipoOperacion === 'transferencia') {
         return false;
       }
-      // Para Cheque Tercero, no es requerido (se define al confirmar/depositar)
-      if (this.medioDePago === 'Cheque Tercero') {
+      // Para CHEQUE TERCERO, no es requerido (se define al confirmar/depositar)
+      if (this.medioDePago === 'CHEQUE TERCERO') {
         return false;
       }
       // Para otros casos, sí es requerido
@@ -144,8 +148,8 @@ const gastoSchema = new mongoose.Schema({
           if (this.tipoOperacion === 'transferencia') {
             return true;
           }
-          // Para Cheque Tercero, permitir vacío
-          if (this.medioDePago === 'Cheque Tercero') {
+          // Para CHEQUE TERCERO, permitir vacío
+          if (this.medioDePago === 'CHEQUE TERCERO') {
             return true;
           }
           // Para otros casos, no permitir vacío
@@ -153,9 +157,9 @@ const gastoSchema = new mongoose.Schema({
         }
         
         // Si tiene valor, debe ser uno de los valores válidos
-        return (cajas as readonly string[]).includes(value);
+        return (CAJAS as readonly string[]).includes(value);
       },
-      message: () => `Banco debe ser uno de los valores válidos: ${cajas.join(', ')}`
+      message: () => `Banco debe ser uno de los valores válidos: ${CAJAS.join(', ')}`
     }
   },
   // user: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'User' } // Opcional: para asociar gastos a usuarios

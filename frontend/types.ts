@@ -1,3 +1,10 @@
+// Bancos disponibles
+export const BANCOS = ['PROVINCIA', 'SANTANDER', 'EFECTIVO', 'FCI', 'RESERVA'] as const;
+
+// Unidades de medida para productos
+export const UNIDADES_MEDIDA = ['UNIDAD', 'KILO', 'METRO', 'LITRO', 'CAJA', 'PAQUETE'] as const;
+
+export const MEDIOS_PAGO_GASTOS = ['CHEQUE TERCERO', 'CHEQUE PROPIO', 'EFECTIVO', 'TRANSFERENCIA', 'TARJETA DÉBITO', 'TARJETA CRÉDITO', 'RESERVA', 'OTRO', ''] as const;
 export interface User {
   id: string;
   username: string;
@@ -79,8 +86,8 @@ export interface LiquidacionEmpleado {
   reciboGenerado?: string;
   fechaPago?: string;
   observaciones?: string;
-  medioDePago?: '' | 'Cheque Tercero' | 'Cheque Propio' | 'Efectivo' | 'Transferencia' | 'Tarjeta Débito' | 'Tarjeta Crédito' | 'Reserva' | 'Otro';
-  banco?: 'PROVINCIA' | 'SANTANDER' | 'EFECTIVO' | 'FCI' | 'RESERVA';
+  medioDePago?: typeof MEDIOS_PAGO_GASTOS[number];
+  banco?: typeof BANCOS[number];
 }
 
 export interface LiquidacionPeriodo {
@@ -113,22 +120,13 @@ export const subRubrosByRubro: Record<string, string[]> = {
   'MOVILIDAD': ['COMBUSTIBLE', 'PEAJES', 'ESTACIONAMIENTO','MECANICO','SERVICE']
 };
 
-// Bancos disponibles
-export const BANCOS = ['PROVINCIA', 'SANTANDER', 'EFECTIVO', 'FCI', 'RESERVA'] as const;
-
-// Unidades de medida para productos
-export const UNIDADES_MEDIDA = ['unidad', 'kilo', 'metro', 'litro', 'caja', 'paquete'] as const;
-
-// Medios de pago para ventas
-export const MEDIOS_PAGO_VENTAS = ['Efectivo', 'Transferencia', 'Tarjeta Débito', 'Tarjeta Crédito', 'Cheque Tercero', 'Cuenta Corriente', 'Mixto'] as const;
-
 export interface Gasto {
   _id?: string;
   fecha: string;
   rubro: 'COBRO.VENTA' | 'SERVICIOS' | 'PROOV.MATERIA.PRIMA' | 'PROOVMANO.DE.OBRA' | 'BANCO' | 'ARCA' | 'GASTOS.ADMIN' | 'GASTOS ADMINISTRATIVOS' | 'MANT.MAQ' | 'SUELDOS' | 'MOVILIDAD';
   subRubro: string;
   // Allow empty string as a valid initial value for Select components
-  medioDePago: '' | 'Cheque Tercero' | 'Cheque Propio' | 'Efectivo' | 'Transferencia'| 'Tarjeta Débito' | 'Tarjeta Crédito' | 'Reserva' | 'Otro';
+  medioDePago: typeof MEDIOS_PAGO_GASTOS[number];
   clientes: string;
   detalleGastos: string;
   tipoOperacion: 'entrada' | 'salida' | 'transferencia';
@@ -143,10 +141,10 @@ export interface Gasto {
   entrada?: number;
   salida?: number;
   // Campos específicos para transferencias
-  cuentaOrigen?: 'PROVINCIA' | 'SANTANDER' | 'EFECTIVO' | 'FCI' | 'RESERVA';
-  cuentaDestino?: 'PROVINCIA' | 'SANTANDER' | 'EFECTIVO' | 'FCI' | 'RESERVA';
+  cuentaOrigen?: typeof BANCOS[number];
+  cuentaDestino?: typeof BANCOS[number];
   montoTransferencia?: number;
-  banco: 'PROVINCIA' | 'SANTANDER' | 'EFECTIVO' | 'FCI' | 'RESERVA';
+  banco: typeof BANCOS[number];
 }
 
 // ========== SISTEMA DE VENTAS E INVENTARIO ==========
@@ -162,7 +160,7 @@ export interface Producto {
   precioVenta: number;
   stock: number;
   stockMinimo: number;
-  unidadMedida: 'unidad' | 'kilo' | 'metro' | 'litro' | 'caja' | 'paquete';
+  unidadMedida: typeof UNIDADES_MEDIDA[number];
   proveedor?: string;
   imagen?: string;
   estado: 'activo' | 'inactivo';
@@ -225,7 +223,7 @@ export interface Venta {
   descuentoTotal: number;
   iva: number;
   total: number;
-  medioPago: typeof MEDIOS_PAGO_VENTAS[number];
+  medioPago: typeof MEDIOS_PAGO_GASTOS[number];
   detallesPago?: string;
   banco?: typeof BANCOS[number];
   estado: 'pendiente' | 'confirmada' | 'anulada' | 'parcial';

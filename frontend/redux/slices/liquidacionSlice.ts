@@ -67,6 +67,7 @@ export const registrarAdelanto = createAsyncThunk(
     periodoId: string;
     empleadoId: string;
     monto: number;
+    banco?: string;
     observaciones?: string;
   }) => {
     const response = await api.post(`${apiUrl}/liquidacion/adelanto`, data);

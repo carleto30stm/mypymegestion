@@ -4,7 +4,7 @@ import { AppDispatch, RootState } from '../redux/store';
 import { fetchProductos } from '../redux/slices/productosSlice';
 import { fetchClientesActivos } from '../redux/slices/clientesSlice';
 import { createVenta } from '../redux/slices/ventasSlice';
-import { Producto, ItemVenta, BANCOS, MEDIOS_PAGO_VENTAS } from '../types';
+import { Producto, ItemVenta, BANCOS, MEDIOS_PAGO_GASTOS } from '../types';
 import {
   Box,
   Typography,
@@ -44,7 +44,7 @@ const VentasPage: React.FC = () => {
   const [productoSeleccionado, setProductoSeleccionado] = useState<Producto | null>(null);
   const [cantidad, setCantidad] = useState<number>(1);
   const [clienteId, setClienteId] = useState<string>('');
-  const [medioPago, setMedioPago] = useState<string>('Efectivo');
+  const [medioPago, setMedioPago] = useState<string>('EFECTIVO');
   const [banco, setBanco] = useState<string>('');
   const [observaciones, setObservaciones] = useState<string>('');
   const [error, setError] = useState<string>('');
@@ -128,7 +128,7 @@ const VentasPage: React.FC = () => {
       iva: totales.iva,
       total: totales.total,
       medioPago: medioPago as any,
-      banco: medioPago !== 'Efectivo' ? banco : undefined,
+      banco: medioPago !== 'EFECTIVO' ? banco : undefined,
       observaciones: observaciones || undefined,
       vendedor: user?.id || ''
     };
@@ -138,7 +138,7 @@ const VentasPage: React.FC = () => {
       // Limpiar formulario
       setCarrito([]);
       setClienteId('');
-      setMedioPago('Efectivo');
+      setMedioPago('EFECTIVO');
       setBanco('');
       setObservaciones('');
       setError('');
@@ -267,7 +267,7 @@ const VentasPage: React.FC = () => {
             <FormControl fullWidth sx={{ mb: 2 }}>
               <InputLabel>Medio de Pago *</InputLabel>
               <Select value={medioPago} onChange={(e) => setMedioPago(e.target.value)} label="Medio de Pago *">
-                {MEDIOS_PAGO_VENTAS.map((medio) => (
+                {MEDIOS_PAGO_GASTOS.map((medio) => (
                   <MenuItem key={medio} value={medio}>
                     {medio}
                   </MenuItem>
@@ -275,7 +275,7 @@ const VentasPage: React.FC = () => {
               </Select>
             </FormControl>
 
-            {medioPago !== 'Efectivo' && medioPago !== 'Cuenta Corriente' && (
+            {medioPago !== 'EFECTIVO' && medioPago !== 'CUENTA CORRIENTE' && (
               <FormControl fullWidth sx={{ mb: 2 }}>
                 <InputLabel>Banco *</InputLabel>
                 <Select 

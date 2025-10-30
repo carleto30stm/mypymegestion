@@ -18,35 +18,66 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { formatDate, formatCurrencyWithSymbol } from '../utils/formatters';
 
 interface PendingChecksProps {
-  filterType: 'total' | 'month';
+  filterType: 'today' | 'month' | 'quarter' | 'semester' | 'year' | 'total';
   selectedMonth: string;
+  selectedQuarter: string;
+  selectedSemester: string;
+  selectedYear: string;
   availableMonths: Array<{ value: string; label: string }>;
 }
 
 const PendingChecks: React.FC<PendingChecksProps> = ({ 
   filterType, 
-  selectedMonth, 
-  availableMonths 
+  selectedMonth,
+  selectedQuarter,
+  selectedSemester,
+  selectedYear
 }) => {
   const dispatch = useDispatch<AppDispatch>();
   const { items: gastos } = useSelector((state: RootState) => state.gastos);
   
+  // Función helper para determinar si una fecha coincide con el filtro
+  const matchesFilter = (fecha: Date): boolean => {
+    const fechaStr = fecha.toISOString();
+    const today = new Date().toISOString().split('T')[0];
+    
+    switch (filterType) {
+      case 'today':
+        return fechaStr.split('T')[0] === today;
+      case 'month':
+        return fechaStr.slice(0, 7) === selectedMonth;
+      case 'quarter': {
+        const [year, quarter] = selectedQuarter.split('-Q');
+        const fechaYear = fecha.getFullYear();
+        const fechaQuarter = Math.floor(fecha.getMonth() / 3) + 1;
+        return fechaYear === parseInt(year) && fechaQuarter === parseInt(quarter);
+      }
+      case 'semester': {
+        const [year, semester] = selectedSemester.split('-S');
+        const fechaYear = fecha.getFullYear();
+        const fechaSemester = fecha.getMonth() < 6 ? 1 : 2;
+        return fechaYear === parseInt(year) && fechaSemester === parseInt(semester);
+      }
+      case 'year':
+        return fecha.getFullYear() === parseInt(selectedYear);
+      case 'total':
+      default:
+        return true;
+    }
+  };
+
   // Función para filtrar cheques pendientes según el tipo de filtro
   const getFilteredCheques = () => {
     // Primero filtrar solo cheques pendientes
     let chequesPendientes = gastos.filter(gasto => 
-      gasto.medioDePago?.includes('Cheque') && !gasto.confirmado
+      gasto.medioDePago?.toUpperCase().includes('CHEQUE') && !gasto.confirmado
     );
 
     // Luego aplicar filtro de fecha según el tipo
     if (filterType === 'total') {
       return chequesPendientes;
     } else {
-      // Filtrar por mes seleccionado
-      return chequesPendientes.filter(gasto => {
-        const fechaGasto = new Date(gasto.fecha).toISOString().slice(0, 7); // YYYY-MM
-        return fechaGasto === selectedMonth;
-      });
+      return chequesPendientes.filter(gasto => matchesFilter(new Date(gasto.fecha)));
     }
   };
   

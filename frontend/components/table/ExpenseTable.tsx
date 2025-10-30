@@ -28,8 +28,11 @@ import { useAuthDebug } from '../../hooks/useAuthDebug';
 interface ExpenseTableProps {
     isModalOpen: boolean;
     setIsModalOpen: (isOpen: boolean) => void;
-    filterType: 'total' | 'month';
+    filterType: 'today' | 'month' | 'quarter' | 'semester' | 'year' | 'total';
     selectedMonth: string;
+    selectedQuarter: string;
+    selectedSemester: string;
+    selectedYear: string;
     availableMonths: Array<{ value: string; label: string }>;
 }
 
@@ -37,7 +40,10 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
   isModalOpen, 
   setIsModalOpen, 
   filterType, 
-  selectedMonth 
+  selectedMonth,
+  selectedQuarter,
+  selectedSemester,
+  selectedYear
 }) => {
   const dispatch = useDispatch<AppDispatch>();
   const { items: gastos, status } = useSelector((state: RootState) => state.gastos);
@@ -202,7 +208,7 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
         }
         
         // Para cheques, mostrar estado de confirmación
-        if (gasto.medioDePago?.includes('Cheque')) {
+        if (gasto.medioDePago?.toUpperCase().includes('CHEQUE')) {
           if (gasto.confirmado) {
             return <Chip 
               icon={<CheckCircleIcon />} 
@@ -329,7 +335,7 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
         }
         
         // Botón de confirmar cheque (solo para cheques pendientes)
-        if (gasto.medioDePago?.includes('Cheque') && !gasto.confirmado) {
+        if (gasto.medioDePago?.toUpperCase().includes('CHEQUE') && !gasto.confirmado) {
           actions.push(
             <GridActionsCellItem
               key="confirm"
@@ -373,6 +379,36 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
   }
 
   // Función para filtrar gastos según el tipo de filtro
+  // Función helper para determinar si una fecha coincide con el filtro
+  const matchesFilter = (fecha: Date): boolean => {
+    const fechaStr = fecha.toISOString();
+    const today = new Date().toISOString().split('T')[0];
+    
+    switch (filterType) {
+      case 'today':
+        return fechaStr.split('T')[0] === today;
+      case 'month':
+        return fechaStr.slice(0, 7) === selectedMonth;
+      case 'quarter': {
+        const [year, quarter] = selectedQuarter.split('-Q');
+        const fechaYear = fecha.getFullYear();
+        const fechaQuarter = Math.floor(fecha.getMonth() / 3) + 1;
+        return fechaYear === parseInt(year) && fechaQuarter === parseInt(quarter);
+      }
+      case 'semester': {
+        const [year, semester] = selectedSemester.split('-S');
+        const fechaYear = fecha.getFullYear();
+        const fechaSemester = fecha.getMonth() < 6 ? 1 : 2;
+        return fechaYear === parseInt(year) && fechaSemester === parseInt(semester);
+      }
+      case 'year':
+        return fecha.getFullYear() === parseInt(selectedYear);
+      case 'total':
+      default:
+        return true;
+    }
+  };
+
   const getFilteredGastos = () => {
     // CAMBIO: Ya NO filtramos por fechaStandBy aquí - mostramos TODOS los registros
     // La lógica de StandBy solo aplicará en los cálculos (BankSummary)
@@ -380,11 +416,8 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
     if (filterType === 'total') {
       return gastos; // Mostrar todos los gastos
     } else {
-      // Filtrar solo por mes seleccionado
-      return gastos.filter(gasto => {
-        const fechaGasto = new Date(gasto.fecha).toISOString().slice(0, 7); // YYYY-MM
-        return fechaGasto === selectedMonth;
-      });
+      // Filtrar por fecha según el tipo de filtro seleccionado
+      return gastos.filter(gasto => matchesFilter(new Date(gasto.fecha)));
     }
   };
 

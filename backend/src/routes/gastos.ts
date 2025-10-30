@@ -35,7 +35,7 @@ router.patch('/:id/confirmar', async (req, res) => {
     }
 
     // Verificar que sea un cheque
-    if (!gasto.medioDePago?.includes('Cheque')) {
+    if (!gasto.medioDePago?.includes('CHEQUE')) {
       return res.status(400).json({ error: 'Solo se pueden confirmar cheques' });
     }
 
@@ -59,7 +59,7 @@ router.post('/:id/disponer-cheque', async (req, res) => {
     }
 
     // Verificar que sea un cheque de tercero confirmado
-    if (chequeOriginal.medioDePago !== 'Cheque Tercero' || !chequeOriginal.confirmado) {
+    if (chequeOriginal.medioDePago !== 'CHEQUE TERCERO' || !chequeOriginal.confirmado) {
       return res.status(400).json({ error: 'Solo se pueden disponer cheques de terceros confirmados' });
     }
 
@@ -87,7 +87,7 @@ router.post('/:id/disponer-cheque', async (req, res) => {
       fecha: new Date(),
       rubro: 'BANCO',
       subRubro: 'MOV.BANC',
-      medioDePago: 'Cheque Tercero',
+      medioDePago: 'CHEQUE TERCERO',
       banco: chequeOriginal.banco, // Mismo banco donde estaba el cheque original
       clientes: chequeOriginal.clientes,
       detalleGastos: `${tipoDisposicion === 'depositar' ? 'Depósito' : 'Pago a proveedor'} - ${detalleOperacion}`,
@@ -107,7 +107,7 @@ router.post('/:id/disponer-cheque', async (req, res) => {
         fecha: new Date(),
         rubro: 'BANCO',
         subRubro: 'MOV.BANC',
-        medioDePago: 'Efectivo', // Ahora es dinero en cuenta
+        medioDePago: 'EFECTIVO', // Ahora es dinero en cuenta
         banco: destino, // El banco donde depositamos (PROVINCIA, SANTANDER, etc.)
         clientes: chequeOriginal.clientes,
         detalleGastos: `Depósito cheque de tercero - ${detalleOperacion}`,

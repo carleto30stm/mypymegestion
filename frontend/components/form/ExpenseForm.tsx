@@ -326,16 +326,15 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
       setFormData(updatedFormData);
       setValidationError('');
     } else if (name === 'medioDePago') {
-      // Si selecciona Cheque Tercero, limpiar el banco (no es requerido)
+      // Si selecciona CHEQUE TERCERO, limpiar el banco (no es requerido)
       const updatedFormData = {
         ...formData,
         medioDePago: value,
       };
       
-      if (value === 'Cheque Tercero') {
-        updatedFormData.banco = ''; // Limpiar banco para Cheque Tercero
+      if (value === 'CHEQUE TERCERO') {
+        updatedFormData.banco = ''; // Limpiar banco para CHEQUE TERCERO
       }
-      
       setFormData(updatedFormData);
       setValidationError('');
     } else {
@@ -572,14 +571,14 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
                 label="Medio de Pago"
                 onChange={(e) => handleSelectChange('medioDePago', e.target.value)}
               >
-                <MenuItem value="Cheque Tercero">Cheque Tercero</MenuItem>
-                <MenuItem value="Cheque Propio">Cheque Propio</MenuItem>
-                <MenuItem value="Efectivo">Efectivo</MenuItem>
-                <MenuItem value="Transferencia">Transferencia</MenuItem>
-                <MenuItem value="Tarjeta Débito">Tarjeta Débito</MenuItem>
-                <MenuItem value="Tarjeta Crédito">Tarjeta Crédito</MenuItem>
-                <MenuItem value="Reserva">Reserva</MenuItem>
-                <MenuItem value="Otro">Otro</MenuItem>
+                <MenuItem value="CHEQUE TERCERO">Cheque Tercero</MenuItem>
+                <MenuItem value="CHEQUE PROPIO">Cheque Propio</MenuItem>
+                <MenuItem value="EFECTIVO">Efectivo</MenuItem>
+                <MenuItem value="TRANSFERENCIA">Transferencia</MenuItem>
+                <MenuItem value="TARJETA DÉBITO">Tarjeta Débito</MenuItem>
+                <MenuItem value="TARJETA CRÉDITO">Tarjeta Crédito</MenuItem>
+                <MenuItem value="RESERVA">Reserva</MenuItem>
+                <MenuItem value="OTRO">Otro</MenuItem>
               </Select>
             </FormControl>
           </Grid>
@@ -618,8 +617,8 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
           </Grid>
         )}
 
-        {/* Banco - Solo para NO transferencias y NO Cheque Tercero */}
-        {formData.tipoOperacion !== 'transferencia' && formData.medioDePago !== 'Cheque Tercero' && (
+        {/* Banco - Solo para NO transferencias y NO CHEQUE TERCERO */}
+        {formData.tipoOperacion !== 'transferencia' && formData.medioDePago !== 'CHEQUE TERCERO' && (
           <Grid item xs={12} sm={6}>
             <FormControl fullWidth required>
               <InputLabel>Caja</InputLabel>
@@ -683,7 +682,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
 
         {/* Fecha StandBy - Solo para cheques */}
         {formData.tipoOperacion !== 'transferencia' && 
-         (formData.medioDePago === 'Cheque Propio' || formData.medioDePago === 'Cheque Tercero') && (
+         (formData.medioDePago === 'CHEQUE PROPIO' || formData.medioDePago === 'CHEQUE TERCERO') && (
           <Grid item xs={12} sm={6}>
             <TextField
               name="fechaStandBy"

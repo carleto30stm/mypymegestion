@@ -1,4 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import { MEDIO_PAGO, CAJAS } from '../Types/Types.js';
+type MEDIO_PAGO = typeof MEDIO_PAGO[number];
+type CAJAS = typeof CAJAS[number];
 
 // Interface para resumen de horas extra en liquidación
 export interface IHoraExtraResumen {
@@ -29,8 +32,8 @@ export interface ILiquidacionEmpleado {
   fechaPago?: Date;
   observaciones?: string;
   // Información de pago
-  medioDePago?: 'Cheque Tercero' | 'Cheque Propio' | 'Efectivo' | 'Transferencia' | 'Tarjeta Débito' | 'Tarjeta Crédito' | 'Reserva' | 'Otro';
-  banco?: 'PROVINCIA' | 'SANTANDER' | 'EFECTIVO' | 'FCI' | 'RESERVA';
+  medioDePago?:  MEDIO_PAGO;
+  banco?: CAJAS;
 }
 
 // Interface principal del período de liquidación
@@ -81,11 +84,11 @@ const LiquidacionEmpleadoSchema = new Schema({
   observaciones: { type: String },
   medioDePago: {
     type: String,
-    enum: ['Cheque Tercero', 'Cheque Propio', 'Efectivo', 'Transferencia', 'Tarjeta Débito', 'Tarjeta Crédito', 'Reserva', 'Otro']
+    enum: MEDIO_PAGO
   },
   banco: {
     type: String,
-    enum: ['PROVINCIA', 'SANTANDER', 'EFECTIVO', 'FCI', 'RESERVA']
+    enum: CAJAS
   }
 });
 
@@ -112,9 +115,21 @@ const LiquidacionPeriodoSchema = new Schema({
   timestamps: true
 });
 
+// Middleware para normalizar medioDePago a mayúsculas antes de validar
+LiquidacionPeriodoSchema.pre('validate', function(next) {
+  if (this.liquidaciones && Array.isArray(this.liquidaciones)) {
+    this.liquidaciones.forEach((liq: any) => {
+      if (liq.medioDePago && typeof liq.medioDePago === 'string') {
+        liq.medioDePago = liq.medioDePago.toUpperCase();
+      }
+    });
+  }
+  next();
+});
+
 // Middleware para calcular total general antes de guardar
 LiquidacionPeriodoSchema.pre('save', function(next) {
-  this.totalGeneral = this.liquidaciones.reduce((sum, liq) => sum + liq.totalAPagar, 0);
+  this.totalGeneral = this.liquidaciones.reduce((sum: number, liq: any) => sum + liq.totalAPagar, 0);
   next();
 });
 

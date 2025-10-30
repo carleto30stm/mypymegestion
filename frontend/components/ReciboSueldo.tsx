@@ -63,7 +63,7 @@ const ReciboSueldo: React.FC<ReciboSueldoProps> = ({ liquidacion, periodo, open,
     }
     
     doc.text(`Medio de Pago:`, 15, yPos);
-    doc.text(liquidacion.medioDePago || 'Efectivo', 70, yPos);
+    doc.text(liquidacion.medioDePago || 'EFECTIVO', 70, yPos);
     yPos += 6;
     
     if (liquidacion.banco && liquidacion.banco !== 'EFECTIVO') {

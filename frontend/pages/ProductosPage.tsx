@@ -74,7 +74,7 @@ const ProductosPage: React.FC = () => {
     precioVenta: 0,
     stock: 0,
     stockMinimo: 5,
-    unidadMedida: 'unidad',
+    unidadMedida: 'UNIDAD',
     proveedor: '',
     estado: 'activo'
   });
@@ -99,7 +99,7 @@ const ProductosPage: React.FC = () => {
         precioVenta: 0,
         stock: 0,
         stockMinimo: 5,
-        unidadMedida: 'unidad',
+        unidadMedida: 'UNIDAD',
         proveedor: '',
         estado: 'activo'
       });

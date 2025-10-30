@@ -227,7 +227,7 @@ export const marcarComoPagada = async (req: Request, res: Response): Promise<voi
       fecha: new Date().toISOString().split('T')[0],
       rubro: 'SUELDOS',
       subRubro: `${horaExtra.empleadoApellido}, ${horaExtra.empleadoNombre}`,
-      medioDePago: medioDePago || 'Efectivo',
+      medioDePago: medioDePago || 'EFECTIVO',
       clientes: '',
       detalleGastos: `Pago horas extra - ${horaExtra.cantidadHoras} horas (${horaExtra.descripcion || 'Sin descripción'})`,
       tipoOperacion: 'salida',

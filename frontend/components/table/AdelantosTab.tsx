@@ -21,10 +21,10 @@ import {
 } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
 import { AppDispatch, RootState } from '../../redux/store';
-import { LiquidacionPeriodo } from '../../types';
+import { LiquidacionPeriodo, BANCOS } from '../../types';
 import { registrarAdelanto, fetchPeriodoById } from '../../redux/slices/liquidacionSlice';
 import { fetchGastos } from '../../redux/slices/gastosSlice';
-import { formatCurrency } from '../../utils/formatters';
+import { formatCurrency, parseCurrency } from '../../utils/formatters';
 
 interface AdelantosTabProps {
   periodo: LiquidacionPeriodo;
@@ -37,6 +37,7 @@ const AdelantosTab: React.FC<AdelantosTabProps> = ({ periodo }) => {
   const [openAdelanto, setOpenAdelanto] = useState(false);
   const [selectedEmpleadoId, setSelectedEmpleadoId] = useState('');
   const [monto, setMonto] = useState('');
+  const [banco, setBanco] = useState('EFECTIVO');
   const [observaciones, setObservaciones] = useState('');
   
   const isEditable = periodo.estado === 'abierto' && user?.userType === 'admin';
@@ -44,6 +45,7 @@ const AdelantosTab: React.FC<AdelantosTabProps> = ({ periodo }) => {
   const handleOpenAdelanto = () => {
     setSelectedEmpleadoId('');
     setMonto('');
+    setBanco('EFECTIVO');
     setObservaciones('');
     setOpenAdelanto(true);
   };
@@ -53,13 +55,17 @@ const AdelantosTab: React.FC<AdelantosTabProps> = ({ periodo }) => {
   };
 
   const handleRegistrarAdelanto = async () => {
-    if (!selectedEmpleadoId || !monto || !periodo._id) return;
+    if (!selectedEmpleadoId || !monto || !periodo._id || !banco) return;
+
+    const montoNumerico = parseCurrency(monto);
+    if (montoNumerico <= 0) return;
 
     try {
       await dispatch(registrarAdelanto({
         periodoId: periodo._id,
         empleadoId: selectedEmpleadoId,
-        monto: parseFloat(monto),
+        monto: montoNumerico,
+        banco,
         observaciones
       })).unwrap();
       
@@ -210,13 +216,34 @@ const AdelantosTab: React.FC<AdelantosTabProps> = ({ periodo }) => {
 
             <TextField
               label="Monto del Adelanto"
-              type="number"
               value={monto}
-              onChange={(e) => setMonto(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                // Permitir solo números y punto decimal
+                if (value === '' || /^\d*\.?\d{0,2}$/.test(value)) {
+                  setMonto(value);
+                }
+              }}
               fullWidth
               required
-              inputProps={{ min: 0, step: 0.01 }}
+              placeholder="0.00"
+              helperText="Ingrese el monto con hasta 2 decimales (ej: 1500.50)"
             />
+
+            <FormControl fullWidth required>
+              <InputLabel>Caja/Banco de Origen</InputLabel>
+              <Select
+                value={banco}
+                onChange={(e) => setBanco(e.target.value)}
+                label="Caja/Banco de Origen"
+              >
+                {BANCOS.map((b) => (
+                  <MenuItem key={b} value={b}>
+                    {b}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
 
             <TextField
               label="Observaciones"
@@ -238,7 +265,7 @@ const AdelantosTab: React.FC<AdelantosTabProps> = ({ periodo }) => {
           <Button
             onClick={handleRegistrarAdelanto}
             variant="contained"
-            disabled={!selectedEmpleadoId || !monto || parseFloat(monto) <= 0}
+            disabled={!selectedEmpleadoId || !monto || !banco || parseCurrency(monto) <= 0}
           >
             Registrar
           </Button>
