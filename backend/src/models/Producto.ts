@@ -107,7 +107,6 @@ const productoSchema = new mongoose.Schema<IProducto>({
 });
 
 // Índices para búsqueda eficiente
-productoSchema.index({ codigo: 1 });
 productoSchema.index({ nombre: 1 });
 productoSchema.index({ categoria: 1 });
 productoSchema.index({ estado: 1 });

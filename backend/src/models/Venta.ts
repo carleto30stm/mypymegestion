@@ -236,7 +236,6 @@ VentaSchema.pre('save', async function(next) {
 });
 
 // Índices para búsqueda eficiente
-VentaSchema.index({ numeroVenta: 1 });
 VentaSchema.index({ fecha: -1 });
 VentaSchema.index({ clienteId: 1 });
 VentaSchema.index({ estado: 1 });

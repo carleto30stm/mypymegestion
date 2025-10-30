@@ -133,7 +133,6 @@ const clienteSchema = new mongoose.Schema<ICliente>({
 });
 
 // Índices para búsqueda eficiente
-clienteSchema.index({ numeroDocumento: 1 });
 clienteSchema.index({ nombre: 1, apellido: 1 });
 clienteSchema.index({ razonSocial: 1 });
 clienteSchema.index({ estado: 1 });
