@@ -117,7 +117,7 @@ export const subRubrosByRubro: Record<string, string[]> = {
 export const BANCOS = ['PROVINCIA', 'SANTANDER', 'EFECTIVO', 'FCI', 'RESERVA'] as const;
 
 // Unidades de medida para productos
-export const UNIDADES_MEDIDA = ['unidad', 'Kilo', 'Metro', 'Litro', 'Caja', 'Paquete'] as const;
+export const UNIDADES_MEDIDA = ['unidad', 'kilo', 'metro', 'litro', 'caja', 'paquete'] as const;
 
 // Medios de pago para ventas
 export const MEDIOS_PAGO_VENTAS = ['Efectivo', 'Transferencia', 'Tarjeta Débito', 'Tarjeta Crédito', 'Cheque Tercero', 'Cuenta Corriente', 'Mixto'] as const;
