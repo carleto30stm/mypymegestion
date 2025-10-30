@@ -88,10 +88,32 @@ const PendingChecks: React.FC<PendingChecksProps> = ({
     dispatch(confirmarCheque(id));
   };
 
+  const getPeriodName = (): string => {
+    switch (filterType) {
+      case 'today':
+        return 'hoy';
+      case 'month':
+        return new Date(selectedMonth + '-01').toLocaleDateString('es-ES', { year: 'numeric', month: 'long' });
+      case 'quarter': {
+        const [year, quarter] = selectedQuarter.split('-Q');
+        return `el trimestre ${quarter} de ${year}`;
+      }
+      case 'semester': {
+        const [year, semester] = selectedSemester.split('-S');
+        return `el semestre ${semester} de ${year}`;
+      }
+      case 'year':
+        return `el año ${selectedYear}`;
+      case 'total':
+      default:
+        return 'en total';
+    }
+  };
+
   if (chequesPendientes.length === 0) {
     const filtroTexto = filterType === 'total' 
-      ? 'en total' 
-      : `para ${availableMonths?.find(m => m.value === selectedMonth)?.label || selectedMonth}`;
+      ? getPeriodName()
+      : `para ${getPeriodName()}`;
       
     return (
       <Paper sx={{ p: 3, mt: 2 }}>
@@ -121,8 +143,8 @@ const PendingChecks: React.FC<PendingChecksProps> = ({
       
       <Typography variant="body2" color="text.secondary" gutterBottom>
         Estos cheques no se incluyen en los cálculos hasta que sean confirmados manualmente.
-        {filterType === 'month' && (
-          <><br />Filtro aplicado: {availableMonths?.find(m => m.value === selectedMonth)?.label || selectedMonth}</>
+        {filterType !== 'total' && (
+          <><br />Filtro aplicado: {getPeriodName()}</>
         )}
       </Typography>
 
