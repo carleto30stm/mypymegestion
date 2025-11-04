@@ -1,0 +1,446 @@
+import type { Request as ExpressRequest, Response as ExpressResponse } from 'express';
+import mongoose from 'mongoose';
+import ReciboPago from '../models/ReciboPago.js';
+import Venta from '../models/Venta.js';
+
+// @desc    Obtener todos los recibos con filtros
+// @route   GET /api/recibos
+// @access  Private
+export const getRecibos = async (req: ExpressRequest, res: ExpressResponse) => {
+  try {
+    const { 
+      clienteId, 
+      estadoRecibo, 
+      momentoCobro,
+      fechaInicio, 
+      fechaFin,
+      medioPago
+    } = req.query;
+
+    // Construir filtros
+    const filtros: any = {};
+
+    if (clienteId) {
+      filtros.clienteId = clienteId;
+    }
+
+    if (estadoRecibo) {
+      filtros.estadoRecibo = estadoRecibo;
+    }
+
+    if (momentoCobro) {
+      filtros.momentoCobro = momentoCobro;
+    }
+
+    if (fechaInicio || fechaFin) {
+      filtros.fecha = {};
+      if (fechaInicio) {
+        filtros.fecha.$gte = new Date(fechaInicio as string);
+      }
+      if (fechaFin) {
+        filtros.fecha.$lte = new Date(fechaFin as string);
+      }
+    }
+
+    if (medioPago) {
+      filtros['formasPago.medioPago'] = medioPago;
+    }
+
+    const recibos = await ReciboPago.find(filtros)
+      .populate('clienteId', 'nombre apellido numeroDocumento razonSocial')
+      .populate('creadoPor', 'username')
+      .sort({ fecha: -1 });
+
+    res.json(recibos);
+  } catch (error) {
+    console.error('Error al obtener recibos:', error);
+    res.status(500).json({ message: 'Error al obtener recibos' });
+  }
+};
+
+// @desc    Obtener recibo por ID
+// @route   GET /api/recibos/:id
+// @access  Private
+export const getReciboById = async (req: ExpressRequest, res: ExpressResponse) => {
+  try {
+    const recibo = await ReciboPago.findById(req.params.id)
+      .populate('clienteId')
+      .populate('ventasRelacionadas.ventaId')
+      .populate('creadoPor', 'username')
+      .populate('modificadoPor', 'username');
+
+    if (!recibo) {
+      return res.status(404).json({ message: 'Recibo no encontrado' });
+    }
+
+    res.json(recibo);
+  } catch (error) {
+    console.error('Error al obtener recibo:', error);
+    res.status(500).json({ message: 'Error al obtener recibo' });
+  }
+};
+
+// @desc    Crear nuevo recibo de pago
+// @route   POST /api/recibos
+// @access  Private (admin/oper_ad/oper)
+export const crearRecibo = async (req: ExpressRequest, res: ExpressResponse) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const {
+      clienteId,
+      ventasIds,
+      formasPago,
+      momentoCobro,
+      observaciones,
+      creadoPor
+    } = req.body;
+
+    // Validaciones básicas
+    if (!clienteId || !ventasIds || !Array.isArray(ventasIds) || ventasIds.length === 0) {
+      await session.abortTransaction();
+      return res.status(400).json({ message: 'Cliente y ventas son obligatorios' });
+    }
+
+    if (!formasPago || !Array.isArray(formasPago) || formasPago.length === 0) {
+      await session.abortTransaction();
+      return res.status(400).json({ message: 'Debe especificar al menos una forma de pago' });
+    }
+
+    if (!creadoPor) {
+      await session.abortTransaction();
+      return res.status(400).json({ message: 'El creador es obligatorio' });
+    }
+
+    // Obtener las ventas
+    const ventas = await Venta.find({ _id: { $in: ventasIds } }).session(session);
+
+    if (ventas.length !== ventasIds.length) {
+      await session.abortTransaction();
+      return res.status(404).json({ message: 'Una o más ventas no fueron encontradas' });
+    }
+
+    // Validar que todas las ventas pertenezcan al mismo cliente
+    const clientesUnicos = [...new Set(ventas.map((v: any) => v.clienteId.toString()))];
+    if (clientesUnicos.length > 1) {
+      await session.abortTransaction();
+      return res.status(400).json({ message: 'Todas las ventas deben pertenecer al mismo cliente' });
+    }
+
+    if (clientesUnicos[0] !== clienteId) {
+      await session.abortTransaction();
+      return res.status(400).json({ message: 'Las ventas no pertenecen al cliente especificado' });
+    }
+
+    // Calcular totales
+    const totalFormasPago = formasPago.reduce((sum: number, fp: any) => sum + fp.monto, 0);
+    let totalACobrar = 0;
+    const ventasRelacionadas = [];
+
+    for (const venta of ventas) {
+      const saldoAnterior = venta.saldoPendiente;
+      
+      if (saldoAnterior <= 0) {
+        await session.abortTransaction();
+        return res.status(400).json({ 
+          message: `La venta ${venta.numeroVenta} no tiene saldo pendiente` 
+        });
+      }
+
+      totalACobrar += saldoAnterior;
+
+      ventasRelacionadas.push({
+        ventaId: venta._id as mongoose.Types.ObjectId,
+        numeroVenta: venta.numeroVenta || (venta._id as mongoose.Types.ObjectId).toString(),
+        montoOriginal: venta.total,
+        saldoAnterior: saldoAnterior,
+        montoCobrado: 0, // Se calculará después
+        saldoRestante: 0  // Se calculará después
+      });
+    }
+
+    // Distribuir el pago entre las ventas
+    let montoPendienteDistribuir = totalFormasPago;
+    
+    for (let i = 0; i < ventasRelacionadas.length; i++) {
+      const ventaRel = ventasRelacionadas[i];
+      const venta = ventas[i];
+      
+      if (!ventaRel || !venta) continue;
+      if (montoPendienteDistribuir <= 0) break;
+      
+      const montoCobrado = Math.min(ventaRel.saldoAnterior, montoPendienteDistribuir);
+      ventaRel.montoCobrado = montoCobrado;
+      ventaRel.saldoRestante = ventaRel.saldoAnterior - montoCobrado;
+      
+      montoPendienteDistribuir -= montoCobrado;
+      
+      // Actualizar venta
+      venta.montoCobrado += montoCobrado;
+      venta.saldoPendiente = ventaRel.saldoRestante;
+      
+      // Actualizar estado de cobranza
+      if (venta.saldoPendiente === 0) {
+        venta.estadoCobranza = 'cobrado';
+      } else if (venta.montoCobrado > 0) {
+        venta.estadoCobranza = 'parcialmente_cobrado';
+      }
+      
+      await venta.save({ session });
+    }
+
+    // Obtener datos del cliente de la primera venta
+    const primeraVenta = ventas[0];
+    
+    if (!primeraVenta) {
+      await session.abortTransaction();
+      return res.status(400).json({ message: 'No se encontraron ventas válidas' });
+    }
+    
+    // Crear el recibo
+    const nuevoRecibo = new ReciboPago({
+      fecha: new Date(),
+      clienteId,
+      nombreCliente: primeraVenta.nombreCliente,
+      documentoCliente: primeraVenta.documentoCliente,
+      ventasRelacionadas,
+      formasPago,
+      totales: {
+        totalACobrar,
+        totalCobrado: totalFormasPago,
+        vuelto: totalFormasPago > totalACobrar ? totalFormasPago - totalACobrar : 0,
+        saldoPendiente: totalFormasPago < totalACobrar ? totalACobrar - totalFormasPago : 0
+      },
+      momentoCobro: momentoCobro || 'diferido',
+      estadoRecibo: 'activo',
+      observaciones,
+      creadoPor
+    });
+
+    const reciboGuardado = await nuevoRecibo.save({ session });
+
+    // Actualizar referencias en ventas
+    for (const venta of ventas) {
+      if (!venta.recibosRelacionados) {
+        venta.recibosRelacionados = [];
+      }
+      venta.recibosRelacionados.push(reciboGuardado._id as mongoose.Types.ObjectId);
+      venta.ultimaCobranza = new Date();
+      await venta.save({ session });
+    }
+
+    await session.commitTransaction();
+
+    const reciboCompleto = await ReciboPago.findById(reciboGuardado._id)
+      .populate('clienteId')
+      .populate('ventasRelacionadas.ventaId')
+      .populate('creadoPor', 'username');
+
+    res.status(201).json(reciboCompleto);
+  } catch (error: any) {
+    await session.abortTransaction();
+    console.error('Error al crear recibo:', error);
+    res.status(500).json({ 
+      message: 'Error al crear recibo',
+      error: error.message 
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
+// @desc    Anular recibo de pago
+// @route   PATCH /api/recibos/:id/anular
+// @access  Private (admin only)
+export const anularRecibo = async (req: ExpressRequest, res: ExpressResponse) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { motivoAnulacion, modificadoPor } = req.body;
+
+    if (!motivoAnulacion) {
+      await session.abortTransaction();
+      return res.status(400).json({ message: 'El motivo de anulación es obligatorio' });
+    }
+
+    const recibo = await ReciboPago.findById(req.params.id).session(session);
+
+    if (!recibo) {
+      await session.abortTransaction();
+      return res.status(404).json({ message: 'Recibo no encontrado' });
+    }
+
+    if (recibo.estadoRecibo === 'anulado') {
+      await session.abortTransaction();
+      return res.status(400).json({ message: 'El recibo ya está anulado' });
+    }
+
+    // Revertir los pagos en las ventas relacionadas
+    for (const ventaRel of recibo.ventasRelacionadas) {
+      const venta = await Venta.findById(ventaRel.ventaId).session(session);
+      
+      if (venta) {
+        // Revertir monto cobrado
+        venta.montoCobrado -= ventaRel.montoCobrado;
+        venta.saldoPendiente += ventaRel.montoCobrado;
+        
+        // Actualizar estado de cobranza
+        if (venta.montoCobrado === 0) {
+          venta.estadoCobranza = 'sin_cobrar';
+        } else if (venta.saldoPendiente > 0) {
+          venta.estadoCobranza = 'parcialmente_cobrado';
+        }
+        
+        // Remover referencia al recibo
+        if (venta.recibosRelacionados) {
+          const reciboIdStr = (recibo._id as mongoose.Types.ObjectId).toString();
+          venta.recibosRelacionados = venta.recibosRelacionados.filter(
+            (r: any) => r.toString() !== reciboIdStr
+          );
+        }
+        
+        await venta.save({ session });
+      }
+    }
+
+    // Anular el recibo
+    recibo.estadoRecibo = 'anulado';
+    recibo.motivoAnulacion = motivoAnulacion;
+    recibo.fechaAnulacion = new Date();
+    recibo.modificadoPor = modificadoPor;
+
+    await recibo.save({ session });
+
+    await session.commitTransaction();
+
+    const reciboActualizado = await ReciboPago.findById(recibo._id)
+      .populate('clienteId')
+      .populate('ventasRelacionadas.ventaId');
+
+    res.json(reciboActualizado);
+  } catch (error: any) {
+    await session.abortTransaction();
+    console.error('Error al anular recibo:', error);
+    res.status(500).json({ 
+      message: 'Error al anular recibo',
+      error: error.message 
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
+// @desc    Obtener estadísticas de cobranza
+// @route   GET /api/recibos/estadisticas
+// @access  Private
+export const getEstadisticasCobranza = async (req: ExpressRequest, res: ExpressResponse) => {
+  try {
+    // Total de recibos activos
+    const totalRecibos = await ReciboPago.countDocuments({ estadoRecibo: 'activo' });
+
+    // Monto total cobrado
+    const montoCobrado = await ReciboPago.aggregate([
+      { $match: { estadoRecibo: 'activo' } },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: '$totales.totalCobrado' }
+        }
+      }
+    ]);
+
+    const montoTotalCobrado = montoCobrado.length > 0 ? montoCobrado[0].total : 0;
+
+    // Recibos por medio de pago
+    const recibosPorMedioPago = await ReciboPago.aggregate([
+      { $match: { estadoRecibo: 'activo' } },
+      { $unwind: '$formasPago' },
+      {
+        $group: {
+          _id: '$formasPago.medioPago',
+          cantidad: { $sum: 1 },
+          monto: { $sum: '$formasPago.monto' }
+        }
+      },
+      { $sort: { monto: -1 } }
+    ]);
+
+    // Ventas pendientes de cobro
+    const ventasPendientes = await Venta.aggregate([
+      { 
+        $match: { 
+          estado: 'confirmada',
+          estadoCobranza: { $in: ['sin_cobrar', 'parcialmente_cobrado'] },
+          saldoPendiente: { $gt: 0 }
+        } 
+      },
+      {
+        $group: {
+          _id: null,
+          cantidad: { $sum: 1 },
+          montoTotal: { $sum: '$saldoPendiente' }
+        }
+      }
+    ]);
+
+    // Cheques pendientes de cobro
+    const chequesPendientes = await ReciboPago.aggregate([
+      { $match: { estadoRecibo: 'activo' } },
+      { $unwind: '$formasPago' },
+      { 
+        $match: { 
+          'formasPago.medioPago': 'CHEQUE',
+          'formasPago.datosCheque.estadoCheque': { $in: ['pendiente', 'en_cartera'] }
+        } 
+      },
+      {
+        $group: {
+          _id: null,
+          cantidad: { $sum: 1 },
+          montoTotal: { $sum: '$formasPago.monto' }
+        }
+      }
+    ]);
+
+    res.json({
+      totalRecibos,
+      montoTotalCobrado,
+      recibosPorMedioPago,
+      ventasPendientesCobro: {
+        cantidad: ventasPendientes.length > 0 ? ventasPendientes[0].cantidad : 0,
+        montoTotal: ventasPendientes.length > 0 ? ventasPendientes[0].montoTotal : 0
+      },
+      chequesPendientes: {
+        cantidad: chequesPendientes.length > 0 ? chequesPendientes[0].cantidad : 0,
+        montoTotal: chequesPendientes.length > 0 ? chequesPendientes[0].montoTotal : 0
+      }
+    });
+  } catch (error) {
+    console.error('Error al obtener estadísticas:', error);
+    res.status(500).json({ message: 'Error al obtener estadísticas de cobranza' });
+  }
+};
+
+// @desc    Obtener recibos por cliente
+// @route   GET /api/recibos/cliente/:clienteId
+// @access  Private
+export const getRecibosPorCliente = async (req: ExpressRequest, res: ExpressResponse) => {
+  try {
+    const { clienteId } = req.params;
+
+    const recibos = await ReciboPago.find({ 
+      clienteId,
+      estadoRecibo: 'activo'
+    })
+      .populate('ventasRelacionadas.ventaId', 'numeroVenta fecha')
+      .populate('creadoPor', 'username')
+      .sort({ fecha: -1 });
+
+    res.json(recibos);
+  } catch (error) {
+    console.error('Error al obtener recibos por cliente:', error);
+    res.status(500).json({ message: 'Error al obtener recibos del cliente' });
+  }
+};

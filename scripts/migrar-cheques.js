@@ -11,7 +11,7 @@ async function migrarCheques() {
       { 
         $set: { 
           banco: "EFECTIVO",
-          medioDePago: "Cheque Tercero"
+          medioDePago: "CHEQUE TERCERO"
         }
       }
     );
@@ -22,7 +22,7 @@ async function migrarCheques() {
       { 
         $set: { 
           banco: "SANTANDER", // O el banco principal
-          medioDePago: "Cheque Propio"
+          medioDePago: "CHEQUE PROPIO"
         }
       }
     );

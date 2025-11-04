@@ -27,9 +27,9 @@ import {
   ArrowBack as BackIcon
 } from '@mui/icons-material';
 import EmployeeList from '../components/EmployeeList';
-import EmployeeForm from '../components/EmployeeForm';
+import EmployeeForm from '../components/form/EmployeeForm';
 import EmployeePayrollComponent from '../components/EmployeePayroll';
-import Modal from '../components/Modal';
+import Modal from '../components/modal/Modal';
 import { Employee } from '../types';
 
 interface TabPanelProps {

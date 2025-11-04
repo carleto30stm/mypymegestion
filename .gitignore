@@ -44,3 +44,32 @@ Thumbs.db
 # Temporary folders
 tmp/
 temp/
+
+# AFIP Certificados y claves (NUNCA SUBIR)
+# Certificados de producción
+backend/afip-cert.crt
+backend/afip-key.key
+backend/*.crt
+backend/*.key
+backend/*.p12
+backend/*.pfx
+
+# Certificados de homologación
+backend/afip-cert-homolog.crt
+backend/afip-key-homolog.key
+
+# Carpeta de certificados
+backend/certificados/
+backend/certs/
+backend/afip/
+
+# CSR (Certificate Signing Request)
+backend/*.csr
+
+# Archivos de configuración con datos sensibles
+backend/.env.afip
+backend/afip.config.js
+
+# Backups de certificados
+backend/*-backup.crt
+backend/*-backup.key

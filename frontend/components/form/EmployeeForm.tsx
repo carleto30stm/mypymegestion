@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch } from 'react-redux';
-import { AppDispatch } from '../redux/store';
-import { addEmployee, updateEmployee } from '../redux/slices/employeesSlice';
-import { formatCurrency } from '../utils/formatters';
-import { Employee } from '../types';
+import { AppDispatch } from '../../redux/store';
+import { addEmployee, updateEmployee } from '../../redux/slices/employeesSlice';
+import { formatCurrency } from '../../utils/formatters';
+import { Employee } from '../../types';
 import {
   TextField,
   Button,

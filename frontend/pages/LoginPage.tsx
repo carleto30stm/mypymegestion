@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { RootState } from '../redux/store';
-import LoginForm from '../components/LoginForm';
+import LoginForm from '../components/form/LoginForm';
 import Container from '@mui/material/Container';
 import Box from '@mui/material/Box';
 
