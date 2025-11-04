@@ -2,9 +2,30 @@
 export const BANCOS = ['PROVINCIA', 'SANTANDER', 'EFECTIVO', 'FCI', 'RESERVA'] as const;
 
 // Unidades de medida para productos
-export const UNIDADES_MEDIDA = ['UNIDAD', 'KILO', 'METRO', 'LITRO', 'CAJA', 'PAQUETE'] as const;
+export const UNIDADES_MEDIDA = ['UNIDAD', 'KG', 'METRO', 'LITRO', 'CAJA', 'PAQUETE'] as const;
 
 export const MEDIOS_PAGO_GASTOS = ['CHEQUE TERCERO', 'CHEQUE PROPIO', 'EFECTIVO', 'TRANSFERENCIA', 'TARJETA DÉBITO', 'TARJETA CRÉDITO', 'RESERVA', 'OTRO', ''] as const;
+
+// Medios de pago para sistema de cobranza (más específico)
+export const MEDIOS_PAGO = ['EFECTIVO', 'TRANSFERENCIA', 'CHEQUE', 'TARJETA_DEBITO', 'TARJETA_CREDITO', 'CUENTA_CORRIENTE'] as const;
+
+// Estados de entrega para ventas y remitos
+export const ESTADOS_ENTREGA = ['sin_remito', 'remito_generado', 'en_transito', 'entregado', 'devuelto'] as const;
+
+// Estados de cobranza para ventas
+export const ESTADOS_COBRANZA = ['sin_cobrar', 'parcialmente_cobrado', 'cobrado'] as const;
+
+// Estados de cheque
+export const ESTADOS_CHEQUE = ['recibido', 'depositado', 'cobrado', 'rechazado', 'endosado'] as const;
+
+// Estados para cheques recibidos en cobranza
+export const ESTADOS_CHEQUE_COBRANZA = ['pendiente', 'depositado', 'cobrado', 'rechazado', 'en_cartera'] as const;
+
+// Momento de cobro
+export const MOMENTO_COBRO = ['anticipado', 'contra_entrega', 'diferido'] as const;
+
+// Estados de recibo de pago
+export const ESTADOS_RECIBO = ['activo', 'anulado'] as const;
 export interface User {
   id: string;
   username: string;
@@ -196,6 +217,25 @@ export interface Cliente {
   // Virtuals (calculados por el backend)
   nombreCompleto?: string;
   puedeComprarCredito?: boolean;
+  
+  // Campos para facturación fiscal
+  requiereFacturaAFIP: boolean;
+  aplicaIVA: boolean;
+  
+  // Campos para entregas
+  direccionEntrega?: string;
+  direccionesAlternativas?: Array<{
+    alias: string;
+    direccion: string;
+    ciudad?: string;
+    referencia?: string;
+    contacto?: string;
+    telefono?: string;
+  }>;
+  
+  // Preferencias de pago
+  aceptaCheques: boolean;
+  diasVencimientoCheques?: number;
 }
 
 // Interface para item de venta
@@ -234,6 +274,37 @@ export interface Venta {
   fechaActualizacion?: string;
   fechaAnulacion?: string;
   motivoAnulacion?: string;
+  
+  // Campos fiscales
+  aplicaIVA: boolean;
+  requiereFacturaAFIP: boolean;
+  
+  // Campos para cheques
+  datosCheque?: {
+    numeroCheque: string;
+    bancoEmisor: string;
+    cuitTitular?: string;
+    titularCheque?: string;
+    fechaEmision: string;
+    fechaVencimiento: string;
+    monto: number;
+    estadoCheque: typeof ESTADOS_CHEQUE[number];
+    fechaDeposito?: string;
+    observaciones?: string;
+  };
+  
+  // Campos para remito y entrega
+  estadoEntrega: typeof ESTADOS_ENTREGA[number];
+  remitoId?: string;
+  direccionEntrega?: string;
+  fechaEntrega?: string;
+  
+  // Campos para cobranza
+  estadoCobranza: typeof ESTADOS_COBRANZA[number];
+  montoCobrado: number;
+  saldoPendiente: number;
+  recibosRelacionados?: string[];
+  ultimaCobranza?: string;
 }
 
 // Interface para estadísticas de ventas
@@ -251,4 +322,486 @@ export interface EstadisticasVentas {
     cantidad: number;
     total: number;
   }>;
+}
+
+// ========== SISTEMA DE REMITOS ==========
+
+// Estados de remito
+export const ESTADOS_REMITO = ['pendiente', 'en_transito', 'entregado', 'devuelto', 'cancelado'] as const;
+
+// Interface para items de remito
+export interface ItemRemito {
+  productoId: string;
+  codigoProducto: string;
+  nombreProducto: string;
+  cantidadSolicitada: number;
+  cantidadEntregada: number;
+  observacion?: string;
+}
+
+// Interface para remito
+export interface Remito {
+  _id?: string;
+  numeroRemito: string;
+  fecha: string;
+  ventaId: string;
+  clienteId: string;
+  nombreCliente: string;
+  documentoCliente: string;
+  direccionEntrega: string;
+  items: ItemRemito[];
+  estado: typeof ESTADOS_REMITO[number];
+  repartidor?: string;
+  vehiculo?: string;
+  horaDespacho?: string;
+  horaEntrega?: string;
+  nombreReceptor?: string;
+  dniReceptor?: string;
+  firmaDigital?: string;
+  observaciones?: string;
+  motivoCancelacion?: string;
+  creadoPor: string;
+  modificadoPor?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// Interface para estadísticas de remitos
+export interface EstadisticasRemitos {
+  pendientes: number;
+  en_transito: number;
+  entregados: number;
+  devueltos: number;
+  cancelados: number;
+  total: number;
+}
+
+// ========== SISTEMA DE COMPRAS E INVENTARIO DE MATERIAS PRIMAS ==========
+
+// Interface para proveedores
+export interface Proveedor {
+  _id?: string;
+  tipoDocumento: 'DNI' | 'CUIT' | 'CUIL' | 'Pasaporte';
+  numeroDocumento: string;
+  razonSocial: string;
+  nombreContacto?: string;
+  email?: string;
+  telefono?: string;
+  direccion?: string;
+  ciudad?: string;
+  provincia?: string;
+  codigoPostal?: string;
+  condicionIVA: 'Responsable Inscripto' | 'Monotributista' | 'Exento' | 'Consumidor Final';
+  saldoCuenta: number; // Positivo = debemos, negativo = anticipo
+  limiteCredito: number;
+  categorias: string[];
+  diasPago?: number;
+  estado: 'activo' | 'inactivo' | 'bloqueado';
+  calificacion?: number;
+  observaciones?: string;
+  banco?: string;
+  cbu?: string;
+  alias?: string;
+  fechaCreacion?: string;
+  fechaActualizacion?: string;
+  ultimaCompra?: string;
+  // Virtuals
+  tieneSaldoPendiente?: boolean;
+  puedeComprarCredito?: boolean;
+}
+
+// Interface para materia prima
+export interface MateriaPrima {
+  _id?: string;
+  codigo: string;
+  nombre: string;
+  descripcion?: string;
+  categoria: string;
+  precioUltimaCompra: number;
+  precioPromedio: number;
+  stock: number;
+  stockMinimo: number;
+  stockMaximo: number;
+  unidadMedida: typeof UNIDADES_MEDIDA[number];
+  proveedorPrincipal?: string | Proveedor;
+  proveedoresAlternativos?: string[] | Proveedor[];
+  ubicacion?: string;
+  lote?: string;
+  fechaVencimiento?: string;
+  estado: 'activo' | 'inactivo' | 'discontinuado';
+  observaciones?: string;
+  fechaCreacion?: string;
+  fechaActualizacion?: string;
+  ultimaCompra?: string;
+  // Virtuals
+  stockBajo?: boolean;
+  stockCritico?: boolean;
+  estaVencido?: boolean;
+  proximoVencer?: boolean;
+}
+
+// Interface para item de compra
+export interface ItemCompra {
+  materiaPrimaId: string;
+  codigoMateriaPrima: string;
+  nombreMateriaPrima: string;
+  cantidad: number;
+  precioUnitario: number;
+  subtotal: number;
+  descuento: number;
+  total: number;
+}
+
+// Interface para compra
+export interface Compra {
+  _id?: string;
+  numeroCompra?: string;
+  fecha: string;
+  fechaEntrega?: string;
+  fechaRecepcion?: string;
+  proveedorId: string;
+  razonSocialProveedor: string;
+  documentoProveedor: string;
+  items: ItemCompra[];
+  subtotal: number;
+  descuentoTotal: number;
+  iva: number;
+  total: number;
+  medioPago?: typeof MEDIOS_PAGO_GASTOS[number];
+  banco?: typeof BANCOS[number];
+  detallesPago?: string;
+  estado: 'presupuesto' | 'pedido' | 'parcial' | 'recibido' | 'pagado' | 'anulado';
+  tipoComprobante?: 'Factura A' | 'Factura B' | 'Factura C' | 'Remito' | 'Presupuesto';
+  numeroComprobante?: string;
+  observaciones?: string;
+  comprador: string;
+  gastoRelacionadoId?: string;
+  fechaCreacion?: string;
+  fechaActualizacion?: string;
+  fechaAnulacion?: string;
+  motivoAnulacion?: string;
+}
+
+// Interface para estadísticas de compras
+export interface EstadisticasCompras {
+  totalCompras: number;
+  montoTotal: number;
+  porEstado: Array<{
+    _id: string;
+    cantidad: number;
+    totalMonto: number;
+  }>;
+}
+
+// Interface para movimiento de inventario
+export interface MovimientoInventario {
+  _id?: string;
+  fecha: string;
+  tipo: 'entrada' | 'salida' | 'ajuste' | 'produccion' | 'devolucion' | 'merma';
+  materiaPrimaId: string;
+  codigoMateriaPrima?: string;
+  nombreMateriaPrima?: string;
+  cantidad: number;
+  stockAnterior: number;
+  stockNuevo: number;
+  precioUnitario?: number;
+  valor?: number;
+  documentoOrigen?: 'compra' | 'venta' | 'produccion' | 'ajuste' | 'devolucion';
+  documentoOrigenId?: string;
+  numeroDocumento?: string;
+  observaciones?: string;
+  responsable?: string;
+  fechaCreacion?: string;
+}
+
+// Interface para estadísticas de movimientos
+export interface EstadisticasMovimientos {
+  totalMovimientos: number;
+  porTipo: Array<{
+    _id: string;
+    cantidad: number;
+    totalCantidad: number;
+  }>;
+}
+
+// ========== MÓDULO DE PRODUCCIÓN ==========
+
+// Interface para item de materia prima en receta
+export interface ItemReceta {
+  materiaPrimaId: string;
+  codigoMateriaPrima: string;
+  nombreMateriaPrima: string;
+  cantidad: number;
+  unidadMedida: string;
+  costo?: number;
+}
+
+// Interface para receta (BOM)
+export interface Receta {
+  _id?: string;
+  productoId: string;
+  codigoProducto: string;
+  nombreProducto: string;
+  materiasPrimas: ItemReceta[];
+  rendimiento: number;
+  tiempoPreparacion: number;
+  costoMateriasPrimas: number;
+  costoManoObra?: number;
+  costoIndirecto?: number;
+  costoTotal: number;
+  costoUnitario?: number;
+  precioVentaSugerido?: number;
+  margenBruto?: number;
+  estado: 'activa' | 'inactiva' | 'borrador';
+  version: number;
+  observaciones?: string;
+  createdBy: string;
+  fechaCreacion?: string;
+  fechaActualizacion?: string;
+  esRentable?: boolean;
+  necesitaActualizacion?: boolean;
+}
+
+// Interface para simulación de producción
+export interface SimulacionProduccion {
+  receta: {
+    id: string;
+    producto: string;
+    version: number;
+  };
+  cantidadSolicitada: number;
+  unidadesProducidas: number;
+  factible: boolean;
+  materiasPrimas: Array<{
+    materiaPrimaId: string;
+    codigo: string;
+    nombre: string;
+    cantidadNecesaria: number;
+    stockDisponible: number;
+    disponible: boolean;
+    faltante: number;
+    costo: number;
+  }>;
+  costos: {
+    materiasPrimas: number;
+    manoObra: number;
+    indirecto: number;
+    total: number;
+    unitario: number;
+  };
+  tiempoEstimado: number;
+  alertas: string[];
+}
+
+// Interface para materia prima en orden de producción
+export interface MateriaPrimaOrden {
+  materiaPrimaId: string;
+  codigoMateriaPrima: string;
+  nombreMateriaPrima: string;
+  cantidadNecesaria: number;
+  cantidadReservada: number;
+  cantidadConsumida: number;
+  costo: number;
+}
+
+// Interface para orden de producción
+export interface OrdenProduccion {
+  _id?: string;
+  numeroOrden?: string;
+  fecha: string;
+  fechaInicio?: string;
+  fechaFinalizacion?: string;
+  recetaId: string;
+  productoId: string;
+  codigoProducto: string;
+  nombreProducto: string;
+  cantidadAProducir: number;
+  unidadesProducidas: number;
+  materiasPrimas: MateriaPrimaOrden[];
+  costoMateriasPrimas: number;
+  costoManoObra: number;
+  costoIndirecto: number;
+  costoTotal: number;
+  costoUnitario?: number;
+  estado: 'planificada' | 'en_proceso' | 'completada' | 'cancelada';
+  prioridad: 'baja' | 'media' | 'alta' | 'urgente';
+  responsable: string;
+  observaciones?: string;
+  motivoCancelacion?: string;
+  createdBy: string;
+  fechaCreacion?: string;
+  fechaActualizacion?: string;
+  progreso?: {
+    totalNecesario: number;
+    totalReservado: number;
+    totalConsumido: number;
+    porcentajeReserva: number;
+    porcentajeConsumo: number;
+  };
+  tiempoProduccion?: number;
+}
+
+// Interface para estadísticas de producción
+export interface EstadisticasProduccion {
+  totalOrdenes: number;
+  ordenesPorEstado: Array<{
+    _id: string;
+    cantidad: number;
+    unidadesProducidas: number;
+    costoTotal: number;
+  }>;
+  productosMasProducidos: Array<{
+    _id: string;
+    codigoProducto: string;
+    nombreProducto: string;
+    totalOrdenes: number;
+    unidadesProducidas: number;
+    costoTotal: number;
+  }>;
+  costoTotalProduccion: number;
+}
+
+// ========== SISTEMA DE COBRANZA Y RECIBOS DE PAGO ==========
+
+// Interface para datos de cheque recibido
+export interface DatosCheque {
+  numeroCheque: string;
+  bancoEmisor: string;
+  fechaEmision: string;
+  fechaVencimiento: string;
+  titularCheque: string;
+  cuitTitular?: string;
+  estadoCheque: typeof ESTADOS_CHEQUE_COBRANZA[number];
+  observaciones?: string;
+  fechaDeposito?: string;
+  fechaCobro?: string;
+  fechaRechazo?: string;
+  motivoRechazo?: string;
+}
+
+// Interface para datos de transferencia
+export interface DatosTransferencia {
+  numeroOperacion: string;
+  banco: string;
+  fechaTransferencia: string;
+  cuentaOrigen?: string;
+  cuentaDestino?: string;
+  observaciones?: string;
+}
+
+// Interface para datos de tarjeta
+export interface DatosTarjeta {
+  tipoTarjeta: 'debito' | 'credito';
+  numeroAutorizacion?: string;
+  lote?: string;
+  cuotas?: number;
+  marca?: 'VISA' | 'MASTERCARD' | 'AMEX' | 'CABAL' | 'NARANJA';
+  ultimos4Digitos?: string;
+  observaciones?: string;
+}
+
+// Interface para forma de pago individual
+export interface FormaPago {
+  medioPago: typeof MEDIOS_PAGO[number];
+  monto: number;
+  banco?: typeof BANCOS[number];
+  
+  // Datos específicos según medio de pago
+  datosCheque?: DatosCheque;
+  datosTransferencia?: DatosTransferencia;
+  datosTarjeta?: DatosTarjeta;
+  
+  observaciones?: string;
+}
+
+// Interface para venta relacionada en recibo
+export interface VentaRelacionada {
+  ventaId: string;
+  numeroVenta: string;
+  montoOriginal: number;
+  saldoAnterior: number;
+  montoCobrado: number;
+  saldoRestante: number;
+}
+
+// Interface para recibo de pago
+export interface ReciboPago {
+  _id?: string;
+  numeroRecibo: string;
+  fecha: string;
+  clienteId: string;
+  nombreCliente: string;
+  documentoCliente: string;
+  
+  // Comprobantes relacionados (ventas cobradas)
+  ventasRelacionadas: VentaRelacionada[];
+  
+  // Formas de pago utilizadas
+  formasPago: FormaPago[];
+  
+  // Totales
+  totales: {
+    totalACobrar: number;      // Suma de saldos pendientes de ventas
+    totalCobrado: number;       // Suma de formas de pago
+    vuelto: number;             // Si totalCobrado > totalACobrar
+    saldoPendiente: number;     // Si totalCobrado < totalACobrar (no debería pasar)
+  };
+  
+  // Metadata
+  momentoCobro: typeof MOMENTO_COBRO[number];
+  estadoRecibo: typeof ESTADOS_RECIBO[number];
+  observaciones?: string;
+  motivoAnulacion?: string;
+  fechaAnulacion?: string;
+  
+  creadoPor: string;
+  modificadoPor?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// Interface para estadísticas de cobranza
+export interface EstadisticasCobranza {
+  totalRecibos: number;
+  montoTotalCobrado: number;
+  recibosPorMedioPago: Array<{
+    medioPago: string;
+    cantidad: number;
+    monto: number;
+  }>;
+  ventasPendientesCobro: {
+    cantidad: number;
+    montoTotal: number;
+  };
+  chequesPendientes: {
+    cantidad: number;
+    montoTotal: number;
+  };
+}
+
+// Interface para cuenta corriente de cliente
+export interface MovimientoCuentaCorriente {
+  _id?: string;
+  fecha: string;
+  tipo: 'venta' | 'recibo' | 'nota_credito' | 'ajuste';
+  documentoTipo: string;
+  documentoNumero: string;
+  documentoId: string;
+  concepto: string;
+  debe: number;
+  haber: number;
+  saldo: number;
+}
+
+// Interface para resumen de cuenta corriente
+export interface ResumenCuentaCorriente {
+  clienteId: string;
+  nombreCliente: string;
+  limiteCredito: number;
+  saldoActual: number;
+  saldoDisponible: number;
+  ventasPendientes: number;
+  montoVencido: number;
+  movimientos: MovimientoCuentaCorriente[];
+  estadoCuenta: 'al_dia' | 'proximo_limite' | 'limite_excedido' | 'moroso';
 }

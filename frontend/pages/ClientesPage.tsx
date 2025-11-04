@@ -32,7 +32,11 @@ import {
   Select,
   MenuItem,
   Grid,
-  Tooltip
+  Tooltip,
+  FormControlLabel,
+  Switch,
+  Divider,
+  Alert
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -93,7 +97,15 @@ const ClientesPage: React.FC = () => {
         condicionIVA: 'Consumidor Final',
         saldoCuenta: 0,
         limiteCredito: 0,
-        estado: 'activo'
+        estado: 'activo',
+        // Campos fiscales
+        requiereFacturaAFIP: false,
+        aplicaIVA: true,
+        // Campos de entrega
+        direccionEntrega: '',
+        // Campos de pago
+        aceptaCheques: true,
+        diasVencimientoCheques: 30
       });
     }
     setOpenForm(true);
@@ -170,6 +182,7 @@ const ClientesPage: React.FC = () => {
               <TableCell><strong>Documento</strong></TableCell>
               <TableCell><strong>Nombre/Razón Social</strong></TableCell>
               <TableCell><strong>Contacto</strong></TableCell>
+              <TableCell align="center"><strong>Fiscal</strong></TableCell>
               <TableCell align="right"><strong>Saldo Cuenta</strong></TableCell>
               <TableCell align="right"><strong>Límite Crédito</strong></TableCell>
               <TableCell><strong>Estado</strong></TableCell>
@@ -190,6 +203,28 @@ const ClientesPage: React.FC = () => {
                 <TableCell>
                   <Typography variant="caption" display="block">{cliente.telefono || '-'}</Typography>
                   <Typography variant="caption" display="block">{cliente.email || '-'}</Typography>
+                </TableCell>
+                <TableCell align="center">
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, justifyContent: 'center' }}>
+                    {cliente.requiereFacturaAFIP && (
+                      <Tooltip title="Requiere factura electrónica AFIP">
+                        <Chip label="AFIP" color="info" size="small" sx={{ fontSize: '0.7rem' }} />
+                      </Tooltip>
+                    )}
+                    {!cliente.aplicaIVA && (
+                      <Tooltip title="Cliente exento de IVA">
+                        <Chip label="Sin IVA" color="warning" size="small" sx={{ fontSize: '0.7rem' }} />
+                      </Tooltip>
+                    )}
+                    {!cliente.aceptaCheques && (
+                      <Tooltip title="No acepta cheques como medio de pago">
+                        <Chip label="No ✓" color="default" size="small" sx={{ fontSize: '0.7rem' }} />
+                      </Tooltip>
+                    )}
+                    {cliente.requiereFacturaAFIP === false && cliente.aplicaIVA && cliente.aceptaCheques && (
+                      <Typography variant="caption" color="textSecondary">-</Typography>
+                    )}
+                  </Box>
                 </TableCell>
                 <TableCell align="right">
                   <Typography color={cliente.saldoCuenta > 0 ? 'error' : 'success.main'}>
@@ -338,6 +373,100 @@ const ClientesPage: React.FC = () => {
                 value={formData.limiteCredito}
                 onChange={(e) => setFormData({ ...formData, limiteCredito: parseFloat(e.target.value) })}
                 inputProps={{ min: 0, step: 100 }}
+              />
+            </Grid>
+
+            {/* Sección Facturación y Fiscal */}
+            <Grid item xs={12}>
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="h6" gutterBottom color="primary">
+                📋 Configuración Fiscal
+              </Typography>
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={formData.requiereFacturaAFIP || false}
+                    onChange={(e) => setFormData({ ...formData, requiereFacturaAFIP: e.target.checked })}
+                  />
+                }
+                label="Requiere Factura Electrónica AFIP"
+              />
+              {formData.requiereFacturaAFIP && (
+                <Alert severity="info" sx={{ mt: 1 }}>
+                  Este cliente debe tener factura electrónica en cada venta
+                </Alert>
+              )}
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={formData.aplicaIVA !== false}
+                    onChange={(e) => setFormData({ ...formData, aplicaIVA: e.target.checked })}
+                  />
+                }
+                label="Aplica IVA 21%"
+              />
+              {!formData.aplicaIVA && (
+                <Alert severity="warning" sx={{ mt: 1 }}>
+                  Cliente exento de IVA
+                </Alert>
+              )}
+            </Grid>
+
+            {/* Sección Entrega */}
+            <Grid item xs={12}>
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="h6" gutterBottom color="primary">
+                🚚 Datos de Entrega
+              </Typography>
+            </Grid>
+
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Dirección de Entrega"
+                value={formData.direccionEntrega || ''}
+                onChange={(e) => setFormData({ ...formData, direccionEntrega: e.target.value })}
+                placeholder="Si es diferente a la dirección principal"
+                helperText="Dejar vacío para usar la dirección principal"
+              />
+            </Grid>
+
+            {/* Sección Pagos */}
+            <Grid item xs={12}>
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="h6" gutterBottom color="primary">
+                💰 Configuración de Pagos
+              </Typography>
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={formData.aceptaCheques !== false}
+                    onChange={(e) => setFormData({ ...formData, aceptaCheques: e.target.checked })}
+                  />
+                }
+                label="Acepta Cheques"
+              />
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Días de Vencimiento Cheques"
+                type="number"
+                value={formData.diasVencimientoCheques || 30}
+                onChange={(e) => setFormData({ ...formData, diasVencimientoCheques: parseInt(e.target.value) })}
+                inputProps={{ min: 0, max: 365, step: 1 }}
+                helperText="Días estándar para vencimiento de cheques (30, 60, 90)"
+                disabled={!formData.aceptaCheques}
               />
             </Grid>
           </Grid>

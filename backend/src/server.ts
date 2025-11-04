@@ -11,6 +11,15 @@ import liquidacionRoutes from './routes/liquidacion.js';
 import productosRoutes from './routes/productos.js';
 import clientesRoutes from './routes/clientes.js';
 import ventasRoutes from './routes/ventas.js';
+import facturacionRoutes from './routes/facturacionRoutes.js';
+import proveedoresRoutes from './routes/proveedores.js';
+import materiasPrimasRoutes from './routes/materiasPrimas.js';
+import comprasRoutes from './routes/compras.js';
+import movimientosInventarioRoutes from './routes/movimientosInventario.js';
+import recetasRoutes from './routes/recetas.js';
+import ordenesProduccionRoutes from './routes/ordenesProduccion.js';
+import remitosRoutes from './routes/remitos.js';
+import recibosRoutes from './routes/recibos.js';
 
 dotenv.config();
 
@@ -75,6 +84,15 @@ const start = async () => {
     app.use('/api/productos', productosRoutes);
     app.use('/api/clientes', clientesRoutes);
     app.use('/api/ventas', ventasRoutes);
+    app.use('/api/facturacion', facturacionRoutes);
+    app.use('/api/proveedores', proveedoresRoutes);
+    app.use('/api/materias-primas', materiasPrimasRoutes);
+    app.use('/api/compras', comprasRoutes);
+    app.use('/api/movimientos-inventario', movimientosInventarioRoutes);
+    app.use('/api/recetas', recetasRoutes);
+    app.use('/api/ordenes-produccion', ordenesProduccionRoutes);
+    app.use('/api/remitos', remitosRoutes);
+    app.use('/api/recibos', recibosRoutes);
 
     const env = process.env.NODE_ENV || 'development';
     app.listen(PORT, () => {

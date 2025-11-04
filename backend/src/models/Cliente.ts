@@ -20,6 +20,25 @@ export interface ICliente extends Document {
   fechaCreacion: Date;
   fechaActualizacion: Date;
   ultimaCompra?: Date;
+  
+  // Campos para facturación fiscal
+  requiereFacturaAFIP: boolean;
+  aplicaIVA: boolean;
+  
+  // Campos para entregas
+  direccionEntrega?: string;
+  direccionesAlternativas?: Array<{
+    alias: string;
+    direccion: string;
+    ciudad?: string;
+    referencia?: string;
+    contacto?: string;
+    telefono?: string;
+  }>;
+  
+  // Preferencias de pago
+  aceptaCheques: boolean;
+  diasVencimientoCheques?: number;
 }
 
 const clienteSchema = new mongoose.Schema<ICliente>({
@@ -124,6 +143,67 @@ const clienteSchema = new mongoose.Schema<ICliente>({
   },
   ultimaCompra: {
     type: Date
+  },
+  // Campos para facturación fiscal
+  requiereFacturaAFIP: {
+    type: Boolean,
+    default: false,
+    required: true
+  },
+  aplicaIVA: {
+    type: Boolean,
+    default: true,
+    required: true
+  },
+  // Campos para entregas
+  direccionEntrega: {
+    type: String,
+    trim: true,
+    maxlength: [300, 'La dirección de entrega no puede exceder 300 caracteres']
+  },
+  direccionesAlternativas: [{
+    alias: {
+      type: String,
+      trim: true,
+      maxlength: [50, 'El alias no puede exceder 50 caracteres']
+    },
+    direccion: {
+      type: String,
+      trim: true,
+      required: true,
+      maxlength: [300, 'La dirección no puede exceder 300 caracteres']
+    },
+    ciudad: {
+      type: String,
+      trim: true,
+      maxlength: [100, 'La ciudad no puede exceder 100 caracteres']
+    },
+    referencia: {
+      type: String,
+      trim: true,
+      maxlength: [200, 'La referencia no puede exceder 200 caracteres']
+    },
+    contacto: {
+      type: String,
+      trim: true,
+      maxlength: [100, 'El contacto no puede exceder 100 caracteres']
+    },
+    telefono: {
+      type: String,
+      trim: true,
+      maxlength: [20, 'El teléfono no puede exceder 20 caracteres']
+    }
+  }],
+  // Preferencias de pago
+  aceptaCheques: {
+    type: Boolean,
+    default: true
+  },
+  diasVencimientoCheques: {
+    type: Number,
+    min: [0, 'Los días de vencimiento deben ser mayor o igual a 0'],
+    max: [365, 'Los días de vencimiento no pueden exceder 365'],
+    default: 30
   }
 }, {
   timestamps: {

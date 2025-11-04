@@ -6,7 +6,8 @@ import {
   crearVenta,
   anularVenta,
   registrarPago,
-  getEstadisticasVentas
+  getEstadisticasVentas,
+  confirmarVenta
 } from '../controllers/ventasController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
@@ -25,6 +26,8 @@ router.route('/:id')
   .get(getVentaById);
 
 // Rutas especiales
+router.patch('/:id/confirmar', confirmarVenta); // admin/oper_ad pueden confirmar
+
 router.patch('/:id/anular', anularVenta); // Solo admin puede anular
 
 router.patch('/:id/registrar-pago', registrarPago); // admin/oper_ad pueden registrar pagos

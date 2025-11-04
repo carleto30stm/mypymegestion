@@ -38,6 +38,37 @@ export interface IVenta extends Document {
   fechaActualizacion: Date;
   fechaAnulacion?: Date;
   motivoAnulacion?: string;
+  
+  // Campos fiscales
+  aplicaIVA: boolean;
+  requiereFacturaAFIP: boolean;
+  
+  // Campos para cheques
+  datosCheque?: {
+    numeroCheque: string;
+    bancoEmisor: string;
+    cuitTitular?: string;
+    titularCheque?: string;
+    fechaEmision: Date;
+    fechaVencimiento: Date;
+    monto: number;
+    estadoCheque: 'recibido' | 'depositado' | 'cobrado' | 'rechazado' | 'endosado';
+    fechaDeposito?: Date;
+    observaciones?: string;
+  };
+  
+  // Campos para remito y entrega
+  estadoEntrega: 'sin_remito' | 'remito_generado' | 'en_transito' | 'entregado' | 'devuelto';
+  remitoId?: mongoose.Types.ObjectId;
+  direccionEntrega?: string;
+  fechaEntrega?: Date;
+  
+  // Campos para cobranza
+  estadoCobranza: 'sin_cobrar' | 'parcialmente_cobrado' | 'cobrado';
+  montoCobrado: number;
+  saldoPendiente: number;
+  recibosRelacionados?: mongoose.Types.ObjectId[];
+  ultimaCobranza?: Date;
 }
 
 const ItemVentaSchema = new Schema({
@@ -190,7 +221,87 @@ const VentaSchema = new Schema({
     type: String,
     trim: true,
     maxlength: [500, 'El motivo de anulación no puede exceder 500 caracteres']
-  }
+  },
+  // Campos fiscales
+  aplicaIVA: {
+    type: Boolean,
+    required: true,
+    default: true
+  },
+  requiereFacturaAFIP: {
+    type: Boolean,
+    default: false
+  },
+  // Campos para cheques
+  datosCheque: {
+    numeroCheque: {
+      type: String,
+      trim: true,
+      uppercase: true
+    },
+    bancoEmisor: {
+      type: String,
+      trim: true
+    },
+    cuitTitular: {
+      type: String,
+      trim: true
+    },
+    titularCheque: {
+      type: String,
+      trim: true
+    },
+    fechaEmision: Date,
+    fechaVencimiento: Date,
+    monto: Number,
+    estadoCheque: {
+      type: String,
+      enum: ['recibido', 'depositado', 'cobrado', 'rechazado', 'endosado'],
+      default: 'recibido'
+    },
+    fechaDeposito: Date,
+    observaciones: {
+      type: String,
+      trim: true,
+      maxlength: [500, 'Las observaciones del cheque no pueden exceder 500 caracteres']
+    }
+  },
+  // Campos para remito y entrega
+  estadoEntrega: {
+    type: String,
+    enum: ['sin_remito', 'remito_generado', 'en_transito', 'entregado', 'devuelto'],
+    default: 'sin_remito'
+  },
+  remitoId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Remito'
+  },
+  direccionEntrega: {
+    type: String,
+    trim: true,
+    maxlength: [300, 'La dirección de entrega no puede exceder 300 caracteres']
+  },
+  fechaEntrega: Date,
+  // Campos para cobranza
+  estadoCobranza: {
+    type: String,
+    enum: ['sin_cobrar', 'parcialmente_cobrado', 'cobrado'],
+    default: 'sin_cobrar'
+  },
+  montoCobrado: {
+    type: Number,
+    default: 0,
+    min: [0, 'El monto cobrado debe ser mayor o igual a 0']
+  },
+  saldoPendiente: {
+    type: Number,
+    default: 0
+  },
+  recibosRelacionados: [{
+    type: Schema.Types.ObjectId,
+    ref: 'ReciboPago'
+  }],
+  ultimaCobranza: Date
 }, {
   timestamps: {
     createdAt: 'fechaCreacion',
@@ -206,8 +317,18 @@ VentaSchema.pre('save', function(next) {
   // Calcular descuento total
   this.descuentoTotal = this.items.reduce((sum, item) => sum + item.descuento, 0);
   
+  // Calcular IVA dinámico (21% solo si aplicaIVA es true)
+  if (this.aplicaIVA) {
+    this.iva = (this.subtotal - this.descuentoTotal) * 0.21;
+  } else {
+    this.iva = 0;
+  }
+  
   // Calcular total (subtotal - descuentos + IVA)
   this.total = this.subtotal - this.descuentoTotal + this.iva;
+  
+  // Calcular saldo pendiente
+  this.saldoPendiente = this.total - this.montoCobrado;
   
   next();
 });

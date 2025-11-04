@@ -62,6 +62,18 @@ export const anularVenta = createAsyncThunk(
   }
 );
 
+export const confirmarVenta = createAsyncThunk(
+  'ventas/confirmar',
+  async (id: string, { rejectWithValue }) => {
+    try {
+      const response = await api.patch(`/api/ventas/${id}/confirmar`);
+      return response.data.venta;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.message || 'Error al confirmar venta');
+    }
+  }
+);
+
 export const registrarPago = createAsyncThunk(
   'ventas/registrarPago',
   async ({ id, montoPago, medioPago, banco, observaciones }: { id: string; montoPago: number; medioPago: string; banco?: string; observaciones?: string }, { rejectWithValue }) => {
@@ -114,6 +126,13 @@ const ventasSlice = createSlice({
       // Create venta
       .addCase(createVenta.fulfilled, (state, action: PayloadAction<Venta>) => {
         state.items.unshift(action.payload);
+      })
+      // Confirmar venta
+      .addCase(confirmarVenta.fulfilled, (state, action: PayloadAction<Venta>) => {
+        const index = state.items.findIndex(v => v._id === action.payload._id);
+        if (index !== -1) {
+          state.items[index] = action.payload;
+        }
       })
       // Anular venta
       .addCase(anularVenta.fulfilled, (state, action: PayloadAction<Venta>) => {

@@ -4,7 +4,8 @@ import { AppDispatch, RootState } from '../redux/store';
 import { fetchProductos } from '../redux/slices/productosSlice';
 import { fetchClientesActivos } from '../redux/slices/clientesSlice';
 import { createVenta } from '../redux/slices/ventasSlice';
-import { Producto, ItemVenta, BANCOS, MEDIOS_PAGO_GASTOS } from '../types';
+import { crearFacturaDesdeVenta } from '../redux/slices/facturasSlice';
+import { Producto, ItemVenta, Cliente } from '../types';
 import {
   Box,
   Typography,
@@ -25,12 +26,21 @@ import {
   Autocomplete,
   Grid,
   Divider,
-  Alert
+  Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  CircularProgress,
+  Chip
 } from '@mui/material';
 import {
   PointOfSale as PosIcon,
   Delete as DeleteIcon,
-  ShoppingCart as CartIcon
+  ShoppingCart as CartIcon,
+  Receipt as ReceiptIcon,
+  Warning as WarningIcon,
+  Info as InfoIcon
 } from '@mui/icons-material';
 import { formatCurrency } from '../utils/formatters';
 
@@ -44,10 +54,11 @@ const VentasPage: React.FC = () => {
   const [productoSeleccionado, setProductoSeleccionado] = useState<Producto | null>(null);
   const [cantidad, setCantidad] = useState<number>(1);
   const [clienteId, setClienteId] = useState<string>('');
-  const [medioPago, setMedioPago] = useState<string>('EFECTIVO');
-  const [banco, setBanco] = useState<string>('');
   const [observaciones, setObservaciones] = useState<string>('');
   const [error, setError] = useState<string>('');
+  const [ventaExitosa, setVentaExitosa] = useState<string | null>(null);
+  const [showFacturarDialog, setShowFacturarDialog] = useState(false);
+  const [facturandoVenta, setFacturandoVenta] = useState(false);
 
   useEffect(() => {
     dispatch(fetchProductos());
@@ -102,9 +113,15 @@ const VentasPage: React.FC = () => {
 
   const calcularTotales = () => {
     const subtotal = carrito.reduce((sum, item) => sum + item.subtotal, 0);
-    const iva = subtotal * 0.21;
+    
+    // Buscar el cliente seleccionado para verificar si aplica IVA
+    const clienteSeleccionado = clientesActivos.find(c => c._id === clienteId);
+    const aplicaIVA = clienteSeleccionado?.aplicaIVA !== false; // Por defecto true si no se encuentra
+    
+    const iva = aplicaIVA ? subtotal * 0.21 : 0;
     const total = subtotal + iva;
-    return { subtotal, iva, total };
+    
+    return { subtotal, iva, total, aplicaIVA, clienteSeleccionado };
   };
 
   const handleConfirmarVenta = async () => {
@@ -127,26 +144,49 @@ const VentasPage: React.FC = () => {
       descuentoTotal: 0,
       iva: totales.iva,
       total: totales.total,
-      medioPago: medioPago as any,
-      banco: medioPago !== 'EFECTIVO' ? banco : undefined,
       observaciones: observaciones || undefined,
-      vendedor: user?.id || ''
+      vendedor: user?.id || '',
+      // Copiar configuración fiscal del cliente
+      aplicaIVA: totales.aplicaIVA,
+      requiereFacturaAFIP: totales.clienteSeleccionado?.requiereFacturaAFIP || false
     };
 
     try {
-      await dispatch(createVenta(nuevaVenta)).unwrap();
+      const result = await dispatch(createVenta(nuevaVenta)).unwrap();
+      // Guardar el ID de la venta para poder facturar
+      setVentaExitosa(result._id);
+      setShowFacturarDialog(true);
+      
       // Limpiar formulario
       setCarrito([]);
       setClienteId('');
-      setMedioPago('EFECTIVO');
-      setBanco('');
       setObservaciones('');
       setError('');
-      alert('Venta registrada exitosamente');
       dispatch(fetchProductos()); // Actualizar stock
     } catch (err: any) {
       setError(err.message || 'Error al registrar la venta');
     }
+  };
+
+  const handleFacturar = async () => {
+    if (!ventaExitosa) return;
+
+    setFacturandoVenta(true);
+    try {
+      await dispatch(crearFacturaDesdeVenta(ventaExitosa)).unwrap();
+      alert('Factura creada exitosamente. Puede verla en la sección de Facturación.');
+      setShowFacturarDialog(false);
+      setVentaExitosa(null);
+    } catch (err: any) {
+      setError(err.message || 'Error al crear la factura');
+    } finally {
+      setFacturandoVenta(false);
+    }
+  };
+
+  const handleOmitirFactura = () => {
+    setShowFacturarDialog(false);
+    setVentaExitosa(null);
   };
 
   const totales = calcularTotales();
@@ -236,12 +276,35 @@ const VentasPage: React.FC = () => {
         <Grid item xs={12} md={5}>
           <Paper sx={{ p: 2, mb: 2 }}>
             <Typography variant="h6" gutterBottom>Totales</Typography>
+            
+            {/* Indicadores fiscales del cliente */}
+            {totales.clienteSeleccionado && (
+              <Box sx={{ mb: 2 }}>
+                {totales.clienteSeleccionado.requiereFacturaAFIP && (
+                  <Alert severity="info" icon={<InfoIcon />} sx={{ mb: 1, py: 0.5 }}>
+                    <Typography variant="caption">
+                      <strong>Cliente requiere factura electrónica AFIP</strong>
+                    </Typography>
+                  </Alert>
+                )}
+                {!totales.aplicaIVA && (
+                  <Alert severity="warning" icon={<WarningIcon />} sx={{ mb: 1, py: 0.5 }}>
+                    <Typography variant="caption">
+                      <strong>Cliente exento de IVA</strong> - No se aplicará IVA en esta venta
+                    </Typography>
+                  </Alert>
+                )}
+              </Box>
+            )}
+
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
               <Typography>Subtotal:</Typography>
               <Typography>{formatCurrency(totales.subtotal)}</Typography>
             </Box>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-              <Typography>IVA (21%):</Typography>
+              <Typography>
+                IVA {totales.aplicaIVA ? '(21%)' : '(0% - Exento)'}:
+              </Typography>
               <Typography>{formatCurrency(totales.iva)}</Typography>
             </Box>
             <Divider sx={{ my: 1 }} />
@@ -258,39 +321,21 @@ const VentasPage: React.FC = () => {
               <Select value={clienteId} onChange={(e) => setClienteId(e.target.value)} label="Cliente *">
                 {clientesActivos.map((c) => (
                   <MenuItem key={c._id} value={c._id}>
-                    {c.razonSocial || `${c.apellido} ${c.nombre}`}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                      <Typography sx={{ flex: 1 }}>
+                        {c.razonSocial || `${c.apellido} ${c.nombre}`}
+                      </Typography>
+                      {c.requiereFacturaAFIP && (
+                        <Chip label="AFIP" color="info" size="small" sx={{ fontSize: '0.65rem', height: 18 }} />
+                      )}
+                      {!c.aplicaIVA && (
+                        <Chip label="Sin IVA" color="warning" size="small" sx={{ fontSize: '0.65rem', height: 18 }} />
+                      )}
+                    </Box>
                   </MenuItem>
                 ))}
               </Select>
             </FormControl>
-
-            <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel>Medio de Pago *</InputLabel>
-              <Select value={medioPago} onChange={(e) => setMedioPago(e.target.value)} label="Medio de Pago *">
-                {MEDIOS_PAGO_GASTOS.map((medio) => (
-                  <MenuItem key={medio} value={medio}>
-                    {medio}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            {medioPago !== 'EFECTIVO' && medioPago !== 'CUENTA CORRIENTE' && (
-              <FormControl fullWidth sx={{ mb: 2 }}>
-                <InputLabel>Banco *</InputLabel>
-                <Select 
-                  value={banco} 
-                  onChange={(e) => setBanco(e.target.value)} 
-                  label="Banco *"
-                >
-                  {BANCOS.map((b) => (
-                    <MenuItem key={b} value={b}>
-                      {b}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            )}
 
             <TextField
               fullWidth
@@ -327,6 +372,40 @@ const VentasPage: React.FC = () => {
           </Paper>
         </Grid>
       </Grid>
+
+      {/* Dialog de Facturación */}
+      <Dialog open={showFacturarDialog} onClose={handleOmitirFactura} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <ReceiptIcon color="primary" />
+            <Typography variant="h6">Venta Registrada Exitosamente</Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="success" sx={{ mb: 2 }}>
+            La venta ha sido registrada correctamente.
+          </Alert>
+          <Typography variant="body1" gutterBottom>
+            ¿Desea generar una factura electrónica para esta venta?
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            Puede crear la factura ahora o hacerlo más tarde desde el historial de ventas.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleOmitirFactura} disabled={facturandoVenta}>
+            Omitir
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleFacturar}
+            disabled={facturandoVenta}
+            startIcon={facturandoVenta ? <CircularProgress size={20} /> : <ReceiptIcon />}
+          >
+            {facturandoVenta ? 'Creando factura...' : 'Facturar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

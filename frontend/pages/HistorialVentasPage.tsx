@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../redux/store';
-import { fetchVentas, anularVenta } from '../redux/slices/ventasSlice';
+import { fetchVentas, anularVenta, confirmarVenta } from '../redux/slices/ventasSlice';
+import { crearFacturaDesdeVenta, fetchFacturas } from '../redux/slices/facturasSlice';
 import { Venta } from '../types';
 import {
   Box,
@@ -21,18 +22,22 @@ import {
   DialogActions,
   Button,
   TextField,
-  Tooltip
+  Tooltip,
+  CircularProgress
 } from '@mui/material';
 import {
   Receipt as ReceiptIcon,
   Visibility as ViewIcon,
-  Cancel as CancelIcon
+  Cancel as CancelIcon,
+  Description as DescriptionIcon,
+  CheckCircle as CheckCircleIcon
 } from '@mui/icons-material';
 import { formatCurrency, formatDate } from '../utils/formatters';
 
 const HistorialVentasPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { items: ventas, status } = useSelector((state: RootState) => state.ventas);
+  const { items: facturas } = useSelector((state: RootState) => state.facturas);
   const { user } = useSelector((state: RootState) => state.auth);
 
   const [openDetalle, setOpenDetalle] = useState(false);
@@ -40,9 +45,12 @@ const HistorialVentasPage: React.FC = () => {
   const [openAnular, setOpenAnular] = useState(false);
   const [ventaAnular, setVentaAnular] = useState<Venta | null>(null);
   const [motivoAnulacion, setMotivoAnulacion] = useState('');
+  const [facturandoVenta, setFacturandoVenta] = useState<string | null>(null);
+  const [confirmandoVenta, setConfirmandoVenta] = useState<string | null>(null);
 
   useEffect(() => {
     dispatch(fetchVentas());
+    dispatch(fetchFacturas({}));
   }, [dispatch]);
 
   const handleVerDetalle = (venta: Venta) => {
@@ -68,7 +76,37 @@ const HistorialVentasPage: React.FC = () => {
     dispatch(fetchVentas());
   };
 
+  const handleConfirmarVenta = async (ventaId: string) => {
+    setConfirmandoVenta(ventaId);
+    try {
+      await dispatch(confirmarVenta(ventaId)).unwrap();
+      dispatch(fetchVentas());
+    } catch (err: any) {
+      alert(err.message || 'Error al confirmar la venta');
+    } finally {
+      setConfirmandoVenta(null);
+    }
+  };
+
+  const handleFacturar = async (ventaId: string) => {
+    setFacturandoVenta(ventaId);
+    try {
+      await dispatch(crearFacturaDesdeVenta(ventaId)).unwrap();
+      alert('Factura creada exitosamente');
+      dispatch(fetchFacturas({}));
+    } catch (err: any) {
+      alert(err.message || 'Error al crear la factura');
+    } finally {
+      setFacturandoVenta(null);
+    }
+  };
+
+  const getFacturaByVentaId = (ventaId: string) => {
+    return facturas.find((f) => f.ventaId === ventaId);
+  };
+
   const canAnular = user?.userType === 'admin';
+  const canConfirm = user?.userType === 'admin' || user?.userType === 'oper_ad';
 
   return (
     <Box sx={{ p: 3 }}>
@@ -88,6 +126,7 @@ const HistorialVentasPage: React.FC = () => {
               <TableCell align="right"><strong>Total</strong></TableCell>
               <TableCell><strong>Medio Pago</strong></TableCell>
               <TableCell><strong>Estado</strong></TableCell>
+              <TableCell align="center"><strong>Factura</strong></TableCell>
               <TableCell align="center"><strong>Acciones</strong></TableCell>
             </TableRow>
           </TableHead>
@@ -118,12 +157,68 @@ const HistorialVentasPage: React.FC = () => {
                   />
                 </TableCell>
                 <TableCell align="center">
+                  {(() => {
+                    const factura = getFacturaByVentaId(venta._id!);
+                    if (factura) {
+                      return (
+                        <Chip
+                          label={factura.estado.toUpperCase()}
+                          color={
+                            factura.estado === 'autorizada'
+                              ? 'success'
+                              : factura.estado === 'borrador'
+                              ? 'default'
+                              : 'error'
+                          }
+                          size="small"
+                        />
+                      );
+                    }
+                    return <Typography variant="body2" color="text.secondary">-</Typography>;
+                  })()}
+                </TableCell>
+                <TableCell align="center">
                   <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
+                    {canConfirm && venta.estado === 'pendiente' && (
+                      <Tooltip title="Confirmar Venta">
+                        <IconButton
+                          size="small"
+                          color="success"
+                          onClick={() => handleConfirmarVenta(venta._id!)}
+                          disabled={confirmandoVenta === venta._id}
+                        >
+                          {confirmandoVenta === venta._id ? (
+                            <CircularProgress size={20} />
+                          ) : (
+                            <CheckCircleIcon fontSize="small" />
+                          )}
+                        </IconButton>
+                      </Tooltip>
+                    )}
+
                     <Tooltip title="Ver Detalle">
                       <IconButton size="small" onClick={() => handleVerDetalle(venta)}>
                         <ViewIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
+                    
+                    {venta.estado === 'confirmada' && !getFacturaByVentaId(venta._id!) && (
+                      <Tooltip title="Crear Factura">
+                        <IconButton
+                          size="small"
+                          color="primary"
+                          onClick={() => handleFacturar(venta._id!)}
+                          disabled={facturandoVenta === venta._id}
+                        >
+                          {facturandoVenta === venta._id ? (
+                            <CircularProgress size={20} />
+                          ) : (
+                            <DescriptionIcon fontSize="small" />
+                          )}
+                        </IconButton>
+                      </Tooltip>
+                    )}
+
                     {canAnular && venta.estado === 'confirmada' && (
                       <Tooltip title="Anular">
                         <IconButton size="small" color="error" onClick={() => handleOpenAnular(venta)}>

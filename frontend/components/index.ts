@@ -1,11 +1,12 @@
 
-
-
 export * from './AccountingReport'
+export { default as AutorizarFacturaDialog } from './AutorizarFacturaDialog'
 export * from './BankSummary'
 export * from './ChequesDisponibles'
 export * from './EmployeeList'
 export * from './EmployeePayroll'
+export { default as FacturaDetailDialog } from './FacturaDetailDialog'
+export { default as FacturaPDF } from './FacturaPDF'
 export * from './Layout'
 export * from './PendingChecks'
 export * from './ReciboSueldo'

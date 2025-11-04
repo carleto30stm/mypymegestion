@@ -8,6 +8,9 @@ import liquidacionReducer from './slices/liquidacionSlice';
 import productosReducer from './slices/productosSlice';
 import clientesReducer from './slices/clientesSlice';
 import ventasReducer from './slices/ventasSlice';
+import facturasReducer from './slices/facturasSlice';
+import remitosReducer from './slices/remitosSlice';
+import recibosReducer from './slices/recibosSlice';
 
 // Configurar el logger solo en desarrollo
 const logger = createLogger({
@@ -29,6 +32,9 @@ export const store = configureStore({
     productos: productosReducer,
     clientes: clientesReducer,
     ventas: ventasReducer,
+    facturas: facturasReducer,
+    remitos: remitosReducer,
+    recibos: recibosReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

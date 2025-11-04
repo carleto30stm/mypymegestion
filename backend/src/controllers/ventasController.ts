@@ -72,13 +72,13 @@ export const crearVenta = async (req: ExpressRequest, res: ExpressResponse) => {
     session.startTransaction();
 
     try {
-        const { clienteId, items, medioPago, banco, detallesPago, observaciones, vendedor, iva } = req.body;
+        const { clienteId, items, observaciones, vendedor, aplicaIVA } = req.body;
 
         // Validaciones básicas
-        if (!clienteId || !items || items.length === 0 || !medioPago || !vendedor) {
+        if (!clienteId || !items || items.length === 0 || !vendedor) {
             await session.abortTransaction();
             return res.status(400).json({ 
-                message: 'Cliente, items, medio de pago y vendedor son requeridos' 
+                message: 'Cliente, items y vendedor son requeridos' 
             });
         }
 
@@ -145,27 +145,18 @@ export const crearVenta = async (req: ExpressRequest, res: ExpressResponse) => {
 
         // Calcular totales
         const descuentoTotal = itemsVenta.reduce((sum, item) => sum + item.descuento, 0);
-        const ivaCalculado = iva || 0;
+        
+        // Calcular IVA basado en la condición fiscal del cliente
+        // Si aplicaIVA es false (cliente exento) o no viene el campo, IVA = 0
+        const ivaCalculado = (aplicaIVA === true) ? (subtotalVenta - descuentoTotal) * 0.21 : 0;
         const totalVenta = subtotalVenta - descuentoTotal + ivaCalculado;
 
-        // Determinar estado inicial
-        let estadoVenta = 'confirmada';
-        if (medioPago === 'Cuenta Corriente') {
-            estadoVenta = 'parcial';
-            
-            // Actualizar saldo del cliente
-            cliente.saldoCuenta += totalVenta;
-            cliente.ultimaCompra = new Date();
-            
-            // Verificar límite de crédito
-            if (cliente.saldoCuenta > cliente.limiteCredito) {
-                cliente.estado = 'moroso';
-            }
-            
-            await cliente.save({ session });
-        }
+        // Estado inicial siempre es 'pendiente'
+        // El usuario debe confirmar manualmente en el historial
+        const estadoVenta = 'pendiente';
 
         // Crear venta
+        // El cobro se gestiona posteriormente en el módulo de Cobranzas
         const nuevaVenta = new Venta({
             fecha: new Date(),
             clienteId,
@@ -176,49 +167,17 @@ export const crearVenta = async (req: ExpressRequest, res: ExpressResponse) => {
             descuentoTotal,
             iva: ivaCalculado,
             total: totalVenta,
-            medioPago,
-            banco,
-            detallesPago,
             observaciones,
             vendedor,
-            estado: estadoVenta
+            estado: estadoVenta,
+            aplicaIVA: aplicaIVA === true,
+            // Campos de cobranza se actualizan desde ReciboPago
+            estadoCobranza: 'sin_cobrar',
+            montoCobrado: 0,
+            saldoPendiente: totalVenta
         });
 
         const ventaGuardada = await nuevaVenta.save({ session });
-
-        // Crear registro en Gasto solo si NO es cuenta corriente (pendiente de cobro)
-        if (medioPago !== 'Cuenta Corriente') {
-            // Determinar subRubro según medio de pago
-            let subRubro = 'COBRO';
-            if (medioPago === 'EFECTIVO') subRubro = 'COBRO';
-            else if (medioPago === 'TRANSFERENCIA') subRubro = 'COBRO';
-            else if (medioPago === 'TARJETA DÉBITO' || medioPago === 'TARJETA CRÉDITO') subRubro = 'COBRO';
-            else if (medioPago === 'CHEQUE TERCERO') subRubro = 'COBRO';
-
-            // Para cheques de terceros, no confirmar automáticamente (queda pendiente)
-            const esChequeTercero = medioPago === 'CHEQUE TERCERO';
-
-            const nuevoGasto = new Gasto({
-                fecha: nuevaVenta.fecha,
-                rubro: 'COBRO.VENTA',
-                subRubro,
-                medioDePago: medioPago,
-                banco: banco || 'EFECTIVO',
-                entrada: totalVenta,
-                salida: 0,
-                detalleGastos: `Venta ${ventaGuardada.numeroVenta} - Cliente: ${nombreCliente}`,
-                tipoOperacion: 'entrada',
-                confirmado: !esChequeTercero, // Cheques de terceros quedan sin confirmar
-                estadoCheque: esChequeTercero ? 'recibido' : undefined,
-                fechaStandBy: esChequeTercero ? nuevaVenta.fecha : null
-            });
-
-            const gastoGuardado = await nuevoGasto.save({ session });
-
-            // Vincular gasto con venta
-            ventaGuardada.gastoRelacionadoId = gastoGuardado._id;
-            await ventaGuardada.save({ session });
-        }
 
         await session.commitTransaction();
 
@@ -463,5 +422,37 @@ export const getEstadisticasVentas = async (req: ExpressRequest, res: ExpressRes
         });
     } catch (error) {
         res.status(500).json({ message: 'Error al obtener estadísticas' });
+    }
+};
+
+// @route   PATCH /api/ventas/:id/confirmar
+// @desc    Confirmar una venta pendiente
+// @access  Private (admin/oper_ad)
+export const confirmarVenta = async (req: ExpressRequest, res: ExpressResponse) => {
+    try {
+        const { id } = req.params;
+
+        const venta = await Venta.findById(id);
+
+        if (!venta) {
+            res.status(404).json({ message: 'Venta no encontrada' });
+            return;
+        }
+
+        if (venta.estado !== 'pendiente') {
+            res.status(400).json({ message: `No se puede confirmar una venta en estado ${venta.estado}` });
+            return;
+        }
+
+        venta.estado = 'confirmada';
+        await venta.save();
+
+        res.json({
+            message: 'Venta confirmada exitosamente',
+            venta
+        });
+    } catch (error: any) {
+        console.error('Error al confirmar venta:', error);
+        res.status(500).json({ message: error.message || 'Error al confirmar venta' });
     }
 };

@@ -65,3 +65,5 @@ Breve: este proyecto es una aplicación fullstack (React + Vite en frontend, Nod
 Si quieres, actualizo este archivo con ejemplos concretos de endpoints (ej: rutas en `backend/src/routes/gastos.ts`) o añado sección de debugging paso a paso. ¿Hay algo que te gustaría ampliar o cambiar?
 usa los archivos recientemente editados como referencia para entender mejor los cambios realizados.
 usa los archivos de barril index.ts para hacer las importaciones
+no harcoder valores si es posible en ves de eso usa enum que se pueda reutilizar
+los inputs de los formularios deben usar el formato de currency donde corresponda (ej: precios, montos). ./frontend/utils/formatters.ts tiene funciones útiles para esto.

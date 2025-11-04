@@ -10,6 +10,7 @@ import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
+import ListSubheader from '@mui/material/ListSubheader';
 import Divider from '@mui/material/Divider';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
@@ -27,6 +28,12 @@ import AssignmentIcon from '@mui/icons-material/Assignment';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import PointOfSaleIcon from '@mui/icons-material/PointOfSale';
 import HistoryIcon from '@mui/icons-material/History';
+import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
+import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturing';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 
 export const drawerWidth = 240;
 export const drawerHandleWidth = 40;
@@ -211,6 +218,130 @@ const Sidebar: React.FC<SidebarProps> = ({
               <HistoryIcon />
             </ListItemIcon>
             <ListItemText primary="Historial Ventas" />
+          </ListItemButton>
+        </ListItem>
+        
+        <ListItem disablePadding>
+          <ListItemButton 
+            onClick={() => navigate('/facturas')}
+            selected={location.pathname === '/facturas'}
+          >
+            <ListItemIcon>
+              <ReceiptIcon />
+            </ListItemIcon>
+            <ListItemText primary="Facturación" />
+          </ListItemButton>
+        </ListItem>
+        
+        <ListItem disablePadding>
+          <ListItemButton 
+            onClick={() => navigate('/remitos')}
+            selected={location.pathname === '/remitos'}
+          >
+            <ListItemIcon>
+              <LocalShippingIcon />
+            </ListItemIcon>
+            <ListItemText primary="Remitos" />
+          </ListItemButton>
+        </ListItem>
+        
+        <ListItem disablePadding>
+          <ListItemButton 
+            onClick={() => navigate('/cobranzas')}
+            selected={location.pathname === '/cobranzas'}
+          >
+            <ListItemIcon>
+              <AccountBalanceWalletIcon />
+            </ListItemIcon>
+            <ListItemText primary="Cobranzas" />
+          </ListItemButton>
+        </ListItem>
+      </List>
+      <Divider />
+
+      {/* Sección de Compras */}
+      <List>
+        <ListSubheader component="div">
+          COMPRAS E INVENTARIO
+        </ListSubheader>
+        
+        <ListItem disablePadding>
+          <ListItemButton 
+            onClick={() => navigate('/proveedores')}
+            selected={location.pathname === '/proveedores'}
+          >
+            <ListItemIcon>
+              <PeopleIcon />
+            </ListItemIcon>
+            <ListItemText primary="Proveedores" />
+          </ListItemButton>
+        </ListItem>
+
+        <ListItem disablePadding>
+          <ListItemButton 
+            onClick={() => navigate('/materias-primas')}
+            selected={location.pathname === '/materias-primas'}
+          >
+            <ListItemIcon>
+              <InventoryIcon />
+            </ListItemIcon>
+            <ListItemText primary="Materias Primas" />
+          </ListItemButton>
+        </ListItem>
+
+        <ListItem disablePadding>
+          <ListItemButton 
+            onClick={() => navigate('/compras')}
+            selected={location.pathname === '/compras'}
+          >
+            <ListItemIcon>
+              <ShoppingCartIcon />
+            </ListItemIcon>
+            <ListItemText primary="Compras" />
+          </ListItemButton>
+        </ListItem>
+
+        <ListItem disablePadding>
+          <ListItemButton 
+            onClick={() => navigate('/movimientos-inventario')}
+            selected={location.pathname === '/movimientos-inventario'}
+          >
+            <ListItemIcon>
+              <SwapHorizIcon />
+            </ListItemIcon>
+            <ListItemText primary="Movimientos" />
+          </ListItemButton>
+        </ListItem>
+      </List>
+      <Divider />
+      
+      {/* Producción */}
+      <List>
+        <ListSubheader component="div" inset>
+          PRODUCCIÓN
+        </ListSubheader>
+
+        <ListItem disablePadding>
+          <ListItemButton 
+            onClick={() => navigate('/recetas')}
+            selected={location.pathname === '/recetas'}
+          >
+            <ListItemIcon>
+              <MenuBookIcon />
+            </ListItemIcon>
+            <ListItemText primary="Recetas" />
+          </ListItemButton>
+        </ListItem>
+
+        <ListItem disablePadding>
+          <ListItemButton 
+            onClick={() => navigate('/ordenes-produccion')}
+            selected={location.pathname === '/ordenes-produccion'}
+          >
+            <ListItemIcon>
+              <PrecisionManufacturingIcon />
+            </ListItemIcon>
+            <ListItemText primary="Órdenes de Producción" />
           </ListItemButton>
         </ListItem>
       </List>
