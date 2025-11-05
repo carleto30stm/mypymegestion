@@ -385,11 +385,11 @@ export const getEstadisticasRemitos = async (req: ExpressRequest, res: ExpressRe
     ]);
 
     const resultado = {
-      pendientes: 0,
+      pendiente: 0,
       en_transito: 0,
-      entregados: 0,
-      devueltos: 0,
-      cancelados: 0,
+      entregado: 0,
+      devuelto: 0,
+      cancelado: 0,
       total: 0
     };
 

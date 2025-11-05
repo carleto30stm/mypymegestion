@@ -2,6 +2,7 @@ import type { Request as ExpressRequest, Response as ExpressResponse } from 'exp
 import mongoose from 'mongoose';
 import ReciboPago from '../models/ReciboPago.js';
 import Venta from '../models/Venta.js';
+import Gasto from '../models/Gasto.js';
 
 // @desc    Obtener todos los recibos con filtros
 // @route   GET /api/recibos
@@ -219,6 +220,41 @@ export const crearRecibo = async (req: ExpressRequest, res: ExpressResponse) => 
     });
 
     const reciboGuardado = await nuevoRecibo.save({ session });
+
+    // Registrar cada forma de pago como un Gasto de tipo entrada (ingreso)
+    for (const formaPago of formasPago) {
+      // Determinar el banco/caja según el medio de pago
+      let bancoDestino = 'EFECTIVO'; // Por defecto efectivo
+      
+      if (formaPago.medioPago === 'TRANSFERENCIA' || formaPago.medioPago === 'CHEQUE') {
+        // Si tiene banco especificado, usar ese banco
+        bancoDestino = formaPago.banco || 'PROVINCIA';
+      } else if (formaPago.medioPago === 'EFECTIVO') {
+        bancoDestino = 'EFECTIVO';
+      } else if (formaPago.medioPago === 'TARJETA_DEBITO' || formaPago.medioPago === 'TARJETA_CREDITO') {
+        // Las tarjetas van al banco especificado o SANTANDER por defecto
+        bancoDestino = formaPago.banco || 'SANTANDER';
+      }
+
+      // Crear un Gasto de tipo entrada (ingreso) en la tabla de gastos
+      await Gasto.create([{
+        fecha: new Date(),
+        rubro: 'COBRO.VENTA',
+        subRubro: 'COBRO',
+        medioDePago: formaPago.medioPago,
+        clientes: primeraVenta.nombreCliente,
+        detalleGastos: `Cobranza recibo ${reciboGuardado.numeroRecibo || 'PENDIENTE'} - ${primeraVenta.nombreCliente}${formaPago.observaciones ? ` - ${formaPago.observaciones}` : ''}`,
+        tipoOperacion: 'entrada',
+        comentario: observaciones || `Recibo ${reciboGuardado.numeroRecibo || 'PENDIENTE'}`,
+        estado: 'activo',
+        confirmado: true,
+        entrada: formaPago.monto,
+        salida: 0,
+        banco: bancoDestino
+      }], { session });
+
+      console.log(`✅ Ingreso registrado: ${formaPago.medioPago} $${formaPago.monto} en ${bancoDestino}`);
+    }
 
     // Actualizar referencias en ventas
     for (const venta of ventas) {

@@ -26,6 +26,12 @@ Breve: este proyecto es una aplicación fullstack (React + Vite en frontend, Nod
   - Expiración: el backend y frontend usan 12 horas por diseño; `authSlice` calcula expiration y `services/api.ts` bloquea/redirige si expiró.
 
 4) Convenciones específicas del proyecto (no genéricas)
+  - **Enums centralizados**: TODOS los enums deben estar centralizados en archivos Types:
+    - Backend: `backend/src/Types/Types.ts` → exportar como `const` arrays (ej: `export const ESTADOS_REMITO = ['pendiente', 'en_transito', ...] as const`)
+    - Frontend: `frontend/types.ts` → importar o definir los mismos valores
+    - **NUNCA hardcodear enums** directamente en modelos/interfaces (ej: NO usar `estado: 'pendiente' | 'en_transito' | ...` en interfaces)
+    - En su lugar: definir el enum en Types.ts y usar `typeof ESTADOS_REMITO[number]` para el tipo
+    - Esto permite reutilizar valores en validaciones, selects, filtros, etc.
   - Rubro / SubRubro: la lista autorizada está duplicada en backend y frontend:
     - Backend: `backend/src/models/Gasto.ts` -> `subRubrosByRubro`.
     - Frontend: `frontend/types.ts` -> `subRubrosByRubro` y unión en la interfaz `Gasto`.
@@ -61,6 +67,25 @@ Breve: este proyecto es una aplicación fullstack (React + Vite en frontend, Nod
 9) Qué no hacer (errores comunes vistos)
   - No modificar solo el frontend al cambiar rubros; romperá la validación backend y producirá errores al crear gastos.
   - No asumir que `localStorage` siempre contiene `user` — `authSlice` parsea y valida; el agente debe respetar esa convención.
+  - **CRÍTICO: NO crear modelos/tablas redundantes sin investigar primero** — SIEMPRE revisar si ya existe una tabla/modelo que cumpla la función antes de crear nuevos. Ejemplo: el modelo `Gasto` ya maneja tanto egresos (tipoOperacion: 'salida') como ingresos (tipoOperacion: 'entrada') y es usado por `BankSummary`. No crear `MovimientoCaja`, `Caja` u otros modelos que dupliquen esta funcionalidad.
+  - **NO hardcodear enums en interfaces/modelos** — Ejemplo incorrecto: `estado: 'pendiente' | 'en_transito' | 'entregado'` directamente en una interface. Correcto: definir `ESTADOS_REMITO` en Types.ts y usar `typeof ESTADOS_REMITO[number]`. Esto permite reutilización en selects, validaciones, filtros.
+
+10) Sistema de registros financieros (IMPORTANTE)
+  - **Tabla única para movimientos financieros**: `backend/src/models/Gasto.ts`
+    - Maneja TODOS los movimientos: ingresos, egresos y transferencias
+    - `tipoOperacion`: 'entrada' (ingresos/cobros), 'salida' (egresos/pagos), 'transferencia' (entre cuentas)
+    - `rubro` y `subRubro`: categorización de movimientos (ver `backend/src/Types/Types.ts` -> `subRubrosByRubro`)
+    - `banco`: cuenta/caja donde se registra (PROVINCIA, SANTANDER, EFECTIVO, FCI, RESERVA)
+    - `entrada` / `salida`: montos según tipo de operación
+    - `confirmado`: true/false (para cheques diferidos)
+  - **BankSummary**: `frontend/components/BankSummary.tsx` 
+    - Lee de `state.gastos.items` (tabla Gasto)
+    - Calcula saldos por banco sumando entradas y restando salidas
+    - NO crear tablas separadas de "cajas" o "movimientos" — usar Gasto
+  - **Para registrar cobros de ventas**:
+    - Crear Gasto con `tipoOperacion: 'entrada'`, `rubro: 'COBRO.VENTA'`, `subRubro: 'COBRO'`
+    - Asignar al `banco` correspondiente según medio de pago
+    - Ver `backend/src/controllers/recibosController.ts` (líneas ~225-245) como referencia
 
 Si quieres, actualizo este archivo con ejemplos concretos de endpoints (ej: rutas en `backend/src/routes/gastos.ts`) o añado sección de debugging paso a paso. ¿Hay algo que te gustaría ampliar o cambiar?
 usa los archivos recientemente editados como referencia para entender mejor los cambios realizados.

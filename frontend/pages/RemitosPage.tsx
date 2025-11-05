@@ -11,6 +11,7 @@ import {
 } from '../redux/slices/remitosSlice';
 import { fetchVentas } from '../redux/slices/ventasSlice';
 import { ESTADOS_REMITO, Remito } from '../types';
+import { generarPDFRemito } from '../utils/pdfGenerator';
 import {
   Box,
   Typography,
@@ -190,6 +191,15 @@ const RemitosPage: React.FC = () => {
     setShowDetalleDialog(true);
   };
 
+  const handleImprimirRemito = (remito: Remito) => {
+    try {
+      generarPDFRemito(remito);
+    } catch (err) {
+      console.error('Error al generar PDF del remito:', err);
+      alert('Error al generar el PDF del remito');
+    }
+  };
+
   const handleAplicarFiltros = () => {
     dispatch(fetchRemitos({
       estado: filtroEstado || undefined,
@@ -277,7 +287,7 @@ const RemitosPage: React.FC = () => {
                 <Typography color="textSecondary" gutterBottom variant="body2">
                   Pendientes
                 </Typography>
-                <Typography variant="h4">{estadisticas.pendientes}</Typography>
+                <Typography variant="h4">{estadisticas.pendiente}</Typography>
               </CardContent>
             </Card>
           </Grid>
@@ -297,7 +307,7 @@ const RemitosPage: React.FC = () => {
                 <Typography color="textSecondary" gutterBottom variant="body2">
                   Entregados
                 </Typography>
-                <Typography variant="h4" color="success.main">{estadisticas.entregados}</Typography>
+                <Typography variant="h4" color="success.main">{estadisticas.entregado}</Typography>
               </CardContent>
             </Card>
           </Grid>
@@ -431,7 +441,7 @@ const RemitosPage: React.FC = () => {
                       </Tooltip>
                     )}
                     <Tooltip title="Imprimir">
-                      <IconButton size="small" color="info">
+                      <IconButton size="small" color="info" onClick={() => handleImprimirRemito(remito)}>
                         <PrintIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
