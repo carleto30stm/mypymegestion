@@ -182,6 +182,8 @@ const ClientesPage: React.FC = () => {
               <TableCell><strong>Documento</strong></TableCell>
               <TableCell><strong>Nombre/Razón Social</strong></TableCell>
               <TableCell><strong>Contacto</strong></TableCell>
+              <TableCell><strong>Provincia</strong></TableCell>
+              <TableCell><strong>Ciudad</strong></TableCell>
               <TableCell align="center"><strong>Fiscal</strong></TableCell>
               <TableCell align="right"><strong>Saldo Cuenta</strong></TableCell>
               <TableCell align="right"><strong>Límite Crédito</strong></TableCell>
@@ -203,6 +205,12 @@ const ClientesPage: React.FC = () => {
                 <TableCell>
                   <Typography variant="caption" display="block">{cliente.telefono || '-'}</Typography>
                   <Typography variant="caption" display="block">{cliente.email || '-'}</Typography>
+                </TableCell>
+                <TableCell>
+                  <Typography variant="caption" display="block">{cliente.provincia || '-'}</Typography>
+                </TableCell>
+                <TableCell>
+                  <Typography variant="caption" display="block">{cliente.ciudad || '-'}</Typography>
                 </TableCell>
                 <TableCell align="center">
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, justifyContent: 'center' }}>
@@ -340,6 +348,22 @@ const ClientesPage: React.FC = () => {
                 label="Teléfono"
                 value={formData.telefono}
                 onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Provincia"
+                value={formData.provincia}
+                onChange={(e) => setFormData({ ...formData, provincia: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Ciudad"
+                value={formData.ciudad}
+                onChange={(e) => setFormData({ ...formData, ciudad: e.target.value })}
               />
             </Grid>
             <Grid item xs={12}>

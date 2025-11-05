@@ -57,7 +57,8 @@ import {
 import { generarRemitoDesdeVenta } from '../redux/slices/remitosSlice';
 import FormaPagoModal from '../components/FormaPagoModal';
 import { formatCurrency, formatDate } from '../utils/formatters';
-import { Venta, Cliente, ReciboPago, FormaPago, ESTADOS_RECIBO } from '../types';
+import { generarPDFRecibo, generarPDFRemito } from '../utils/pdfGenerator';
+import { Venta, Cliente, ReciboPago, FormaPago, ESTADOS_RECIBO, Remito } from '../types';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -285,6 +286,26 @@ const CobranzasPage: React.FC = () => {
       setMotivoAnulacion('');
     } catch (err) {
       console.error('Error al anular recibo:', err);
+    }
+  };
+
+  // Handler para imprimir recibo
+  const handleImprimirRecibo = (recibo: ReciboPago) => {
+    try {
+      generarPDFRecibo(recibo);
+    } catch (err) {
+      console.error('Error al generar PDF del recibo:', err);
+      alert('Error al generar el PDF del recibo');
+    }
+  };
+
+  // Handler para imprimir remito (si se implementa en otra página)
+  const handleImprimirRemito = (remito: Remito) => {
+    try {
+      generarPDFRemito(remito);
+    } catch (err) {
+      console.error('Error al generar PDF del remito:', err);
+      alert('Error al generar el PDF del remito');
     }
   };
 
@@ -726,7 +747,7 @@ const CobranzasPage: React.FC = () => {
                         <IconButton size="small" onClick={() => handleVerDetalle(recibo)} title="Ver detalle">
                           <ViewIcon />
                         </IconButton>
-                        <IconButton size="small" title="Imprimir">
+                        <IconButton size="small" onClick={() => handleImprimirRecibo(recibo)} title="Imprimir" >
                           <PrintIcon />
                         </IconButton>
                         {recibo.estadoRecibo === 'activo' && canEdit && user?.userType === 'admin' && (
@@ -1008,7 +1029,12 @@ const CobranzasPage: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setModalDetalleOpen(false)}>Cerrar</Button>
-          <Button variant="contained" startIcon={<PrintIcon />}>
+          <Button 
+            variant="contained" 
+            startIcon={<PrintIcon />}
+            onClick={() => reciboSeleccionado && handleImprimirRecibo(reciboSeleccionado)}
+            disabled={!reciboSeleccionado}
+          >
             Imprimir
           </Button>
         </DialogActions>

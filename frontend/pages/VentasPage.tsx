@@ -214,10 +214,20 @@ const VentasPage: React.FC = () => {
                 renderInput={(params) => <TextField {...params} label="Buscar producto" />}
               />
               <TextField
-                type="number"
+                type="text"
                 label="Cantidad"
-                value={cantidad}
-                onChange={(e) => setCantidad(parseInt(e.target.value) || 1)}
+                value={cantidad || ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === '') {
+                    setCantidad(0);
+                  } else {
+                    const num = parseInt(value);
+                    if (!isNaN(num) && num >= 0) {
+                      setCantidad(num);
+                    }
+                  }
+                }}
                 inputProps={{ min: 1 }}
                 sx={{ width: 100 }}
               />

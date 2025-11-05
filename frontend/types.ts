@@ -368,9 +368,9 @@ export interface Remito {
 
 // Interface para estadísticas de remitos
 export interface EstadisticasRemitos {
-  pendientes: number;
+  pendiente: number;
   en_transito: number;
-  entregados: number;
+  entregado: number;
   devueltos: number;
   cancelados: number;
   total: number;
