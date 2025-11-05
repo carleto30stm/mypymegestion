@@ -56,6 +56,7 @@ import {
 } from '../redux/slices/recibosSlice';
 import { generarRemitoDesdeVenta } from '../redux/slices/remitosSlice';
 import FormaPagoModal from '../components/FormaPagoModal';
+import CuentaCorrienteDetalle from '../components/CuentaCorrienteDetalle';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import { generarPDFRecibo, generarPDFRemito } from '../utils/pdfGenerator';
 import { Venta, Cliente, ReciboPago, FormaPago, ESTADOS_RECIBO, Remito } from '../types';
@@ -784,50 +785,7 @@ const CobranzasPage: React.FC = () => {
             />
           </Box>
 
-          {clienteCuentaCorriente && (
-            <>
-              {/* Información del cliente */}
-              <Paper elevation={2} sx={{ p: 2, mb: 3 }}>
-                <Grid container spacing={2}>
-                  <Grid item xs={12} sm={4}>
-                    <Typography variant="body2" color="text.secondary">
-                      Cliente
-                    </Typography>
-                    <Typography variant="h6">
-                      {clienteCuentaCorriente.nombre} {clienteCuentaCorriente.apellido}
-                    </Typography>
-                    <Typography variant="caption">{clienteCuentaCorriente.numeroDocumento}</Typography>
-                  </Grid>
-                  <Grid item xs={12} sm={4}>
-                    <Typography variant="body2" color="text.secondary">
-                      Límite de Crédito
-                    </Typography>
-                    <Typography variant="h6">{formatCurrency(clienteCuentaCorriente.limiteCredito)}</Typography>
-                  </Grid>
-                  <Grid item xs={12} sm={4}>
-                    <Typography variant="body2" color="text.secondary">
-                      Saldo Actual
-                    </Typography>
-                    <Typography
-                      variant="h6"
-                      color={clienteCuentaCorriente.saldoCuenta > 0 ? 'error.main' : 'success.main'}
-                    >
-                      {formatCurrency(clienteCuentaCorriente.saldoCuenta)}
-                    </Typography>
-                  </Grid>
-                </Grid>
-              </Paper>
-
-              {/* Movimientos (simplificado - aquí irían las ventas y recibos del cliente) */}
-              <Typography variant="h6" gutterBottom>
-                Movimientos
-              </Typography>
-              <Alert severity="info">
-                Esta sección mostrará el historial de ventas, recibos y ajustes del cliente seleccionado.
-                (Por implementar: integración completa con cuenta corriente)
-              </Alert>
-            </>
-          )}
+          <CuentaCorrienteDetalle cliente={clienteCuentaCorriente} />
         </TabPanel>
       </Paper>
 

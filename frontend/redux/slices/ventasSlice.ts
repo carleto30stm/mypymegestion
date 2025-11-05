@@ -64,9 +64,9 @@ export const anularVenta = createAsyncThunk(
 
 export const confirmarVenta = createAsyncThunk(
   'ventas/confirmar',
-  async (id: string, { rejectWithValue }) => {
+  async ({ id, usuarioConfirmacion }: { id: string; usuarioConfirmacion: string }, { rejectWithValue }) => {
     try {
-      const response = await api.patch(`/api/ventas/${id}/confirmar`);
+      const response = await api.patch(`/api/ventas/${id}/confirmar`, { creadoPor: usuarioConfirmacion, usuarioConfirmacion });
       return response.data.venta;
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.message || 'Error al confirmar venta');

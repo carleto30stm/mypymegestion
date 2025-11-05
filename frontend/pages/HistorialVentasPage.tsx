@@ -77,9 +77,14 @@ const HistorialVentasPage: React.FC = () => {
   };
 
   const handleConfirmarVenta = async (ventaId: string) => {
+    if (!user?.username) {
+      alert('Error: Usuario no identificado');
+      return;
+    }
+
     setConfirmandoVenta(ventaId);
     try {
-      await dispatch(confirmarVenta(ventaId)).unwrap();
+      await dispatch(confirmarVenta({ id: ventaId, usuarioConfirmacion: user.username })).unwrap();
       dispatch(fetchVentas());
     } catch (err: any) {
       alert(err.message || 'Error al confirmar la venta');

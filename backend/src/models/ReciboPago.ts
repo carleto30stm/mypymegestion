@@ -3,7 +3,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 // Enums
 export const MEDIOS_PAGO = ['EFECTIVO', 'TRANSFERENCIA', 'CHEQUE', 'TARJETA_DEBITO', 'TARJETA_CREDITO', 'CUENTA_CORRIENTE'] as const;
 export const ESTADOS_CHEQUE_COBRANZA = ['pendiente', 'depositado', 'cobrado', 'rechazado', 'en_cartera'] as const;
-export const MOMENTO_COBRO = ['anticipado', 'contra_entrega', 'diferido'] as const;
+export const MOMENTO_COBRO = ['anticipado', 'contra_entrega', 'diferido', 'posterior'] as const;
 export const ESTADOS_RECIBO = ['activo', 'anulado'] as const;
 
 // Sub-interfaces
@@ -23,12 +23,12 @@ interface IDatosCheque {
 }
 
 interface IDatosTransferencia {
-  numeroOperacion: string;
-  banco: string;
+  numeroOperacion: string; // Número de transacción/orden bancaria
   fechaTransferencia: Date;
   cuentaOrigen?: string;
   cuentaDestino?: string;
   observaciones?: string;
+  // NOTA: El banco destino va en IFormaPago.banco (la caja donde impacta)
 }
 
 interface IDatosTarjeta {
@@ -110,12 +110,12 @@ const datosChequeSchema = new Schema({
 
 // Schema para datos de transferencia
 const datosTransferenciaSchema = new Schema({
-  numeroOperacion: { type: String, required: true },
-  banco: { type: String, required: true },
+  numeroOperacion: { type: String, required: true }, // Número de transacción/orden bancaria
   fechaTransferencia: { type: Date, required: true },
   cuentaOrigen: { type: String },
   cuentaDestino: { type: String },
   observaciones: { type: String }
+  // NOTA: El banco destino va en formaPago.banco (la caja donde impacta)
 }, { _id: false });
 
 // Schema para datos de tarjeta
@@ -241,13 +241,8 @@ const reciboPagoSchema = new Schema<IReciboPago>(
     },
     ventasRelacionadas: {
       type: [ventaRelacionadaSchema],
-      required: true,
-      validate: {
-        validator: function(v: IVentaRelacionada[]) {
-          return v && v.length > 0;
-        },
-        message: 'Debe haber al menos una venta relacionada'
-      }
+      default: []
+      // Ahora es opcional - array vacío permite regularizaciones de deuda sin ventas específicas
     },
     formasPago: {
       type: [formaPagoSchema],
@@ -352,20 +347,23 @@ reciboPagoSchema.pre('save', function (next) {
   // Calcular total cobrado
   const totalCobrado = this.formasPago.reduce((sum, fp) => sum + fp.monto, 0);
   
-  // Calcular total a cobrar
-  const totalACobrar = this.ventasRelacionadas.reduce((sum, vr) => sum + vr.montoCobrado, 0);
-  
-  // Validar que coincida con totales
+  // Validar que coincida con totales.totalCobrado
   if (Math.abs(this.totales.totalCobrado - totalCobrado) > 0.01) {
     return next(new Error(`El total cobrado (${totalCobrado}) no coincide con la suma de formas de pago`));
   }
   
-  if (Math.abs(this.totales.totalACobrar - totalACobrar) > 0.01) {
-    return next(new Error(`El total a cobrar (${totalACobrar}) no coincide con la suma de montos cobrados de ventas`));
+  // Si hay ventas relacionadas, validar que totalACobrar coincida con suma de montos cobrados
+  if (this.ventasRelacionadas && this.ventasRelacionadas.length > 0) {
+    const totalACobrarVentas = this.ventasRelacionadas.reduce((sum, vr) => sum + vr.montoCobrado, 0);
+    
+    if (Math.abs(this.totales.totalACobrar - totalACobrarVentas) > 0.01) {
+      return next(new Error(`El total a cobrar (${totalACobrarVentas}) no coincide con la suma de montos cobrados de ventas`));
+    }
   }
+  // Si no hay ventas (regularización), el totalACobrar viene directo del controller
   
-  // Calcular vuelto o saldo pendiente
-  const diferencia = totalCobrado - totalACobrar;
+  // Calcular vuelto o saldo pendiente usando los totales configurados
+  const diferencia = this.totales.totalCobrado - this.totales.totalACobrar;
   if (diferencia > 0) {
     this.totales.vuelto = diferencia;
     this.totales.saldoPendiente = 0;

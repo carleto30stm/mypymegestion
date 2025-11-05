@@ -11,6 +11,7 @@ import ventasReducer from './slices/ventasSlice';
 import facturasReducer from './slices/facturasSlice';
 import remitosReducer from './slices/remitosSlice';
 import recibosReducer from './slices/recibosSlice';
+import cuentaCorrienteReducer from './slices/cuentaCorrienteSlice';
 
 // Configurar el logger solo en desarrollo
 const logger = createLogger({
@@ -35,6 +36,7 @@ export const store = configureStore({
     facturas: facturasReducer,
     remitos: remitosReducer,
     recibos: recibosReducer,
+    cuentaCorriente: cuentaCorrienteReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

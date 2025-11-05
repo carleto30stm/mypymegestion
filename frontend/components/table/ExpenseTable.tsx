@@ -182,6 +182,19 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
     { field: 'rubro', headerName: 'Rubro', width: 150 },
     { field: 'subRubro', headerName: 'Sub-Rubro', width: 150 },
     { field: 'medioDePago', headerName: 'Medio de Pago', width: 140 },
+    { 
+      field: 'numeroCheque', 
+      headerName: 'Nro. Cheque', 
+      width: 120,
+      renderCell: (params) => {
+        const gasto = params.row as Gasto;
+        // Solo mostrar si es un medio de pago con cheque
+        if (gasto.medioDePago?.includes('CHEQUE') && gasto.numeroCheque) {
+          return <Typography variant="body2" sx={{ fontWeight: 500 }}>{gasto.numeroCheque}</Typography>;
+        }
+        return <Typography variant="body2" color="text.disabled">-</Typography>;
+      }
+    },
     { field: 'clientes', headerName: 'Clientes', width: 160 },
     { field: 'detalleGastos', headerName: 'Detalle', flex: 1, minWidth: 200 },
     { field: 'comentario', headerName: 'Comentario', width: 200 },
