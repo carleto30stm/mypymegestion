@@ -52,12 +52,6 @@ const productoSchema = new mongoose.Schema<IProducto>({
     type: Number,
     required: [true, 'El precio de venta es requerido'],
     min: [0, 'El precio de venta debe ser mayor o igual a 0'],
-    validate: {
-      validator: function(this: IProducto, value: number) {
-        return value >= this.precioCompra;
-      },
-      message: 'El precio de venta debe ser mayor o igual al precio de compra'
-    }
   },
   stock: {
     type: Number,

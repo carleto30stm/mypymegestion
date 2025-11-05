@@ -9,6 +9,9 @@ export const MEDIOS_PAGO_GASTOS = ['CHEQUE TERCERO', 'CHEQUE PROPIO', 'EFECTIVO'
 // Medios de pago para sistema de cobranza (más específico)
 export const MEDIOS_PAGO = ['EFECTIVO', 'TRANSFERENCIA', 'CHEQUE', 'TARJETA_DEBITO', 'TARJETA_CREDITO', 'CUENTA_CORRIENTE'] as const;
 
+// Estados de Ventas
+export const ESTADOS_VENTA = ['pendiente', 'confirmada', 'anulada', 'parcial'] as const;
+
 // Estados de entrega para ventas y remitos
 export const ESTADOS_ENTREGA = ['sin_remito', 'remito_generado', 'en_transito', 'entregado', 'devuelto'] as const;
 
@@ -157,6 +160,7 @@ export interface Gasto {
   estado?: 'activo' | 'cancelado';
   confirmado?: boolean; // Para cheques: false = pendiente, true = confirmado/cobrado
   // Nuevos campos para manejo de cheques de terceros
+  numeroCheque?: string;
   estadoCheque?: 'recibido' | 'depositado' | 'pagado_proveedor' | 'endosado';
   chequeRelacionadoId?: string;
   entrada?: number;
@@ -257,6 +261,7 @@ export interface Venta {
   fecha: string;
   clienteId: string;
   nombreCliente: string;
+  creadoPor: string;
   documentoCliente: string;
   items: ItemVenta[];
   subtotal: number;
@@ -266,7 +271,7 @@ export interface Venta {
   medioPago: typeof MEDIOS_PAGO_GASTOS[number];
   detallesPago?: string;
   banco?: typeof BANCOS[number];
-  estado: 'pendiente' | 'confirmada' | 'anulada' | 'parcial';
+  estado: typeof ESTADOS_VENTA[number];
   observaciones?: string;
   vendedor: string;
   gastoRelacionadoId?: string;
@@ -274,6 +279,8 @@ export interface Venta {
   fechaActualizacion?: string;
   fechaAnulacion?: string;
   motivoAnulacion?: string;
+  usuarioAnulacion?: string;
+  usuarioConfirmacion?: string;
   
   // Campos fiscales
   aplicaIVA: boolean;
@@ -681,12 +688,12 @@ export interface DatosCheque {
 
 // Interface para datos de transferencia
 export interface DatosTransferencia {
-  numeroOperacion: string;
-  banco: string;
+  numeroOperacion: string; // Número de transacción/orden bancaria
   fechaTransferencia: string;
   cuentaOrigen?: string;
   cuentaDestino?: string;
   observaciones?: string;
+  // NOTA: El banco destino va en FormaPago.banco (la caja donde impacta)
 }
 
 // Interface para datos de tarjeta
@@ -779,18 +786,28 @@ export interface EstadisticasCobranza {
   };
 }
 
-// Interface para cuenta corriente de cliente
+// ========== SISTEMA DE CUENTA CORRIENTE ==========
+
+// Interface para movimientos de cuenta corriente
 export interface MovimientoCuentaCorriente {
   _id?: string;
+  clienteId: string;
   fecha: string;
-  tipo: 'venta' | 'recibo' | 'nota_credito' | 'ajuste';
+  tipo: 'venta' | 'recibo' | 'nota_credito' | 'nota_debito' | 'ajuste_cargo' | 'ajuste_descuento';
   documentoTipo: string;
   documentoNumero: string;
-  documentoId: string;
+  documentoId?: string;
   concepto: string;
+  observaciones?: string;
   debe: number;
   haber: number;
   saldo: number;
+  creadoPor?: string;
+  anulado: boolean;
+  fechaAnulacion?: string;
+  motivoAnulacion?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // Interface para resumen de cuenta corriente
@@ -800,8 +817,64 @@ export interface ResumenCuentaCorriente {
   limiteCredito: number;
   saldoActual: number;
   saldoDisponible: number;
-  ventasPendientes: number;
-  montoVencido: number;
-  movimientos: MovimientoCuentaCorriente[];
+  totalDebe: number;
+  totalHaber: number;
   estadoCuenta: 'al_dia' | 'proximo_limite' | 'limite_excedido' | 'moroso';
+  porcentajeUso: number;
+  movimientosPorTipo: Array<{
+    _id: string;
+    cantidad: number;
+    monto: number;
+  }>;
+  fechaUltimoMovimiento: string | null;
+}
+
+// Interface para antigüedad de deuda
+export interface AntiguedadDeuda {
+  clienteId: string;
+  nombreCliente: string;
+  total: number;
+  antiguedad: {
+    corriente: {
+      monto: number;
+      cantidad: number;
+      items: Array<{
+        documentoNumero: string;
+        fecha: string;
+        diasVencidos: number;
+        monto: number;
+      }>;
+    };
+    treintaDias: {
+      monto: number;
+      cantidad: number;
+      items: Array<{
+        documentoNumero: string;
+        fecha: string;
+        diasVencidos: number;
+        monto: number;
+      }>;
+    };
+    sesentaDias: {
+      monto: number;
+      cantidad: number;
+      items: Array<{
+        documentoNumero: string;
+        fecha: string;
+        diasVencidos: number;
+        monto: number;
+      }>;
+    };
+    noventaDias: {
+      monto: number;
+      cantidad: number;
+      items: Array<{
+        documentoNumero: string;
+        fecha: string;
+        diasVencidos: number;
+        monto: number;
+      }>;
+    };
+  };
+  alerta: string | null;
 }

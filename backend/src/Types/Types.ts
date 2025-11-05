@@ -28,3 +28,9 @@ export const CAJAS = ['PROVINCIA', 'SANTANDER', 'EFECTIVO', 'FCI', 'RESERVA'] as
 
 export const UNIDADES_MEDIDA = ['UNIDAD', 'KG', 'LITRO', 'METRO', 'CAJA', 'PAQUETE'] as const;
 
+// Estados de Ventas
+export const ESTADOS_VENTA = ['pendiente', 'confirmada', 'anulada', 'parcial'] as const;
+export const ESTADOS_ENTREGA = ['sin_remito', 'remito_generado', 'en_transito', 'entregado', 'devuelto'] as const;
+export const ESTADOS_COBRANZA = ['sin_cobrar', 'parcialmente_cobrado', 'cobrado'] as const;
+export const ESTADOS_CHEQUE = ['recibido', 'depositado', 'cobrado', 'rechazado', 'endosado'] as const;
+

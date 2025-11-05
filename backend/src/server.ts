@@ -20,6 +20,7 @@ import recetasRoutes from './routes/recetas.js';
 import ordenesProduccionRoutes from './routes/ordenesProduccion.js';
 import remitosRoutes from './routes/remitos.js';
 import recibosRoutes from './routes/recibos.js';
+import cuentaCorrienteRoutes from './routes/cuentaCorriente.js';
 
 dotenv.config();
 
@@ -93,6 +94,7 @@ const start = async () => {
     app.use('/api/ordenes-produccion', ordenesProduccionRoutes);
     app.use('/api/remitos', remitosRoutes);
     app.use('/api/recibos', recibosRoutes);
+    app.use('/api/cuenta-corriente', cuentaCorrienteRoutes);
 
     const env = process.env.NODE_ENV || 'development';
     app.listen(PORT, () => {

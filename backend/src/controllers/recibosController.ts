@@ -3,6 +3,8 @@ import mongoose from 'mongoose';
 import ReciboPago from '../models/ReciboPago.js';
 import Venta from '../models/Venta.js';
 import Gasto from '../models/Gasto.js';
+import Cliente from '../models/Cliente.js';
+import MovimientoCuentaCorriente from '../models/MovimientoCuentaCorriente.js';
 
 // @desc    Obtener todos los recibos con filtros
 // @route   GET /api/recibos
@@ -99,9 +101,9 @@ export const crearRecibo = async (req: ExpressRequest, res: ExpressResponse) => 
     } = req.body;
 
     // Validaciones básicas
-    if (!clienteId || !ventasIds || !Array.isArray(ventasIds) || ventasIds.length === 0) {
+    if (!clienteId) {
       await session.abortTransaction();
-      return res.status(400).json({ message: 'Cliente y ventas son obligatorios' });
+      return res.status(400).json({ message: 'Cliente es obligatorio' });
     }
 
     if (!formasPago || !Array.isArray(formasPago) || formasPago.length === 0) {
@@ -114,115 +116,173 @@ export const crearRecibo = async (req: ExpressRequest, res: ExpressResponse) => 
       return res.status(400).json({ message: 'El creador es obligatorio' });
     }
 
-    // Obtener las ventas
-    const ventas = await Venta.find({ _id: { $in: ventasIds } }).session(session);
+    // Verificar si es un pago de regularización (sin ventas específicas) o cobro de ventas
+    const esRegularizacion = !ventasIds || !Array.isArray(ventasIds) || ventasIds.length === 0;
 
-    if (ventas.length !== ventasIds.length) {
-      await session.abortTransaction();
-      return res.status(404).json({ message: 'Una o más ventas no fueron encontradas' });
-    }
+    let ventas: any[] = [];
+    let ventasRelacionadas: any[] = [];
+    let totalACobrar = 0;
 
-    // Validar que todas las ventas pertenezcan al mismo cliente
-    const clientesUnicos = [...new Set(ventas.map((v: any) => v.clienteId.toString()))];
-    if (clientesUnicos.length > 1) {
-      await session.abortTransaction();
-      return res.status(400).json({ message: 'Todas las ventas deben pertenecer al mismo cliente' });
-    }
+    if (!esRegularizacion) {
+      // Es un cobro de ventas específicas
+      ventas = await Venta.find({ _id: { $in: ventasIds } }).session(session);
 
-    if (clientesUnicos[0] !== clienteId) {
-      await session.abortTransaction();
-      return res.status(400).json({ message: 'Las ventas no pertenecen al cliente especificado' });
+      if (ventas.length !== ventasIds.length) {
+        await session.abortTransaction();
+        return res.status(404).json({ message: 'Una o más ventas no fueron encontradas' });
+      }
+
+      // Validar que todas las ventas pertenezcan al mismo cliente
+      const clientesUnicos = [...new Set(ventas.map((v: any) => v.clienteId.toString()))];
+      if (clientesUnicos.length > 1) {
+        await session.abortTransaction();
+        return res.status(400).json({ message: 'Todas las ventas deben pertenecer al mismo cliente' });
+      }
+
+      if (clientesUnicos[0] !== clienteId) {
+        await session.abortTransaction();
+        return res.status(400).json({ message: 'Las ventas no pertenecen al cliente especificado' });
+      }
     }
 
     // Calcular totales
     const totalFormasPago = formasPago.reduce((sum: number, fp: any) => sum + fp.monto, 0);
-    let totalACobrar = 0;
-    const ventasRelacionadas = [];
 
-    for (const venta of ventas) {
-      const saldoAnterior = venta.saldoPendiente;
-      
-      if (saldoAnterior <= 0) {
-        await session.abortTransaction();
-        return res.status(400).json({ 
-          message: `La venta ${venta.numeroVenta} no tiene saldo pendiente` 
+    if (!esRegularizacion) {
+      // Solo validar y distribuir si hay ventas específicas
+      for (const venta of ventas) {
+        const saldoAnterior = venta.saldoPendiente;
+        
+        if (saldoAnterior <= 0) {
+          await session.abortTransaction();
+          return res.status(400).json({ 
+            message: `La venta ${venta.numeroVenta} no tiene saldo pendiente` 
+          });
+        }
+
+        totalACobrar += saldoAnterior;
+
+        ventasRelacionadas.push({
+          ventaId: venta._id as mongoose.Types.ObjectId,
+          numeroVenta: venta.numeroVenta || (venta._id as mongoose.Types.ObjectId).toString(),
+          montoOriginal: venta.total,
+          saldoAnterior: saldoAnterior,
+          montoCobrado: 0, // Se calculará después
+          saldoRestante: 0  // Se calculará después
         });
       }
 
-      totalACobrar += saldoAnterior;
-
-      ventasRelacionadas.push({
-        ventaId: venta._id as mongoose.Types.ObjectId,
-        numeroVenta: venta.numeroVenta || (venta._id as mongoose.Types.ObjectId).toString(),
-        montoOriginal: venta.total,
-        saldoAnterior: saldoAnterior,
-        montoCobrado: 0, // Se calculará después
-        saldoRestante: 0  // Se calculará después
-      });
-    }
-
-    // Distribuir el pago entre las ventas
-    let montoPendienteDistribuir = totalFormasPago;
-    
-    for (let i = 0; i < ventasRelacionadas.length; i++) {
-      const ventaRel = ventasRelacionadas[i];
-      const venta = ventas[i];
+      // Distribuir el pago entre las ventas
+      let montoPendienteDistribuir = totalFormasPago;
       
-      if (!ventaRel || !venta) continue;
-      if (montoPendienteDistribuir <= 0) break;
+      for (let i = 0; i < ventasRelacionadas.length; i++) {
+        const ventaRel = ventasRelacionadas[i];
+        const venta = ventas[i];
+        
+        if (!ventaRel || !venta) continue;
+        if (montoPendienteDistribuir <= 0) break;
+        
+        const montoCobrado = Math.min(ventaRel.saldoAnterior, montoPendienteDistribuir);
+        ventaRel.montoCobrado = montoCobrado;
+        ventaRel.saldoRestante = ventaRel.saldoAnterior - montoCobrado;
+        
+        montoPendienteDistribuir -= montoCobrado;
       
-      const montoCobrado = Math.min(ventaRel.saldoAnterior, montoPendienteDistribuir);
-      ventaRel.montoCobrado = montoCobrado;
-      ventaRel.saldoRestante = ventaRel.saldoAnterior - montoCobrado;
-      
-      montoPendienteDistribuir -= montoCobrado;
-      
-      // Actualizar venta
-      venta.montoCobrado += montoCobrado;
-      venta.saldoPendiente = ventaRel.saldoRestante;
-      
-      // Actualizar estado de cobranza
-      if (venta.saldoPendiente === 0) {
-        venta.estadoCobranza = 'cobrado';
-      } else if (venta.montoCobrado > 0) {
-        venta.estadoCobranza = 'parcialmente_cobrado';
+        // Actualizar venta
+        venta.montoCobrado += montoCobrado;
+        venta.saldoPendiente = ventaRel.saldoRestante;
+        
+        // Actualizar estado de cobranza
+        if (venta.saldoPendiente === 0) {
+          venta.estadoCobranza = 'cobrado';
+        } else if (venta.montoCobrado > 0) {
+          venta.estadoCobranza = 'parcialmente_cobrado';
+        }
+        
+        await venta.save({ session });
       }
-      
-      await venta.save({ session });
     }
 
-    // Obtener datos del cliente de la primera venta
-    const primeraVenta = ventas[0];
-    
-    if (!primeraVenta) {
+    // Obtener datos del cliente
+    const cliente = await Cliente.findById(clienteId).session(session);
+    if (!cliente) {
       await session.abortTransaction();
-      return res.status(400).json({ message: 'No se encontraron ventas válidas' });
+      return res.status(404).json({ message: 'Cliente no encontrado' });
     }
+
+    const nombreCliente = cliente.razonSocial || `${cliente.apellido || ''} ${cliente.nombre}`.trim();
+    const documentoCliente = cliente.numeroDocumento;
     
     // Crear el recibo
     const nuevoRecibo = new ReciboPago({
       fecha: new Date(),
       clienteId,
-      nombreCliente: primeraVenta.nombreCliente,
-      documentoCliente: primeraVenta.documentoCliente,
+      nombreCliente,
+      documentoCliente,
       ventasRelacionadas,
       formasPago,
       totales: {
-        totalACobrar,
+        totalACobrar: esRegularizacion ? totalFormasPago : totalACobrar,
         totalCobrado: totalFormasPago,
-        vuelto: totalFormasPago > totalACobrar ? totalFormasPago - totalACobrar : 0,
-        saldoPendiente: totalFormasPago < totalACobrar ? totalACobrar - totalFormasPago : 0
+        vuelto: esRegularizacion ? 0 : (totalFormasPago > totalACobrar ? totalFormasPago - totalACobrar : 0),
+        saldoPendiente: esRegularizacion ? 0 : (totalFormasPago < totalACobrar ? totalACobrar - totalFormasPago : 0)
       },
-      momentoCobro: momentoCobro || 'diferido',
+      momentoCobro: momentoCobro || 'diferido', // Siempre 'diferido' si no se especifica
       estadoRecibo: 'activo',
-      observaciones,
+      observaciones: observaciones || (esRegularizacion ? 'Regularización de deuda - Pago directo' : ''),
       creadoPor
     });
 
     const reciboGuardado = await nuevoRecibo.save({ session });
 
+    // IMPORTANTE: Solo registrar movimiento en cuenta corriente si hay cobros REALES
+    // Si todas las formas de pago son CUENTA_CORRIENTE, NO hay cobro físico (solo ajuste de estado)
+    // El MovimientoCuentaCorriente con debe ya se creó al confirmar la venta
+    const formasPagoReales = formasPago.filter(fp => fp.medioPago !== 'CUENTA_CORRIENTE');
+    const totalCobradoReal = formasPagoReales.reduce((sum, fp) => sum + fp.monto, 0);
+
+    // Solo si hay cobros reales (efectivo, cheque, transferencia), registrar en cuenta corriente
+    if (totalCobradoReal > 0) {
+      const ultimoMovimiento = await MovimientoCuentaCorriente.findOne({
+        clienteId,
+        anulado: false
+      }).sort({ fecha: -1, createdAt: -1 }).session(session);
+
+      const saldoAnterior = ultimoMovimiento?.saldo || 0;
+      const nuevoSaldo = saldoAnterior - totalCobradoReal; // Cobro reduce la deuda
+
+      await MovimientoCuentaCorriente.create([{
+        clienteId,
+        fecha: new Date(),
+        tipo: 'recibo',
+        documentoTipo: 'RECIBO',
+        documentoNumero: reciboGuardado.numeroRecibo || 'PENDIENTE',
+        documentoId: reciboGuardado._id,
+        concepto: `Recibo #${reciboGuardado.numeroRecibo || 'PENDIENTE'} - ${ventasRelacionadas.length} ventas cobradas`,
+        debe: 0,
+        haber: totalCobradoReal,
+        saldo: nuevoSaldo,
+        creadoPor,
+        anulado: false
+      }], { session });
+
+      // Actualizar saldo del cliente
+      await Cliente.findByIdAndUpdate(
+        clienteId,
+        { saldoCuenta: nuevoSaldo },
+        { session }
+      );
+    }
+
     // Registrar cada forma de pago como un Gasto de tipo entrada (ingreso)
+    // IMPORTANTE: NO registrar Gasto si es CUENTA_CORRIENTE (no hay ingreso físico de dinero)
     for (const formaPago of formasPago) {
+      // Si es cuenta corriente, solo se registra en MovimientoCuentaCorriente (ya hecho arriba)
+      // NO crear Gasto porque el dinero no ingresó a caja
+      if (formaPago.medioPago === 'CUENTA_CORRIENTE') {
+        continue; // Saltar este medio de pago
+      }
+
       // Determinar el banco/caja según el medio de pago
       let bancoDestino = 'EFECTIVO'; // Por defecto efectivo
       
@@ -236,14 +296,28 @@ export const crearRecibo = async (req: ExpressRequest, res: ExpressResponse) => 
         bancoDestino = formaPago.banco || 'SANTANDER';
       }
 
+      // Mapear medioPago de ReciboPago al enum MEDIO_PAGO de Gasto
+      // ReciboPago usa: 'CHEQUE', 'TARJETA_DEBITO', 'TARJETA_CREDITO'
+      // Gasto usa: 'CHEQUE TERCERO', 'TARJETA DÉBITO', 'TARJETA CRÉDITO'
+      let medioPagoGasto = formaPago.medioPago;
+      if (formaPago.medioPago === 'CHEQUE') {
+        // Por defecto asumir CHEQUE TERCERO (el cliente paga con cheque)
+        medioPagoGasto = 'CHEQUE TERCERO';
+      } else if (formaPago.medioPago === 'TARJETA_DEBITO') {
+        medioPagoGasto = 'TARJETA DÉBITO';
+      } else if (formaPago.medioPago === 'TARJETA_CREDITO') {
+        medioPagoGasto = 'TARJETA CRÉDITO';
+      }
+
       // Crear un Gasto de tipo entrada (ingreso) en la tabla de gastos
       await Gasto.create([{
         fecha: new Date(),
         rubro: 'COBRO.VENTA',
         subRubro: 'COBRO',
-        medioDePago: formaPago.medioPago,
-        clientes: primeraVenta.nombreCliente,
-        detalleGastos: `Cobranza recibo ${reciboGuardado.numeroRecibo || 'PENDIENTE'} - ${primeraVenta.nombreCliente}${formaPago.observaciones ? ` - ${formaPago.observaciones}` : ''}`,
+        medioDePago: medioPagoGasto,
+        numeroCheque: formaPago.medioPago === 'CHEQUE' && formaPago.datosCheque ? formaPago.datosCheque.numeroCheque : undefined,
+        clientes: nombreCliente,
+        detalleGastos: `Cobranza recibo ${reciboGuardado.numeroRecibo || 'PENDIENTE'} - ${nombreCliente}${formaPago.observaciones ? ` - ${formaPago.observaciones}` : ''}`,
         tipoOperacion: 'entrada',
         comentario: observaciones || `Recibo ${reciboGuardado.numeroRecibo || 'PENDIENTE'}`,
         estado: 'activo',
@@ -251,19 +325,19 @@ export const crearRecibo = async (req: ExpressRequest, res: ExpressResponse) => 
         entrada: formaPago.monto,
         salida: 0,
         banco: bancoDestino
-      }], { session });
-
-      console.log(`✅ Ingreso registrado: ${formaPago.medioPago} $${formaPago.monto} en ${bancoDestino}`);
+      }], { session })
     }
 
-    // Actualizar referencias en ventas
-    for (const venta of ventas) {
-      if (!venta.recibosRelacionados) {
-        venta.recibosRelacionados = [];
+    // Actualizar referencias en ventas (solo si no es regularización)
+    if (!esRegularizacion) {
+      for (const venta of ventas) {
+        if (!venta.recibosRelacionados) {
+          venta.recibosRelacionados = [];
+        }
+        venta.recibosRelacionados.push(reciboGuardado._id as mongoose.Types.ObjectId);
+        venta.ultimaCobranza = new Date();
+        await venta.save({ session });
       }
-      venta.recibosRelacionados.push(reciboGuardado._id as mongoose.Types.ObjectId);
-      venta.ultimaCobranza = new Date();
-      await venta.save({ session });
     }
 
     await session.commitTransaction();

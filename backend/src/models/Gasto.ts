@@ -79,6 +79,12 @@ const gastoSchema = new mongoose.Schema({
     }
   },
   // Nuevos campos para manejo de cheques
+  numeroCheque: {
+    type: String,
+    trim: true,
+    uppercase: true,
+    default: null // Solo se llena cuando medioDePago incluye 'CHEQUE'
+  },
   estadoCheque: {
     type: String,
     enum: ['recibido', 'depositado', 'pagado_proveedor', 'endosado'],

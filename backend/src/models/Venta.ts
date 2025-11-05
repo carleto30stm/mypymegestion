@@ -1,7 +1,19 @@
 import mongoose, { Document, Schema } from 'mongoose';
-import { CAJAS, MEDIO_PAGO } from '../Types/Types.js';
+import { 
+  CAJAS, 
+  MEDIO_PAGO, 
+  ESTADOS_VENTA, 
+  ESTADOS_ENTREGA, 
+  ESTADOS_COBRANZA, 
+  ESTADOS_CHEQUE 
+} from '../Types/Types.js';
+
 type MedioPago = typeof MEDIO_PAGO[number];
 type Cajas = typeof CAJAS[number];
+type EstadoVenta = typeof ESTADOS_VENTA[number];
+type EstadoEntrega = typeof ESTADOS_ENTREGA[number];
+type EstadoCobranza = typeof ESTADOS_COBRANZA[number];
+type EstadoCheque = typeof ESTADOS_CHEQUE[number];
 
 // Interface para item de venta
 export interface IItemVenta {
@@ -30,7 +42,7 @@ export interface IVenta extends Document {
   medioPago: MedioPago;
   detallesPago?: string; // Para pagos mixtos o información adicional
   banco?: Cajas;
-  estado: 'pendiente' | 'confirmada' | 'anulada' | 'parcial'; // parcial para cuenta corriente
+  estado: EstadoVenta;
   observaciones?: string;
   vendedor: string; // Usuario que realizó la venta
   gastoRelacionadoId?: mongoose.Types.ObjectId; // Relación con tabla Gasto
@@ -38,6 +50,9 @@ export interface IVenta extends Document {
   fechaActualizacion: Date;
   fechaAnulacion?: Date;
   motivoAnulacion?: string;
+  usuarioAnulacion?: string; // Usuario que realizó la anulación
+  usuarioConfirmacion?: string; // Usuario que confirmó la venta
+  creadoPor?: string; // Usuario que creó la venta
   
   // Campos fiscales
   aplicaIVA: boolean;
@@ -52,19 +67,19 @@ export interface IVenta extends Document {
     fechaEmision: Date;
     fechaVencimiento: Date;
     monto: number;
-    estadoCheque: 'recibido' | 'depositado' | 'cobrado' | 'rechazado' | 'endosado';
+    estadoCheque: EstadoCheque;
     fechaDeposito?: Date;
     observaciones?: string;
   };
   
   // Campos para remito y entrega
-  estadoEntrega: 'sin_remito' | 'remito_generado' | 'en_transito' | 'entregado' | 'devuelto';
+  estadoEntrega: EstadoEntrega;
   remitoId?: mongoose.Types.ObjectId;
   direccionEntrega?: string;
   fechaEntrega?: Date;
   
   // Campos para cobranza
-  estadoCobranza: 'sin_cobrar' | 'parcialmente_cobrado' | 'cobrado';
+  estadoCobranza: EstadoCobranza;
   montoCobrado: number;
   saldoPendiente: number;
   recibosRelacionados?: mongoose.Types.ObjectId[];
@@ -189,7 +204,7 @@ const VentaSchema = new Schema({
   estado: {
     type: String,
     required: [true, 'El estado es requerido'],
-    enum: ['pendiente', 'confirmada', 'anulada', 'parcial'],
+    enum: ESTADOS_VENTA,
     default: 'pendiente'
   },
   observaciones: {
@@ -221,6 +236,14 @@ const VentaSchema = new Schema({
     type: String,
     trim: true,
     maxlength: [500, 'El motivo de anulación no puede exceder 500 caracteres']
+  },
+  usuarioAnulacion: {
+    type: String,
+    trim: true
+  },
+  usuarioConfirmacion: {
+    type: String,
+    trim: true
   },
   // Campos fiscales
   aplicaIVA: {
@@ -256,7 +279,7 @@ const VentaSchema = new Schema({
     monto: Number,
     estadoCheque: {
       type: String,
-      enum: ['recibido', 'depositado', 'cobrado', 'rechazado', 'endosado'],
+      enum: ESTADOS_CHEQUE,
       default: 'recibido'
     },
     fechaDeposito: Date,
@@ -269,7 +292,7 @@ const VentaSchema = new Schema({
   // Campos para remito y entrega
   estadoEntrega: {
     type: String,
-    enum: ['sin_remito', 'remito_generado', 'en_transito', 'entregado', 'devuelto'],
+    enum: ESTADOS_ENTREGA,
     default: 'sin_remito'
   },
   remitoId: {
@@ -285,7 +308,7 @@ const VentaSchema = new Schema({
   // Campos para cobranza
   estadoCobranza: {
     type: String,
-    enum: ['sin_cobrar', 'parcialmente_cobrado', 'cobrado'],
+    enum: ESTADOS_COBRANZA,
     default: 'sin_cobrar'
   },
   montoCobrado: {
@@ -361,6 +384,11 @@ VentaSchema.index({ fecha: -1 });
 VentaSchema.index({ clienteId: 1 });
 VentaSchema.index({ estado: 1 });
 VentaSchema.index({ vendedor: 1 });
+// Índices compuestos para búsquedas combinadas
+VentaSchema.index({ clienteId: 1, fecha: -1 }); // Ventas de un cliente ordenadas por fecha
+VentaSchema.index({ estado: 1, fecha: -1 }); // Ventas por estado y fecha
+VentaSchema.index({ estadoCobranza: 1, fecha: -1 }); // Ventas pendientes de cobro
+VentaSchema.index({ estadoEntrega: 1, fecha: -1 }); // Ventas por estado de entrega
 
 const Venta = mongoose.model<IVenta>('Venta', VentaSchema);
 

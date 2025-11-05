@@ -3,6 +3,7 @@ import Venta from '../models/Venta.js';
 import Producto from '../models/Producto.js';
 import Cliente from '../models/Cliente.js';
 import Gasto from '../models/Gasto.js';
+import MovimientoCuentaCorriente from '../models/MovimientoCuentaCorriente.js';
 import mongoose from 'mongoose';
 
 // @desc    Obtener todas las ventas
@@ -204,11 +205,16 @@ export const anularVenta = async (req: ExpressRequest, res: ExpressResponse) => 
     session.startTransaction();
 
     try {
-        const { motivoAnulacion } = req.body;
+        const { motivoAnulacion, usuarioAnulacion } = req.body;
 
         if (!motivoAnulacion) {
             await session.abortTransaction();
             return res.status(400).json({ message: 'El motivo de anulación es requerido' });
+        }
+
+        if (!usuarioAnulacion) {
+            await session.abortTransaction();
+            return res.status(400).json({ message: 'El usuario que anula es requerido' });
         }
 
         const venta = await Venta.findById(req.params.id).session(session);
@@ -261,6 +267,7 @@ export const anularVenta = async (req: ExpressRequest, res: ExpressResponse) => 
         venta.estado = 'anulada';
         venta.fechaAnulacion = new Date();
         venta.motivoAnulacion = motivoAnulacion;
+        venta.usuarioAnulacion = usuarioAnulacion;
         await venta.save({ session });
 
         await session.commitTransaction();
@@ -429,30 +436,82 @@ export const getEstadisticasVentas = async (req: ExpressRequest, res: ExpressRes
 // @desc    Confirmar una venta pendiente
 // @access  Private (admin/oper_ad)
 export const confirmarVenta = async (req: ExpressRequest, res: ExpressResponse) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
     try {
         const { id } = req.params;
+        const {creadoPor, usuarioConfirmacion } = req.body;
+        const userId = req.user?._id;
 
-        const venta = await Venta.findById(id);
+        if (!usuarioConfirmacion) {
+            await session.abortTransaction();
+            res.status(400).json({ message: 'El usuario de confirmación es requerido' });
+            return;
+        }
+
+        const venta = await Venta.findById(id).session(session);
 
         if (!venta) {
+            await session.abortTransaction();
             res.status(404).json({ message: 'Venta no encontrada' });
             return;
         }
 
         if (venta.estado !== 'pendiente') {
+            await session.abortTransaction();
             res.status(400).json({ message: `No se puede confirmar una venta en estado ${venta.estado}` });
             return;
         }
 
         venta.estado = 'confirmada';
-        await venta.save();
+        venta.creadoPor = creadoPor;
+        venta.usuarioConfirmacion = usuarioConfirmacion;
+        await venta.save({ session });
+
+        // Registrar movimiento en cuenta corriente
+        // Obtener saldo anterior del cliente
+        const ultimoMovimiento = await MovimientoCuentaCorriente.findOne({
+            clienteId: venta.clienteId,
+            anulado: false
+        }).sort({ fecha: -1, createdAt: -1 }).session(session);
+
+        const saldoAnterior = ultimoMovimiento?.saldo || 0;
+        const nuevoSaldo = saldoAnterior + venta.total;
+
+        await MovimientoCuentaCorriente.create([{
+            clienteId: venta.clienteId,
+            fecha: venta.fecha,
+            tipo: 'venta',
+            documentoTipo: 'VENTA',
+            documentoNumero: venta.numeroVenta,
+            documentoId: venta._id,
+            concepto: `Venta #${venta.numeroVenta} - ${venta.items.length} items`,
+            debe: venta.total,
+            haber: 0,
+            saldo: nuevoSaldo,
+            creadoPor: userId,
+            anulado: false
+        }], { session });
+
+        // Actualizar saldo del cliente
+        await Cliente.findByIdAndUpdate(
+            venta.clienteId,
+            { saldoCuenta: nuevoSaldo },
+            { session }
+        );
+
+        await session.commitTransaction();
 
         res.json({
-            message: 'Venta confirmada exitosamente',
+            message: 'Venta confirmada exitosamente y registrada en cuenta corriente',
             venta
         });
     } catch (error: any) {
+        await session.abortTransaction();
         console.error('Error al confirmar venta:', error);
         res.status(500).json({ message: error.message || 'Error al confirmar venta' });
+    } finally {
+        session.endSession();
     }
 };

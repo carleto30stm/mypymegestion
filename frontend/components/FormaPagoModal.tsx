@@ -31,6 +31,7 @@ interface FormaPagoModalProps {
   montoTotal: number;
   cliente?: Cliente;
   onConfirm: (formasPago: FormaPago[]) => void;
+  permitirPagoParcial?: boolean; // Nuevo prop para permitir pagos menores al total
 }
 
 const FormaPagoModal: React.FC<FormaPagoModalProps> = ({
@@ -38,7 +39,8 @@ const FormaPagoModal: React.FC<FormaPagoModalProps> = ({
   onClose,
   montoTotal,
   cliente,
-  onConfirm
+  onConfirm,
+  permitirPagoParcial = false
 }) => {
   const [formasPago, setFormasPago] = useState<FormaPago[]>([
     {
@@ -48,6 +50,58 @@ const FormaPagoModal: React.FC<FormaPagoModalProps> = ({
   ]);
 
   const [errores, setErrores] = useState<string[]>([]);
+  const [montoTransferenciaFormatted, setMontoTransferenciaFormatted] = useState('');
+
+  // Función para formatear el número mientras se escribe (con decimales)
+  const formatNumberInput = (value: string): string => {
+    // Si el valor está vacío, retornar vacío
+    if (!value) return '';
+    
+    // Permitir solo números y una coma
+    const cleanValue = value.replace(/[^\d,]/g, '');
+    
+    // Si solo hay una coma al final, permitirla
+    if (cleanValue === ',') return '';
+    
+    // Dividir por la coma (separador decimal argentino)
+    const parts = cleanValue.split(',');
+    
+    // Solo permitir una coma
+    if (parts.length > 2) {
+      // Si hay más de una coma, tomar solo las primeras dos partes
+      parts.splice(2);
+    }
+    
+    // Parte entera
+    let integerPart = parts[0] || '';
+    
+    // Formatear la parte entera con puntos cada tres dígitos (solo si tiene valor)
+    if (integerPart.length > 0) {
+      const num = parseInt(integerPart, 10);
+      if (!isNaN(num) && num > 0) {
+        integerPart = num.toLocaleString('es-AR');
+      } else if (integerPart === '0') {
+        integerPart = '0';
+      }
+    }
+    
+    // Parte decimal (máximo 2 dígitos)
+    let decimalPart = parts[1];
+    if (decimalPart !== undefined) {
+      if (decimalPart.length > 2) {
+        decimalPart = decimalPart.substring(0, 2);
+      }
+      // Si hay parte decimal (incluso vacía), agregar la coma
+      return `${integerPart},${decimalPart}`;
+    }
+    
+    // Si termina con coma en el input original, mantenerla
+    if (value.endsWith(',') && parts.length === 2) {
+      return `${integerPart},`;
+    }
+    
+    return integerPart;
+  };
 
   // Resetear al abrir el modal
   useEffect(() => {
@@ -152,7 +206,6 @@ const FormaPagoModal: React.FC<FormaPagoModalProps> = ({
     if (!nuevasFormas[index].datosTransferencia) {
       nuevasFormas[index].datosTransferencia = {
         numeroOperacion: '',
-        banco: '',
         fechaTransferencia: new Date().toISOString().split('T')[0]
       };
     }
@@ -188,9 +241,14 @@ const FormaPagoModal: React.FC<FormaPagoModalProps> = ({
       nuevosErrores.push('Debe agregar al menos una forma de pago');
     }
 
-    // Validar que el total pagado sea suficiente
-    if (totalPagado < montoTotal) {
+    // Validar que el total pagado sea suficiente (solo si no se permite pago parcial)
+    if (!permitirPagoParcial && totalPagado < montoTotal) {
       nuevosErrores.push(`El total pagado (${formatCurrency(totalPagado)}) es menor al monto a cobrar (${formatCurrency(montoTotal)})`);
+    }
+
+    // Si se permite pago parcial, validar que al menos se pague algo
+    if (permitirPagoParcial && totalPagado <= 0) {
+      nuevosErrores.push('Debe registrar al menos un pago mayor a cero');
     }
 
     // Validar cada forma de pago
@@ -221,14 +279,14 @@ const FormaPagoModal: React.FC<FormaPagoModalProps> = ({
 
       // Validar datos de transferencia
       if (fp.medioPago === 'TRANSFERENCIA') {
+        if (!fp.banco) {
+          nuevosErrores.push(`Forma de pago ${index + 1}: Debe seleccionar la caja de destino`);
+        }
         if (!fp.datosTransferencia) {
           nuevosErrores.push(`Forma de pago ${index + 1}: Debe completar los datos de la transferencia`);
         } else {
           if (!fp.datosTransferencia.numeroOperacion) {
-            nuevosErrores.push(`Forma de pago ${index + 1}: El número de operación es obligatorio`);
-          }
-          if (!fp.datosTransferencia.banco) {
-            nuevosErrores.push(`Forma de pago ${index + 1}: El banco es obligatorio`);
+            nuevosErrores.push(`Forma de pago ${index + 1}: El número de operación/transacción es obligatorio`);
           }
         }
       }
@@ -261,12 +319,24 @@ const FormaPagoModal: React.FC<FormaPagoModalProps> = ({
       </DialogTitle>
 
       <DialogContent>
+        {/* Alert de pago parcial */}
+        {permitirPagoParcial && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <Typography variant="body2" fontWeight="bold" gutterBottom>
+              Pago Parcial Permitido
+            </Typography>
+            <Typography variant="caption">
+              Puede registrar un pago menor al total de la deuda. El saldo restante quedará pendiente en la cuenta corriente del cliente.
+            </Typography>
+          </Alert>
+        )}
+
         {/* Información del monto */}
         <Paper elevation={2} sx={{ p: 2, mb: 3, bgcolor: 'primary.50' }}>
           <Grid container spacing={2}>
             <Grid item xs={12} sm={4}>
               <Typography variant="body2" color="text.secondary">
-                Monto a Cobrar
+                {permitirPagoParcial ? 'Deuda Total' : 'Monto a Cobrar'}
               </Typography>
               <Typography variant="h6" color="primary">
                 {formatCurrency(montoTotal)}
@@ -274,22 +344,22 @@ const FormaPagoModal: React.FC<FormaPagoModalProps> = ({
             </Grid>
             <Grid item xs={12} sm={4}>
               <Typography variant="body2" color="text.secondary">
-                Total Pagado
+                {permitirPagoParcial ? 'Monto a Pagar Ahora' : 'Total Pagado'}
               </Typography>
               <Typography 
                 variant="h6" 
-                color={totalPagado >= montoTotal ? 'success.main' : 'warning.main'}
+                color={totalPagado >= montoTotal ? 'success.main' : permitirPagoParcial && totalPagado > 0 ? 'info.main' : 'warning.main'}
               >
                 {formatCurrency(totalPagado)}
               </Typography>
             </Grid>
             <Grid item xs={12} sm={4}>
               <Typography variant="body2" color="text.secondary">
-                {saldoPendiente > 0 ? 'Saldo Pendiente' : 'Vuelto'}
+                {permitirPagoParcial ? 'Quedará Pendiente' : saldoPendiente > 0 ? 'Saldo Pendiente' : 'Vuelto'}
               </Typography>
               <Typography 
                 variant="h6" 
-                color={saldoPendiente > 0 ? 'error.main' : 'info.main'}
+                color={saldoPendiente > 0 ? (permitirPagoParcial ? 'warning.main' : 'error.main') : 'info.main'}
               >
                 {saldoPendiente > 0 
                   ? formatCurrency(saldoPendiente) 
@@ -381,14 +451,18 @@ const FormaPagoModal: React.FC<FormaPagoModalProps> = ({
                 />
               </Grid>
 
-              {/* Banco (para todos excepto efectivo) */}
+              {/* Banco/caja de destino (para todos excepto efectivo) */}
               {fp.medioPago !== 'EFECTIVO' && (
                 <Grid item xs={12}>
                   <FormControl fullWidth size="small">
-                    <InputLabel>Banco</InputLabel>
+                    <InputLabel>
+                      {fp.medioPago === 'TRANSFERENCIA' 
+                        ? 'Caja de Destino *' 
+                        : 'Caja'}
+                    </InputLabel>
                     <Select
                       value={fp.banco || ''}
-                      label="Banco"
+                      label={fp.medioPago === 'TRANSFERENCIA' ? 'Caja de Destino *' : 'Caja'}
                       onChange={(e) => {
                         const nuevasFormas = [...formasPago];
                         nuevasFormas[index].banco = e.target.value as any;
@@ -636,9 +710,12 @@ const FormaPagoModal: React.FC<FormaPagoModalProps> = ({
         <Button
           variant="contained"
           onClick={handleConfirmar}
-          disabled={totalPagado < montoTotal}
+          disabled={permitirPagoParcial ? totalPagado <= 0 : totalPagado < montoTotal}
         >
-          Confirmar ({formatCurrency(totalPagado)})
+          {permitirPagoParcial 
+            ? `Registrar Pago (${formatCurrency(totalPagado)})` 
+            : `Confirmar (${formatCurrency(totalPagado)})`
+          }
         </Button>
       </DialogActions>
     </Dialog>

@@ -635,7 +635,7 @@ const RemitosPage: React.FC = () => {
         <DialogTitle>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Typography variant="h6">Detalle del Remito</Typography>
-            <IconButton onClick={() => window.print()}>
+            <IconButton onClick={() => remitoSeleccionado && handleImprimirRemito(remitoSeleccionado)}>
               <PrintIcon />
             </IconButton>
           </Box>

@@ -32,7 +32,9 @@ import {
   DialogContent,
   DialogActions,
   CircularProgress,
-  Chip
+  Chip,
+  FormControlLabel,
+  Checkbox
 } from '@mui/material';
 import {
   PointOfSale as PosIcon,
@@ -59,11 +61,22 @@ const VentasPage: React.FC = () => {
   const [ventaExitosa, setVentaExitosa] = useState<string | null>(null);
   const [showFacturarDialog, setShowFacturarDialog] = useState(false);
   const [facturandoVenta, setFacturandoVenta] = useState(false);
+  // Estado para controlar si esta venta específica aplica IVA
+  const [aplicaIVAVenta, setAplicaIVAVenta] = useState<boolean>(true);
 
   useEffect(() => {
     dispatch(fetchProductos());
     dispatch(fetchClientesActivos());
   }, [dispatch]);
+
+  // Actualizar sugerencia de IVA cuando cambia el cliente seleccionado
+  useEffect(() => {
+    if (clienteId) {
+      const clienteSeleccionado = clientesActivos.find(c => c._id === clienteId);
+      // Sugerir el IVA del cliente, pero el usuario puede cambiarlo
+      setAplicaIVAVenta(clienteSeleccionado?.aplicaIVA !== false);
+    }
+  }, [clienteId, clientesActivos]);
 
   const productosActivos = productos.filter(p => p.estado === 'activo');
 
@@ -114,14 +127,14 @@ const VentasPage: React.FC = () => {
   const calcularTotales = () => {
     const subtotal = carrito.reduce((sum, item) => sum + item.subtotal, 0);
     
-    // Buscar el cliente seleccionado para verificar si aplica IVA
+    // Buscar el cliente seleccionado (para info adicional)
     const clienteSeleccionado = clientesActivos.find(c => c._id === clienteId);
-    const aplicaIVA = clienteSeleccionado?.aplicaIVA !== false; // Por defecto true si no se encuentra
     
-    const iva = aplicaIVA ? subtotal * 0.21 : 0;
+    // Usar el estado local de IVA (decisión por venta, no por cliente)
+    const iva = aplicaIVAVenta ? subtotal * 0.21 : 0;
     const total = subtotal + iva;
     
-    return { subtotal, iva, total, aplicaIVA, clienteSeleccionado };
+    return { subtotal, iva, total, aplicaIVA: aplicaIVAVenta, clienteSeleccionado };
   };
 
   const handleConfirmarVenta = async () => {
@@ -146,8 +159,8 @@ const VentasPage: React.FC = () => {
       total: totales.total,
       observaciones: observaciones || undefined,
       vendedor: user?.id || '',
-      // Copiar configuración fiscal del cliente
-      aplicaIVA: totales.aplicaIVA,
+      // Enviar decisión de IVA específica para esta venta
+      aplicaIVA: aplicaIVAVenta,
       requiereFacturaAFIP: totales.clienteSeleccionado?.requiereFacturaAFIP || false
     };
 
@@ -161,6 +174,7 @@ const VentasPage: React.FC = () => {
       setCarrito([]);
       setClienteId('');
       setObservaciones('');
+      setAplicaIVAVenta(true); // Resetear a true por defecto
       setError('');
       dispatch(fetchProductos()); // Actualizar stock
     } catch (err: any) {
@@ -287,7 +301,7 @@ const VentasPage: React.FC = () => {
           <Paper sx={{ p: 2, mb: 2 }}>
             <Typography variant="h6" gutterBottom>Totales</Typography>
             
-            {/* Indicadores fiscales del cliente */}
+            {/* Indicadores fiscales */}
             {totales.clienteSeleccionado && (
               <Box sx={{ mb: 2 }}>
                 {totales.clienteSeleccionado.requiereFacturaAFIP && (
@@ -300,7 +314,7 @@ const VentasPage: React.FC = () => {
                 {!totales.aplicaIVA && (
                   <Alert severity="warning" icon={<WarningIcon />} sx={{ mb: 1, py: 0.5 }}>
                     <Typography variant="caption">
-                      <strong>Cliente exento de IVA</strong> - No se aplicará IVA en esta venta
+                      <strong>Venta sin IVA</strong> - No se aplicará IVA en esta operación
                     </Typography>
                   </Alert>
                 )}
@@ -346,6 +360,31 @@ const VentasPage: React.FC = () => {
                 ))}
               </Select>
             </FormControl>
+
+            {/* Control de IVA para esta venta específica */}
+            <Box sx={{ mb: 2, p: 1.5, bgcolor: 'background.default', borderRadius: 1, border: '1px solid', borderColor: aplicaIVAVenta ? 'success.main' : 'warning.main' }}>
+              <FormControlLabel
+                control={
+                  <Checkbox 
+                    checked={aplicaIVAVenta} 
+                    onChange={(e) => setAplicaIVAVenta(e.target.checked)}
+                    color="primary"
+                  />
+                }
+                label={
+                  <Box>
+                    <Typography variant="body2" fontWeight="medium">
+                      Aplicar IVA (21%) en esta venta
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {aplicaIVAVenta 
+                        ? 'Se sumará el 21% de IVA al total' 
+                        : 'Venta sin IVA - Factura X o sin facturar'}
+                    </Typography>
+                  </Box>
+                }
+              />
+            </Box>
 
             <TextField
               fullWidth
