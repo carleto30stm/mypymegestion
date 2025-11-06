@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { AppDispatch, RootState } from '../redux/store';
 import { fetchGastos } from '../redux/slices/gastosSlice';
+import { fetchVentas } from '../redux/slices/ventasSlice';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -34,7 +35,7 @@ import {
   GetApp as ExportIcon,
   Assessment as ReportIcon
 } from '@mui/icons-material';
-import { Gasto } from '../types';
+import { Gasto, Venta } from '../types';
 
 // Interfaces para el reporte contable
 interface AccountingCategory {
@@ -57,19 +58,32 @@ interface AccountingSummary {
   totalIngresos: number;
   totalEgresos: number;
   resultadoNeto: number;
+  ventasNetas: AccountingCategory;
+  ingresosOperacionales: AccountingCategory;
   gastosFijos: AccountingCategory;
   gastosVariables: AccountingCategory;
-  ingresos: AccountingCategory;
   gastosPersonal: AccountingCategory;
   gastosAdministrativos: AccountingCategory;
   gastosOperacionales: AccountingCategory;
   gastosFinancieros: AccountingCategory;
+  // Información complementaria
+  flujoCaja: {
+    cobrosDelPeriodo: number;
+    pagosDelPeriodo: number;
+    flujoNeto: number;
+  };
+  // Métricas financieras
+  margenBruto: number;
+  margenOperacional: number;
+  margenNeto: number;
+  puntoEquilibrio: number;
 }
 
 const AccountingReport: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { items: gastos, status, error } = useSelector((state: RootState) => state.gastos);
-  const loading = status === 'loading';
+  const { items: ventas, status: ventasStatus } = useSelector((state: RootState) => state.ventas);
+  const loading = status === 'loading' || ventasStatus === 'loading';
   const [reportPeriod, setReportPeriod] = useState<'month' | 'quarter' | 'year'>('month');
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
@@ -80,13 +94,14 @@ const AccountingReport: React.FC = () => {
 
   useEffect(() => {
     dispatch(fetchGastos());
+    dispatch(fetchVentas());
   }, [dispatch]);
 
   useEffect(() => {
-    if (gastos.length > 0) {
+    if (gastos.length > 0 && ventas.length > 0) {
       generateReport();
     }
-  }, [gastos, reportPeriod, selectedMonth, selectedYear]);
+  }, [gastos, ventas, reportPeriod, selectedMonth, selectedYear]);
 
   const generateReport = () => {
     const filteredGastos = filterGastosByPeriod();
@@ -121,29 +136,74 @@ const AccountingReport: React.FC = () => {
     });
   };
 
-  const calculateAccountingSummary = (filteredGastos: Gasto[]): AccountingSummary => {
-    // Inicializar categorías contables
-    const gastosFijos: AccountingItem[] = [];
-    const gastosVariables: AccountingItem[] = [];
-    const ingresos: AccountingItem[] = [];
-    const gastosPersonal: AccountingItem[] = [];
-    const gastosAdministrativos: AccountingItem[] = [];
-    const gastosOperacionales: AccountingItem[] = [];
-    const gastosFinancieros: AccountingItem[] = [];
+  const filterVentasByPeriod = (): Venta[] => {
+    return ventas.filter(venta => {
+      // Solo ventas confirmadas
+      if (venta.estado !== 'confirmada') return false;
+      
+      // Usar fechaConfirmacion si existe, sino fechaCreacion
+      const ventaDate = new Date(venta.fechaCreacion || venta.fecha);
+      const currentDate = new Date();
 
-    // Mapas para agrupar conceptos similares
+      switch (reportPeriod) {
+        case 'month':
+          const [year, month] = selectedMonth.split('-').map(Number);
+          return ventaDate.getFullYear() === year && ventaDate.getMonth() + 1 === month;
+        
+        case 'quarter':
+          const selectedYearNum = parseInt(selectedYear);
+          const currentQuarter = Math.floor(currentDate.getMonth() / 3) + 1;
+          const ventaQuarter = Math.floor(ventaDate.getMonth() / 3) + 1;
+          return ventaDate.getFullYear() === selectedYearNum && ventaQuarter === currentQuarter;
+        
+        case 'year':
+          return ventaDate.getFullYear() === parseInt(selectedYear);
+        
+        default:
+          return true;
+      }
+    });
+  };
+
+  const calculateAccountingSummary = (filteredGastos: Gasto[]): AccountingSummary => {
+    // ===== PASO 1: CALCULAR VENTAS NETAS (desde tabla Venta) =====
+    const ventasDelPeriodo = filterVentasByPeriod();
+    
+    // Ventas brutas: solo ventas confirmadas no anuladas
+    const ventasBrutas = ventasDelPeriodo
+      .filter(v => v.estado === 'confirmada' && !v.motivoAnulacion)
+      .reduce((sum, v) => sum + v.total, 0);
+    
+    // Devoluciones: obtener de gastos con subRubro DEVOLUCION (son NEGATIVAS)
+    const devolucionesGastos = filteredGastos
+      .filter(g => g.tipoOperacion === 'entrada' && g.subRubro === 'DEVOLUCION')
+      .reduce((sum, g) => sum + (g.entrada || 0), 0);
+    
+    const ventasNetas = ventasBrutas - devolucionesGastos;
+
+    // ===== PASO 2: INGRESOS OPERACIONALES (Flete, Comisiones, Ajustes) =====
     const conceptMaps = {
+      ventasNetas: new Map<string, { amount: number; count: number; rubros: Set<string> }>(),
+      ingresosOperacionales: new Map<string, { amount: number; count: number; rubros: Set<string> }>(),
       gastosFijos: new Map<string, { amount: number; count: number; rubros: Set<string> }>(),
       gastosVariables: new Map<string, { amount: number; count: number; rubros: Set<string> }>(),
-      ingresos: new Map<string, { amount: number; count: number; rubros: Set<string> }>(),
       gastosPersonal: new Map<string, { amount: number; count: number; rubros: Set<string> }>(),
       gastosAdministrativos: new Map<string, { amount: number; count: number; rubros: Set<string> }>(),
       gastosOperacionales: new Map<string, { amount: number; count: number; rubros: Set<string> }>(),
       gastosFinancieros: new Map<string, { amount: number; count: number; rubros: Set<string> }>()
     };
 
-    let totalIngresos = 0;
+    // Agregar ventas brutas y devoluciones a conceptMaps
+    if (ventasBrutas > 0) {
+      addToConceptMap(conceptMaps.ventasNetas, 'Ventas Brutas', ventasBrutas, 'VENTAS');
+    }
+    if (devolucionesGastos > 0) {
+      addToConceptMap(conceptMaps.ventasNetas, 'Devoluciones', -devolucionesGastos, 'COBRO.VENTA');
+    }
+
+    let totalIngresosOperacionales = 0;
     let totalEgresos = 0;
+    let flujoCobros = 0;
 
     // Procesar cada gasto
     console.log('Procesando gastos filtrados:', filteredGastos.length);
@@ -151,8 +211,16 @@ const AccountingReport: React.FC = () => {
       const amount = gasto.tipoOperacion === 'entrada' ? (gasto.entrada || 0) : (gasto.salida || 0);
       
       if (gasto.tipoOperacion === 'entrada') {
-        totalIngresos += amount;
-        addToConceptMap(conceptMaps.ingresos, getIncomeCategory(gasto), amount, gasto.rubro);
+        // SEPARAR: Ingresos operacionales vs Flujo de cobranzas
+        if (gasto.rubro === 'COBRO.VENTA' && ['FLETE', 'COMISION', 'AJUSTE'].includes(gasto.subRubro)) {
+          // Ingresos operacionales (accesorios)
+          totalIngresosOperacionales += amount;
+          addToConceptMap(conceptMaps.ingresosOperacionales, getOperationalIncomeCategory(gasto), amount, gasto.rubro);
+        } else if (gasto.subRubro === 'COBRO' || gasto.subRubro === 'ADEUDADO') {
+          // Flujo de cobranzas (NO es ingreso, solo conversión AR → Efectivo)
+          flujoCobros += amount;
+        }
+        // NOTA: DEVOLUCION ya se procesó arriba como NEGATIVO en ventas
       } else if (gasto.tipoOperacion === 'salida') {
         totalEgresos += amount;
         
@@ -194,16 +262,17 @@ const AccountingReport: React.FC = () => {
       }));
     };
 
+    const ventasNetasItems = convertMapToItems(conceptMaps.ventasNetas);
+    const ingresosOperacionalesItems = convertMapToItems(conceptMaps.ingresosOperacionales);
     const gastosFijosItems = convertMapToItems(conceptMaps.gastosFijos);
     const gastosVariablesItems = convertMapToItems(conceptMaps.gastosVariables);
-    const ingresosItems = convertMapToItems(conceptMaps.ingresos);
     const gastosPersonalItems = convertMapToItems(conceptMaps.gastosPersonal);
     const gastosAdministrativosItems = convertMapToItems(conceptMaps.gastosAdministrativos);
     const gastosOperacionalesItems = convertMapToItems(conceptMaps.gastosOperacionales);
     const gastosFinancierosItems = convertMapToItems(conceptMaps.gastosFinancieros);
 
-    console.log('Gastos Fijos Map:', conceptMaps.gastosFijos);
-    console.log('Gastos Fijos Items:', gastosFijosItems);
+    console.log('Ventas Netas Map:', conceptMaps.ventasNetas);
+    console.log('Ventas Netas Items:', ventasNetasItems);
 
     const totalGastosFijos = gastosFijosItems.reduce((sum: number, item: AccountingItem) => sum + item.amount, 0);
     const totalGastosVariables = gastosVariablesItems.reduce((sum: number, item: AccountingItem) => sum + item.amount, 0);
@@ -212,11 +281,39 @@ const AccountingReport: React.FC = () => {
     const totalGastosOperacionales = gastosOperacionalesItems.reduce((sum: number, item: AccountingItem) => sum + item.amount, 0);
     const totalGastosFinancieros = gastosFinancierosItems.reduce((sum: number, item: AccountingItem) => sum + item.amount, 0);
 
+    // ===== CALCULOS FINALES =====
+    const totalIngresos = ventasNetas + totalIngresosOperacionales;
+    const costoVentas = totalGastosVariables; // Simplificación: gastos variables = costo de ventas
+    const utilidadBruta = ventasNetas - costoVentas;
+    const gastosOperacionalesCombinados = totalGastosFijos + totalGastosPersonal + totalGastosAdministrativos + totalGastosOperacionales;
+    const EBITDA = utilidadBruta - gastosOperacionalesCombinados;
+    const resultadoNeto = EBITDA - totalGastosFinancieros + totalIngresosOperacionales;
+    
+    // Métricas financieras
+    const margenBruto = ventasNetas > 0 ? (utilidadBruta / ventasNetas) * 100 : 0;
+    const margenOperacional = ventasNetas > 0 ? (EBITDA / ventasNetas) * 100 : 0;
+    const margenNeto = totalIngresos > 0 ? (resultadoNeto / totalIngresos) * 100 : 0;
+    const puntoEquilibrio = totalGastosFijos + totalGastosPersonal;
+
     return {
       period: getPeriodDescription(),
       totalIngresos,
       totalEgresos,
-      resultadoNeto: totalIngresos - totalEgresos,
+      resultadoNeto,
+      ventasNetas: {
+        name: 'Ventas Netas',
+        description: 'Ventas confirmadas menos devoluciones',
+        items: ventasNetasItems,
+        total: ventasNetas,
+        percentage: 100
+      },
+      ingresosOperacionales: {
+        name: 'Otros Ingresos Operacionales',
+        description: 'Fletes, comisiones y ajustes',
+        items: ingresosOperacionalesItems,
+        total: totalIngresosOperacionales,
+        percentage: ventasNetas > 0 ? (totalIngresosOperacionales / ventasNetas) * 100 : 0
+      },
       gastosFijos: {
         name: 'Gastos Fijos',
         description: 'Gastos que no varían con el volumen de producción',
@@ -225,18 +322,11 @@ const AccountingReport: React.FC = () => {
         percentage: totalEgresos > 0 ? (totalGastosFijos / totalEgresos) * 100 : 0
       },
       gastosVariables: {
-        name: 'Gastos Variables',
-        description: 'Gastos que varían según la actividad productiva',
+        name: 'Costo de Ventas',
+        description: 'Costos directos de producción (materia prima, mano de obra)',
         items: gastosVariablesItems,
         total: totalGastosVariables,
         percentage: totalEgresos > 0 ? (totalGastosVariables / totalEgresos) * 100 : 0
-      },
-      ingresos: {
-        name: 'Ingresos',
-        description: 'Entradas de dinero por ventas y otros conceptos',
-        items: ingresosItems,
-        total: totalIngresos,
-        percentage: 100
       },
       gastosPersonal: {
         name: 'Gastos de Personal',
@@ -265,7 +355,16 @@ const AccountingReport: React.FC = () => {
         items: gastosFinancierosItems,
         total: totalGastosFinancieros,
         percentage: totalEgresos > 0 ? (totalGastosFinancieros / totalEgresos) * 100 : 0
-      }
+      },
+      flujoCaja: {
+        cobrosDelPeriodo: flujoCobros,
+        pagosDelPeriodo: totalEgresos,
+        flujoNeto: flujoCobros - totalEgresos
+      },
+      margenBruto,
+      margenOperacional,
+      margenNeto,
+      puntoEquilibrio
     };
   };
 
@@ -430,20 +529,16 @@ const AccountingReport: React.FC = () => {
     return gasto.subRubro;
   };
 
-  const getIncomeCategory = (gasto: Gasto): string => {
+  const getOperationalIncomeCategory = (gasto: Gasto): string => {
     switch (gasto.subRubro) {
-      case 'COBRO':
-        return 'Cobranzas';
-      case 'DEVOLUCION':
-        return 'Devoluciones';
-      case 'ADEUDADO':
-        return 'Recupero de Deudas';
       case 'FLETE':
         return 'Ingresos por Flete';
       case 'COMISION':
-        return 'Comisiones';
+        return 'Comisiones Cobradas';
+      case 'AJUSTE':
+        return 'Ajustes Positivos';
       default:
-        return `Ingresos - ${gasto.subRubro}`;
+        return `Otros Ingresos - ${gasto.subRubro}`;
     }
   };
 
@@ -574,13 +669,14 @@ const AccountingReport: React.FC = () => {
     yPos += 7;
 
     const summaryData = [
+      ['Ventas Netas', formatCurrency(reportData.ventasNetas.total)],
+      ['Otros Ingresos', formatCurrency(reportData.ingresosOperacionales.total)],
       ['Total Ingresos', formatCurrency(reportData.totalIngresos)],
       ['Total Egresos', formatCurrency(reportData.totalEgresos)],
       ['Resultado Neto', formatCurrency(reportData.resultadoNeto)],
-      ['Margen', reportData.totalIngresos > 0 
-        ? `${((reportData.resultadoNeto / reportData.totalIngresos) * 100).toFixed(1)}%`
-        : '0%'
-      ]
+      ['Margen Bruto', `${reportData.margenBruto.toFixed(1)}%`],
+      ['Margen Operacional', `${reportData.margenOperacional.toFixed(1)}%`],
+      ['Margen Neto', `${reportData.margenNeto.toFixed(1)}%`]
     ];
 
     autoTable(doc, {
@@ -641,14 +737,15 @@ const AccountingReport: React.FC = () => {
       }
     };
 
-    // Agregar todas las categorías
-    addCategoryTable(reportData.ingresos, 'Ingresos');
-    addCategoryTable(reportData.gastosPersonal, 'Gastos de Personal');
+    // Agregar todas las categorías - Estado de Resultados
+    addCategoryTable(reportData.ventasNetas, 'A. Ventas Netas');
+    addCategoryTable(reportData.ingresosOperacionales, 'Otros Ingresos Operacionales');
+    addCategoryTable(reportData.gastosVariables, 'B. Costo de Ventas');
+    addCategoryTable(reportData.gastosPersonal, 'C. Gastos de Personal');
     addCategoryTable(reportData.gastosFijos, 'Gastos Fijos');
-    addCategoryTable(reportData.gastosVariables, 'Gastos Variables');
     addCategoryTable(reportData.gastosOperacionales, 'Gastos Operacionales');
     addCategoryTable(reportData.gastosAdministrativos, 'Gastos Administrativos');
-    addCategoryTable(reportData.gastosFinancieros, 'Gastos Financieros');
+    addCategoryTable(reportData.gastosFinancieros, 'D. Gastos Financieros');
 
     // Análisis final
     if (yPos > 230) {
@@ -662,10 +759,11 @@ const AccountingReport: React.FC = () => {
     yPos += 10;
 
     const analysisData = [
-      ['Gastos de Personal', `${reportData.gastosPersonal.percentage.toFixed(1)}%`],
-      ['Gastos Fijos', `${reportData.gastosFijos.percentage.toFixed(1)}%`],
-      ['Gastos Variables', `${reportData.gastosVariables.percentage.toFixed(1)}%`],
-      ['Punto de Equilibrio Aprox.', formatCurrency(reportData.gastosFijos.total + reportData.gastosPersonal.total)]
+      ['Margen Bruto', `${reportData.margenBruto.toFixed(1)}%`],
+      ['Margen Operacional', `${reportData.margenOperacional.toFixed(1)}%`],
+      ['Margen Neto', `${reportData.margenNeto.toFixed(1)}%`],
+      ['Punto de Equilibrio', formatCurrency(reportData.puntoEquilibrio)],
+      ['Flujo de Caja Neto', formatCurrency(reportData.flujoCaja.flujoNeto)]
     ];
 
     autoTable(doc, {
@@ -693,18 +791,39 @@ const AccountingReport: React.FC = () => {
 
     // Hoja 1: Resumen Ejecutivo
     const summaryData = [
-      ['REPORTE CONTABLE'],
+      ['ESTADO DE RESULTADOS'],
       [`Período: ${reportData.period}`],
       [],
-      ['RESUMEN EJECUTIVO'],
-      ['Concepto', 'Valor'],
+      ['A. INGRESOS'],
+      ['Ventas Netas', reportData.ventasNetas.total],
+      ['Otros Ingresos Operacionales', reportData.ingresosOperacionales.total],
       ['Total Ingresos', reportData.totalIngresos],
-      ['Total Egresos', reportData.totalEgresos],
-      ['Resultado Neto', reportData.resultadoNeto],
-      ['Margen (%)', reportData.totalIngresos > 0 
-        ? ((reportData.resultadoNeto / reportData.totalIngresos) * 100).toFixed(2)
-        : '0'
-      ]
+      [],
+      ['B. COSTO DE VENTAS'],
+      ['Costo de Ventas', reportData.gastosVariables.total],
+      [],
+      ['UTILIDAD BRUTA', reportData.ventasNetas.total - reportData.gastosVariables.total],
+      ['Margen Bruto (%)', reportData.margenBruto.toFixed(2)],
+      [],
+      ['C. GASTOS OPERACIONALES'],
+      ['Gastos de Personal', reportData.gastosPersonal.total],
+      ['Gastos Fijos', reportData.gastosFijos.total],
+      ['Gastos Operacionales', reportData.gastosOperacionales.total],
+      ['Gastos Administrativos', reportData.gastosAdministrativos.total],
+      [],
+      ['EBITDA', reportData.ventasNetas.total - reportData.gastosVariables.total - reportData.gastosPersonal.total - reportData.gastosFijos.total - reportData.gastosOperacionales.total - reportData.gastosAdministrativos.total],
+      ['Margen Operacional (%)', reportData.margenOperacional.toFixed(2)],
+      [],
+      ['D. GASTOS FINANCIEROS'],
+      ['Gastos Financieros', reportData.gastosFinancieros.total],
+      [],
+      ['RESULTADO NETO', reportData.resultadoNeto],
+      ['Margen Neto (%)', reportData.margenNeto.toFixed(2)],
+      [],
+      ['INFORMACIÓN DE FLUJO DE CAJA'],
+      ['Cobros del Período', reportData.flujoCaja.cobrosDelPeriodo],
+      ['Pagos del Período', reportData.flujoCaja.pagosDelPeriodo],
+      ['Flujo Neto', reportData.flujoCaja.flujoNeto]
     ];
 
     const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
@@ -746,23 +865,27 @@ const AccountingReport: React.FC = () => {
     };
 
     // Crear hojas para cada categoría
-    createCategorySheet(reportData.ingresos, 'Ingresos');
+    createCategorySheet(reportData.ventasNetas, 'Ventas Netas');
+    createCategorySheet(reportData.ingresosOperacionales, 'Otros Ingresos');
+    createCategorySheet(reportData.gastosVariables, 'Costo de Ventas');
     createCategorySheet(reportData.gastosPersonal, 'Gastos Personal');
     createCategorySheet(reportData.gastosFijos, 'Gastos Fijos');
-    createCategorySheet(reportData.gastosVariables, 'Gastos Variables');
     createCategorySheet(reportData.gastosOperacionales, 'Gastos Operacionales');
     createCategorySheet(reportData.gastosAdministrativos, 'Gastos Administrativos');
     createCategorySheet(reportData.gastosFinancieros, 'Gastos Financieros');
 
     // Hoja de análisis
     const analysisData = [
-      ['ANÁLISIS DE ESTRUCTURA DE COSTOS'],
+      ['ANÁLISIS FINANCIERO'],
       [],
       ['Indicador', 'Valor'],
-      ['Gastos de Personal (%)', reportData.gastosPersonal.percentage.toFixed(2)],
-      ['Gastos Fijos (%)', reportData.gastosFijos.percentage.toFixed(2)],
-      ['Gastos Variables (%)', reportData.gastosVariables.percentage.toFixed(2)],
-      ['Punto de Equilibrio Aproximado', reportData.gastosFijos.total + reportData.gastosPersonal.total]
+      ['Margen Bruto (%)', reportData.margenBruto.toFixed(2)],
+      ['Margen Operacional (%)', reportData.margenOperacional.toFixed(2)],
+      ['Margen Neto (%)', reportData.margenNeto.toFixed(2)],
+      ['Punto de Equilibrio', reportData.puntoEquilibrio],
+      ['Gastos de Personal (% de ventas)', reportData.ventasNetas.total > 0 ? ((reportData.gastosPersonal.total / reportData.ventasNetas.total) * 100).toFixed(2) : '0'],
+      ['Gastos Fijos (% de ventas)', reportData.ventasNetas.total > 0 ? ((reportData.gastosFijos.total / reportData.ventasNetas.total) * 100).toFixed(2) : '0'],
+      ['Costo de Ventas (% de ventas)', reportData.ventasNetas.total > 0 ? ((reportData.gastosVariables.total / reportData.ventasNetas.total) * 100).toFixed(2) : '0']
     ];
 
     const wsAnalysis = XLSX.utils.aoa_to_sheet(analysisData);
@@ -892,13 +1015,23 @@ const AccountingReport: React.FC = () => {
             <Typography variant="h5" gutterBottom>
               Resumen Ejecutivo - {reportData.period}
             </Typography>
-            <Grid container spacing={3}>
+            <Grid container spacing={2}>
               <Grid item xs={12} md={3}>
                 <Card sx={{ bgcolor: 'success.light', color: 'white' }}>
                   <CardContent>
-                    <Typography variant="h6">Total Ingresos</Typography>
-                    <Typography variant="h4" fontWeight="bold">
-                      {formatCurrency(reportData.totalIngresos)}
+                    <Typography variant="subtitle2">Ventas Netas</Typography>
+                    <Typography variant="h5" fontWeight="bold">
+                      {formatCurrency(reportData.ventasNetas.total)}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+              <Grid item xs={12} md={3}>
+                <Card sx={{ bgcolor: 'info.light', color: 'white' }}>
+                  <CardContent>
+                    <Typography variant="subtitle2">Otros Ingresos</Typography>
+                    <Typography variant="h5" fontWeight="bold">
+                      {formatCurrency(reportData.ingresosOperacionales.total)}
                     </Typography>
                   </CardContent>
                 </Card>
@@ -906,8 +1039,8 @@ const AccountingReport: React.FC = () => {
               <Grid item xs={12} md={3}>
                 <Card sx={{ bgcolor: 'error.light', color: 'white' }}>
                   <CardContent>
-                    <Typography variant="h6">Total Egresos</Typography>
-                    <Typography variant="h4" fontWeight="bold">
+                    <Typography variant="subtitle2">Total Egresos</Typography>
+                    <Typography variant="h5" fontWeight="bold">
                       {formatCurrency(reportData.totalEgresos)}
                     </Typography>
                   </CardContent>
@@ -916,86 +1049,271 @@ const AccountingReport: React.FC = () => {
               <Grid item xs={12} md={3}>
                 <Card sx={{ bgcolor: reportData.resultadoNeto >= 0 ? 'success.main' : 'error.main', color: 'white' }}>
                   <CardContent>
-                    <Typography variant="h6">Resultado Neto</Typography>
-                    <Typography variant="h4" fontWeight="bold">
+                    <Typography variant="subtitle2">Resultado Neto</Typography>
+                    <Typography variant="h5" fontWeight="bold">
                       {formatCurrency(reportData.resultadoNeto)}
                     </Typography>
                   </CardContent>
                 </Card>
               </Grid>
-              <Grid item xs={12} md={3}>
-                <Card sx={{ bgcolor: 'info.main', color: 'white' }}>
-                  <CardContent>
-                    <Typography variant="h6">Margen</Typography>
-                    <Typography variant="h4" fontWeight="bold">
-                      {reportData.totalIngresos > 0 
-                        ? `${((reportData.resultadoNeto / reportData.totalIngresos) * 100).toFixed(1)}%`
-                        : '0%'
-                      }
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
             </Grid>
+
+            {/* Métricas Financieras */}
+            <Box sx={{ mt: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                Indicadores Clave
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={3}>
+                  <Box textAlign="center" p={2} bgcolor="background.paper" borderRadius={1}>
+                    <Typography variant="body2" color="textSecondary">Margen Bruto</Typography>
+                    <Typography variant="h6" fontWeight="bold" color={reportData.margenBruto > 30 ? 'success.main' : 'warning.main'}>
+                      {reportData.margenBruto.toFixed(1)}%
+                    </Typography>
+                    <Typography variant="caption" color="textSecondary">
+                      {reportData.margenBruto > 30 ? 'Saludable' : 'Bajo'}
+                    </Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <Box textAlign="center" p={2} bgcolor="background.paper" borderRadius={1}>
+                    <Typography variant="body2" color="textSecondary">Margen Operacional</Typography>
+                    <Typography variant="h6" fontWeight="bold" color={reportData.margenOperacional > 15 ? 'success.main' : 'warning.main'}>
+                      {reportData.margenOperacional.toFixed(1)}%
+                    </Typography>
+                    <Typography variant="caption" color="textSecondary">
+                      {reportData.margenOperacional > 15 ? 'Saludable' : 'Mejorable'}
+                    </Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <Box textAlign="center" p={2} bgcolor="background.paper" borderRadius={1}>
+                    <Typography variant="body2" color="textSecondary">Margen Neto</Typography>
+                    <Typography variant="h6" fontWeight="bold" color={reportData.margenNeto > 10 ? 'success.main' : 'error.main'}>
+                      {reportData.margenNeto.toFixed(1)}%
+                    </Typography>
+                    <Typography variant="caption" color="textSecondary">
+                      {reportData.margenNeto > 10 ? 'Rentable' : 'Ajustar'}
+                    </Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <Box textAlign="center" p={2} bgcolor="background.paper" borderRadius={1}>
+                    <Typography variant="body2" color="textSecondary">Punto de Equilibrio</Typography>
+                    <Typography variant="h6" fontWeight="bold">
+                      {formatCurrency(reportData.puntoEquilibrio)}
+                    </Typography>
+                    <Typography variant="caption" color="textSecondary">
+                      {reportData.ventasNetas.total > reportData.puntoEquilibrio ? '✓ Superado' : '✗ No alcanzado'}
+                    </Typography>
+                  </Box>
+                </Grid>
+              </Grid>
+            </Box>
+
+            {/* Flujo de Caja */}
+            <Box sx={{ mt: 3 }}>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                <Typography variant="subtitle2" fontWeight="bold">
+                  Información de Flujo de Caja (No contable)
+                </Typography>
+              </Alert>
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={4}>
+                  <Typography variant="body2" color="textSecondary">Cobros del Período</Typography>
+                  <Typography variant="h6">{formatCurrency(reportData.flujoCaja.cobrosDelPeriodo)}</Typography>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <Typography variant="body2" color="textSecondary">Pagos del Período</Typography>
+                  <Typography variant="h6">{formatCurrency(reportData.flujoCaja.pagosDelPeriodo)}</Typography>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <Typography variant="body2" color="textSecondary">Flujo Neto</Typography>
+                  <Typography variant="h6" color={reportData.flujoCaja.flujoNeto >= 0 ? 'success.main' : 'error.main'}>
+                    {formatCurrency(reportData.flujoCaja.flujoNeto)}
+                  </Typography>
+                </Grid>
+              </Grid>
+            </Box>
           </Paper>
 
-          {/* Análisis por Categorías */}
+          {/* Estado de Resultados */}
           <Typography variant="h5" gutterBottom sx={{ mt: 4, mb: 2 }}>
-            Análisis por Categorías Contables
+            Estado de Resultados (Estructura Contable)
           </Typography>
 
-          {/* Ingresos */}
-          {renderCategoryTable(reportData.ingresos)}
+          {/* INGRESOS */}
+          <Typography variant="h6" sx={{ mt: 3, mb: 2, color: 'success.main' }}>
+            A. INGRESOS
+          </Typography>
+          {renderCategoryTable(reportData.ventasNetas)}
+          {renderCategoryTable(reportData.ingresosOperacionales)}
 
-          {/* Gastos de Personal */}
-          {renderCategoryTable(reportData.gastosPersonal)}
-
-          {/* Gastos Fijos */}
-          {renderCategoryTable(reportData.gastosFijos)}
-
-          {/* Gastos Variables */}
+          {/* COSTOS */}
+          <Typography variant="h6" sx={{ mt: 3, mb: 2, color: 'error.main' }}>
+            B. COSTO DE VENTAS
+          </Typography>
           {renderCategoryTable(reportData.gastosVariables)}
+          
+          <Paper sx={{ p: 2, mb: 3, bgcolor: 'info.light' }}>
+            <Box display="flex" justifyContent="space-between" alignItems="center">
+              <Typography variant="h6">Utilidad Bruta</Typography>
+              <Typography variant="h5" fontWeight="bold">
+                {formatCurrency(reportData.ventasNetas.total - reportData.gastosVariables.total)}
+              </Typography>
+            </Box>
+            <Typography variant="caption" color="textSecondary">
+              Margen Bruto: {reportData.margenBruto.toFixed(1)}%
+            </Typography>
+          </Paper>
 
-          {/* Gastos Operacionales */}
+          {/* GASTOS OPERACIONALES */}
+          <Typography variant="h6" sx={{ mt: 3, mb: 2, color: 'warning.main' }}>
+            C. GASTOS OPERACIONALES
+          </Typography>
+          {renderCategoryTable(reportData.gastosPersonal)}
+          {renderCategoryTable(reportData.gastosFijos)}
           {renderCategoryTable(reportData.gastosOperacionales)}
-
-          {/* Gastos Administrativos */}
           {renderCategoryTable(reportData.gastosAdministrativos)}
 
-          {/* Gastos Financieros */}
+          <Paper sx={{ p: 2, mb: 3, bgcolor: 'warning.light' }}>
+            <Box display="flex" justifyContent="space-between" alignItems="center">
+              <Typography variant="h6">EBITDA (Utilidad Operacional)</Typography>
+              <Typography variant="h5" fontWeight="bold">
+                {formatCurrency(
+                  reportData.ventasNetas.total - 
+                  reportData.gastosVariables.total - 
+                  reportData.gastosPersonal.total -
+                  reportData.gastosFijos.total -
+                  reportData.gastosOperacionales.total -
+                  reportData.gastosAdministrativos.total
+                )}
+              </Typography>
+            </Box>
+            <Typography variant="caption" color="textSecondary">
+              Margen Operacional: {reportData.margenOperacional.toFixed(1)}%
+            </Typography>
+          </Paper>
+
+          {/* GASTOS FINANCIEROS */}
+          <Typography variant="h6" sx={{ mt: 3, mb: 2, color: 'error.main' }}>
+            D. GASTOS FINANCIEROS
+          </Typography>
           {renderCategoryTable(reportData.gastosFinancieros)}
 
-          {/* Análisis Adicional */}
+          {/* RESULTADO FINAL */}
+          <Paper sx={{ p: 3, mb: 3, bgcolor: reportData.resultadoNeto >= 0 ? 'success.light' : 'error.light' }}>
+            <Box display="flex" justifyContent="space-between" alignItems="center">
+              <Box>
+                <Typography variant="h5" fontWeight="bold">
+                  RESULTADO NETO
+                </Typography>
+                <Typography variant="body2" color="textSecondary">
+                  Margen Neto: {reportData.margenNeto.toFixed(1)}%
+                </Typography>
+              </Box>
+              <Typography variant="h3" fontWeight="bold">
+                {formatCurrency(reportData.resultadoNeto)}
+              </Typography>
+            </Box>
+          </Paper>
+
+          {/* Análisis y Alertas */}
           <Paper sx={{ p: 3, mt: 3 }}>
             <Typography variant="h6" gutterBottom>
-              Análisis de Estructura de Costos
+              Análisis y Recomendaciones
             </Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={12} md={6}>
-                <Typography variant="body2" color="textSecondary">
-                  <strong>Gastos de Personal:</strong> {reportData.gastosPersonal.percentage.toFixed(1)}% del total
-                  {reportData.gastosPersonal.percentage > 40 && (
-                    <Chip label="Alto" color="warning" size="small" sx={{ ml: 1 }} />
-                  )}
+            
+            {/* Alertas críticas */}
+            {reportData.margenBruto < 30 && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                <Typography variant="subtitle2" fontWeight="bold">
+                  ⚠️ Margen bruto bajo ({reportData.margenBruto.toFixed(1)}%)
                 </Typography>
+                <Typography variant="body2">
+                  El margen bruto está por debajo del 30% recomendado. Considerar: revisar precios de venta, negociar mejores costos con proveedores, o reducir desperdicios en producción.
+                </Typography>
+              </Alert>
+            )}
+
+            {reportData.ventasNetas.total < reportData.puntoEquilibrio && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                <Typography variant="subtitle2" fontWeight="bold">
+                  🚨 Ventas por debajo del punto de equilibrio
+                </Typography>
+                <Typography variant="body2">
+                  Las ventas ({formatCurrency(reportData.ventasNetas.total)}) no cubren los costos fijos + personal ({formatCurrency(reportData.puntoEquilibrio)}). 
+                  Déficit: {formatCurrency(reportData.puntoEquilibrio - reportData.ventasNetas.total)}. 
+                  Acción urgente: aumentar ventas o reducir costos fijos.
+                </Typography>
+              </Alert>
+            )}
+
+            {reportData.flujoCaja.flujoNeto < 0 && (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                <Typography variant="subtitle2" fontWeight="bold">
+                  💰 Flujo de caja negativo
+                </Typography>
+                <Typography variant="body2">
+                  Los pagos ({formatCurrency(reportData.flujoCaja.pagosDelPeriodo)}) superan los cobros ({formatCurrency(reportData.flujoCaja.cobrosDelPeriodo)}). 
+                  Déficit: {formatCurrency(Math.abs(reportData.flujoCaja.flujoNeto))}. 
+                  Revisar políticas de crédito y acelerar cobranzas.
+                </Typography>
+              </Alert>
+            )}
+
+            {reportData.gastosPersonal.total / reportData.ventasNetas.total > 0.35 && (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                <Typography variant="subtitle2" fontWeight="bold">
+                  👥 Gastos de personal elevados
+                </Typography>
+                <Typography variant="body2">
+                  Los gastos de personal representan {((reportData.gastosPersonal.total / reportData.ventasNetas.total) * 100).toFixed(1)}% de las ventas (ideal: 15-25%). 
+                  Evaluar productividad y estructura organizacional.
+                </Typography>
+              </Alert>
+            )}
+
+            {/* Métricas comparativas */}
+            <Grid container spacing={2} sx={{ mt: 2 }}>
+              <Grid item xs={12} md={4}>
+                <Box>
+                  <Typography variant="body2" color="textSecondary">
+                    <strong>Gastos de Personal vs Ventas:</strong>
+                  </Typography>
+                  <Typography variant="h6" color={reportData.gastosPersonal.total / reportData.ventasNetas.total > 0.25 ? 'error.main' : 'success.main'}>
+                    {((reportData.gastosPersonal.total / reportData.ventasNetas.total) * 100).toFixed(1)}%
+                  </Typography>
+                  <Typography variant="caption" color="textSecondary">
+                    Ideal: 15-25%
+                  </Typography>
+                </Box>
               </Grid>
-              <Grid item xs={12} md={6}>
-                <Typography variant="body2" color="textSecondary">
-                  <strong>Gastos Fijos:</strong> {reportData.gastosFijos.percentage.toFixed(1)}% del total
-                  {reportData.gastosFijos.percentage > 25 && (
-                    <Chip label="Alto" color="warning" size="small" sx={{ ml: 1 }} />
-                  )}
-                </Typography>
+              <Grid item xs={12} md={4}>
+                <Box>
+                  <Typography variant="body2" color="textSecondary">
+                    <strong>Gastos Fijos vs Ventas:</strong>
+                  </Typography>
+                  <Typography variant="h6" color={reportData.gastosFijos.total / reportData.ventasNetas.total > 0.25 ? 'warning.main' : 'success.main'}>
+                    {((reportData.gastosFijos.total / reportData.ventasNetas.total) * 100).toFixed(1)}%
+                  </Typography>
+                  <Typography variant="caption" color="textSecondary">
+                    Ideal: &lt; 25%
+                  </Typography>
+                </Box>
               </Grid>
-              <Grid item xs={12} md={6}>
-                <Typography variant="body2" color="textSecondary">
-                  <strong>Gastos Variables:</strong> {reportData.gastosVariables.percentage.toFixed(1)}% del total
-                </Typography>
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <Typography variant="body2" color="textSecondary">
-                  <strong>Punto de Equilibrio Aprox:</strong> {formatCurrency(reportData.gastosFijos.total + reportData.gastosPersonal.total)}
-                </Typography>
+              <Grid item xs={12} md={4}>
+                <Box>
+                  <Typography variant="body2" color="textSecondary">
+                    <strong>Margen de Seguridad:</strong>
+                  </Typography>
+                  <Typography variant="h6" color={reportData.ventasNetas.total > reportData.puntoEquilibrio ? 'success.main' : 'error.main'}>
+                    {reportData.ventasNetas.total > 0 ? (((reportData.ventasNetas.total - reportData.puntoEquilibrio) / reportData.ventasNetas.total) * 100).toFixed(1) : '0'}%
+                  </Typography>
+                  <Typography variant="caption" color="textSecondary">
+                    Cushion sobre punto de equilibrio
+                  </Typography>
+                </Box>
               </Grid>
             </Grid>
           </Paper>
