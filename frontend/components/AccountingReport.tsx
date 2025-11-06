@@ -249,28 +249,36 @@ const AccountingReport: React.FC = () => {
       } else if (gasto.tipoOperacion === 'salida') {
         totalEgresos += amount;
         
-        // Clasificar por tipo de gasto contable
-        const category = classifyExpense(gasto);
-        switch (category) {
-          case 'fijo':
-            const fixedCategory = getFixedExpenseCategory(gasto);
-            addToConceptMap(conceptMaps.gastosFijos, fixedCategory, amount, gasto.rubro);
-            break;
-          case 'variable':
-            addToConceptMap(conceptMaps.gastosVariables, getVariableExpenseCategory(gasto), amount, gasto.rubro);
-            break;
-          case 'personal':
-            addToConceptMap(conceptMaps.gastosPersonal, getPersonnelCategory(gasto), amount, gasto.rubro);
-            break;
-          case 'administrativo':
-            addToConceptMap(conceptMaps.gastosAdministrativos, getAdministrativeCategory(gasto), amount, gasto.rubro);
-            break;
-          case 'operacional':
-            addToConceptMap(conceptMaps.gastosOperacionales, getOperationalCategory(gasto), amount, gasto.rubro);
-            break;
-          case 'financiero':
-            addToConceptMap(conceptMaps.gastosFinancieros, getFinancialCategory(gasto), amount, gasto.rubro);
-            break;
+        // IMPORTANTE: Capital de préstamos NO es gasto contable (solo movimiento de caja)
+        const esCapitalPrestamo = gasto.rubro === 'BANCO' && gasto.subRubro === 'PRESTAMO';
+        
+        if (esCapitalPrestamo) {
+          // Solo registrar en conceptMap para visibilidad en flujo de caja, pero NO sumar a gastos financieros
+          addToConceptMap(conceptMaps.gastosFinancieros, getFinancialCategory(gasto), amount, gasto.rubro);
+        } else {
+          // Clasificar por tipo de gasto contable
+          const category = classifyExpense(gasto);
+          switch (category) {
+            case 'fijo':
+              const fixedCategory = getFixedExpenseCategory(gasto);
+              addToConceptMap(conceptMaps.gastosFijos, fixedCategory, amount, gasto.rubro);
+              break;
+            case 'variable':
+              addToConceptMap(conceptMaps.gastosVariables, getVariableExpenseCategory(gasto), amount, gasto.rubro);
+              break;
+            case 'personal':
+              addToConceptMap(conceptMaps.gastosPersonal, getPersonnelCategory(gasto), amount, gasto.rubro);
+              break;
+            case 'administrativo':
+              addToConceptMap(conceptMaps.gastosAdministrativos, getAdministrativeCategory(gasto), amount, gasto.rubro);
+              break;
+            case 'operacional':
+              addToConceptMap(conceptMaps.gastosOperacionales, getOperationalCategory(gasto), amount, gasto.rubro);
+              break;
+            case 'financiero':
+              addToConceptMap(conceptMaps.gastosFinancieros, getFinancialCategory(gasto), amount, gasto.rubro);
+              break;
+          }
         }
       }
     });
@@ -299,7 +307,15 @@ const AccountingReport: React.FC = () => {
     const totalGastosPersonal = gastosPersonalItems.reduce((sum: number, item: AccountingItem) => sum + item.amount, 0);
     const totalGastosAdministrativos = gastosAdministrativosItems.reduce((sum: number, item: AccountingItem) => sum + item.amount, 0);
     const totalGastosOperacionales = gastosOperacionalesItems.reduce((sum: number, item: AccountingItem) => sum + item.amount, 0);
-    const totalGastosFinancieros = gastosFinancierosItems.reduce((sum: number, item: AccountingItem) => sum + item.amount, 0);
+    
+    // IMPORTANTE: Excluir capital de préstamos del total de gastos financieros (no es gasto contable)
+    const totalGastosFinancieros = gastosFinancierosItems.reduce((sum: number, item: AccountingItem) => {
+      // Capital de préstamos NO se suma al gasto financiero (solo movimiento de caja)
+      if (item.concept === 'Amortización de Préstamos') {
+        return sum; // No sumar
+      }
+      return sum + item.amount;
+    }, 0);
 
     // ===== CALCULOS FINALES =====
     const totalIngresos = ventasNetas + totalIngresosOperacionales;
@@ -542,7 +558,23 @@ const AccountingReport: React.FC = () => {
 
   const getFinancialCategory = (gasto: Gasto): string => {
     if (gasto.rubro === 'BANCO') {
-      return 'Gastos Bancarios';
+      switch (gasto.subRubro) {
+        case 'PRESTAMO':
+          // PRESTAMO = capital puro (NO es gasto, solo flujo de caja)
+          // Para intereses, crear gasto separado con subRubro='INTERES'
+          return 'Amortización de Préstamos';
+        case 'INTERES':
+        case 'INTERESES':
+          return 'Intereses de Préstamos'; // Gasto financiero real
+        case 'COMISION BANCARIA':
+        case 'COMISIONES':
+          return 'Comisiones Bancarias';
+        case 'MANTENIMIENTO':
+        case 'MANTENIMIENTO CUENTA':
+          return 'Mantenimiento de Cuenta';
+        default:
+          return 'Gastos Bancarios'; // Otros gastos bancarios sí cuentan
+      }
     } else if (gasto.rubro === 'ARCA') {
       return 'Impuestos - IVA';
     }
@@ -624,33 +656,48 @@ const AccountingReport: React.FC = () => {
               <TableBody>
                 {category.items
                   .sort((a, b) => b.amount - a.amount)
-                  .map((item, index) => (
-                    <TableRow key={index}>
-                      <TableCell>
-                        <Box>
+                  .map((item, index) => {
+                    const esAmortizacion = item.concept === 'Amortización de Préstamos';
+                    return (
+                      <TableRow 
+                        key={index}
+                        sx={esAmortizacion ? { bgcolor: 'info.light', opacity: 0.7 } : {}}
+                      >
+                        <TableCell>
+                          <Box>
+                            <Typography variant="body2" fontWeight="medium">
+                              {item.concept}
+                              {esAmortizacion && (
+                                <Chip 
+                                  label="No sumado" 
+                                  size="small" 
+                                  color="info" 
+                                  sx={{ ml: 1, fontSize: '0.7rem' }}
+                                />
+                              )}
+                            </Typography>
+                            <Typography variant="caption" color="textSecondary">
+                              Rubros: {item.rubros.join(', ')}
+                              {esAmortizacion && ' • Capital pagado (solo flujo de caja)'}
+                            </Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell align="center">
+                          <Chip label={item.count} size="small" variant="outlined" />
+                        </TableCell>
+                        <TableCell align="right">
                           <Typography variant="body2" fontWeight="medium">
-                            {item.concept}
+                            {formatCurrency(item.amount)}
                           </Typography>
-                          <Typography variant="caption" color="textSecondary">
-                            Rubros: {item.rubros.join(', ')}
+                        </TableCell>
+                        <TableCell align="center">
+                          <Typography variant="body2">
+                            {esAmortizacion ? '-' : `${((item.amount / category.total) * 100).toFixed(1)}%`}
                           </Typography>
-                        </Box>
-                      </TableCell>
-                      <TableCell align="center">
-                        <Chip label={item.count} size="small" variant="outlined" />
-                      </TableCell>
-                      <TableCell align="right">
-                        <Typography variant="body2" fontWeight="medium">
-                          {formatCurrency(item.amount)}
-                        </Typography>
-                      </TableCell>
-                      <TableCell align="center">
-                        <Typography variant="body2">
-                          {((item.amount / category.total) * 100).toFixed(1)}%
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
               </TableBody>
             </Table>
           </TableContainer>
@@ -1219,6 +1266,18 @@ const AccountingReport: React.FC = () => {
           <Typography variant="h6" sx={{ mt: 3, mb: 2, color: 'error.main' }}>
             D. GASTOS FINANCIEROS
           </Typography>
+          
+          {/* Nota explicativa sobre préstamos */}
+          {reportData.gastosFinancieros.items.some(item => item.concept === 'Amortización de Préstamos') && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              <Typography variant="body2">
+                <strong>Nota Contable:</strong> La "Amortización de Préstamos" (capital pagado) se muestra para transparencia del flujo de caja, 
+                pero <strong>NO se suma al total de Gastos Financieros</strong> ya que contablemente el pago de capital solo reduce el pasivo, no es un gasto. 
+                Solo los <strong>intereses</strong> se consideran gasto financiero.
+              </Typography>
+            </Alert>
+          )}
+          
           {renderCategoryTable(reportData.gastosFinancieros)}
 
           {/* RESULTADO FINAL */}

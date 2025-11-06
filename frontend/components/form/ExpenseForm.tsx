@@ -95,12 +95,15 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
     cuentaDestino: '',
     montoTransferencia: '',
     horasExtra: '', // Nuevo campo para cantidad de horas extra
+    // Campo para préstamos
+    montoInteres: '', // Monto de intereses del préstamo
   });
 
   // Estados separados para los valores formateados
   const [entradaFormatted, setEntradaFormatted] = useState('');
   const [salidaFormatted, setSalidaFormatted] = useState('');
   const [montoTransferenciaFormatted, setMontoTransferenciaFormatted] = useState('');
+  const [montoInteresFormatted, setMontoInteresFormatted] = useState('');
 
   // Función para formatear el número mientras se escribe (con decimales)
   const formatNumberInput = (value: string): string => {
@@ -218,6 +221,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
         cuentaDestino: gastoToEdit.cuentaDestino || '',
         montoTransferencia: gastoToEdit.montoTransferencia?.toString() || '',
         horasExtra: '', // Resetear horas extra al editar
+        montoInteres: '', // Campo para intereses de préstamos
       });
       
       // Formatear los valores existentes con decimales
@@ -265,6 +269,15 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
       setMontoTransferenciaFormatted(formatted);
       const numericValue = getNumericValue(formatted);
       setFormData(prev => ({ ...prev, montoTransferencia: numericValue.toString() }));
+      setValidationError('');
+      return;
+    }
+
+    if (name === 'montoInteres') {
+      const formatted = formatNumberInput(value);
+      setMontoInteresFormatted(formatted);
+      const numericValue = getNumericValue(formatted);
+      setFormData(prev => ({ ...prev, montoInteres: numericValue.toString() }));
       setValidationError('');
       return;
     }
@@ -337,6 +350,19 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
       }
       setFormData(updatedFormData);
       setValidationError('');
+    } else if (name === 'subRubro') {
+      // Si cambia subRubro y NO es PRESTAMO, limpiar campo de intereses
+      const updatedFormData = {
+        ...formData,
+        subRubro: value,
+      };
+      
+      if (value !== 'PRESTAMO') {
+        updatedFormData.montoInteres = '';
+        setMontoInteresFormatted('');
+      }
+      
+      setFormData(updatedFormData);
     } else {
       setFormData(prev => ({ 
         ...prev, 
@@ -366,6 +392,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
     const salidaValue = Number(formData.salida) || 0;
     const montoTransferenciaValue = Number(formData.montoTransferencia) || 0;
     const horasExtraValue = Number(formData.horasExtra) || 0;
+    const montoInteresValue = Number(formData.montoInteres) || 0;
 
     // Validar según el tipo de operación
     if (formData.tipoOperacion === 'entrada') {
@@ -441,10 +468,47 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
       }
     }
 
-    if (gastoToEdit && gastoToEdit._id) {
-      dispatch(updateGasto({ _id: gastoToEdit._id, ...payload } as any));
+    // CASO ESPECIAL: Préstamo con intereses
+    // Si es un préstamo (subRubro=PRESTAMO) con monto de intereses > 0, crear 2 gastos
+    const esPrestamo = formData.rubro === 'BANCO' && formData.subRubro === 'PRESTAMO';
+    const tieneIntereses = montoInteresValue > 0;
+    
+    if (esPrestamo && tieneIntereses && !gastoToEdit) {
+      // Calcular capital = salida - intereses
+      const montoCapital = salidaValue - montoInteresValue;
+      
+      if (montoCapital < 0) {
+        setValidationError('El monto de intereses no puede ser mayor al monto total del préstamo');
+        return;
+      }
+      
+      // Crear primer gasto: CAPITAL
+      const payloadCapital = {
+        ...payload,
+        salida: montoCapital,
+        detalleGastos: `${formData.detalleGastos} - Capital`,
+      };
+      
+      // Crear segundo gasto: INTERESES
+      const payloadInteres = {
+        ...payload,
+        subRubro: 'INTERES',
+        salida: montoInteresValue,
+        detalleGastos: `${formData.detalleGastos} - Interés`,
+      };
+      
+      // Dispatch ambos gastos
+      dispatch(createGasto(payloadCapital as any));
+      dispatch(createGasto(payloadInteres as any));
+      
+      showNotification('Préstamo registrado: capital e intereses separados', 'success');
     } else {
-      dispatch(createGasto(payload as any));
+      // Caso normal: un solo gasto
+      if (gastoToEdit && gastoToEdit._id) {
+        dispatch(updateGasto({ _id: gastoToEdit._id, ...payload } as any));
+      } else {
+        dispatch(createGasto(payload as any));
+      }
     }
 
     // Marcar que se inició una operación
@@ -784,14 +848,30 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   name="salida"
-                  label="Salida"
+                  label={formData.subRubro === 'PRESTAMO' ? 'Monto Total Cuota' : 'Salida'}
                   type="text"
                   value={salidaFormatted}
                   onChange={handleInputChange}
                   fullWidth
                   required
                   placeholder="Ej: 2.300,75"
-                  helperText="Formato: 1.000,50 (usar coma para decimales)"
+                  helperText={formData.subRubro === 'PRESTAMO' ? 'Monto total de la cuota (capital + intereses)' : 'Formato: 1.000,50 (usar coma para decimales)'}
+                />
+              </Grid>
+            )}
+
+            {/* Monto Intereses (solo si es PRESTAMO) */}
+            {formData.tipoOperacion === 'salida' && formData.subRubro === 'PRESTAMO' && (
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  name="montoInteres"
+                  label="Monto Intereses (opcional)"
+                  type="text"
+                  value={montoInteresFormatted}
+                  onChange={handleInputChange}
+                  fullWidth
+                  placeholder="Ej: 500,00"
+                  helperText="Si incluye intereses, se crearán 2 registros separados (capital e interés)"
                 />
               </Grid>
             )}
