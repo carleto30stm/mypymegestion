@@ -98,7 +98,8 @@ const AccountingReport: React.FC = () => {
   }, [dispatch]);
 
   useEffect(() => {
-    if (gastos.length > 0 && ventas.length > 0) {
+    // Permitir generar reporte con solo gastos (ventas pueden estar vacías)
+    if (gastos.length > 0) {
       generateReport();
     }
   }, [gastos, ventas, reportPeriod, selectedMonth, selectedYear]);
@@ -137,6 +138,11 @@ const AccountingReport: React.FC = () => {
   };
 
   const filterVentasByPeriod = (): Venta[] => {
+    // Si no hay ventas, retornar array vacío
+    if (!ventas || ventas.length === 0) {
+      return [];
+    }
+    
     return ventas.filter(venta => {
       // Solo ventas confirmadas
       if (venta.estado !== 'confirmada') return false;
@@ -166,13 +172,25 @@ const AccountingReport: React.FC = () => {
   };
 
   const calculateAccountingSummary = (filteredGastos: Gasto[]): AccountingSummary => {
-    // ===== PASO 1: CALCULAR VENTAS NETAS (desde tabla Venta) =====
-    const ventasDelPeriodo = filterVentasByPeriod();
+    // ===== PASO 1: CALCULAR VENTAS NETAS =====
     
-    // Ventas brutas: solo ventas confirmadas no anuladas
-    const ventasBrutas = ventasDelPeriodo
+    // 1A. Ventas desde tabla Venta (nuevo sistema)
+    const ventasDelPeriodo = filterVentasByPeriod();
+    const ventasBrutasTabla = ventasDelPeriodo
       .filter(v => v.estado === 'confirmada' && !v.motivoAnulacion)
       .reduce((sum, v) => sum + v.total, 0);
+    
+    // 1B. Ventas legacy: registradas manualmente como gastos COBRO.VENTA (antes del módulo de ventas)
+    const ventasLegacy = filteredGastos
+      .filter(g => 
+        g.tipoOperacion === 'entrada' && 
+        g.rubro === 'COBRO.VENTA' && 
+        (g.subRubro === 'COBRO' || g.subRubro === 'ADEUDADO')
+      )
+      .reduce((sum, g) => sum + (g.entrada || 0), 0);
+    
+    // Total ventas brutas (tabla + legacy)
+    const ventasBrutas = ventasBrutasTabla + ventasLegacy;
     
     // Devoluciones: obtener de gastos con subRubro DEVOLUCION (son NEGATIVAS)
     const devolucionesGastos = filteredGastos
@@ -194,8 +212,11 @@ const AccountingReport: React.FC = () => {
     };
 
     // Agregar ventas brutas y devoluciones a conceptMaps
-    if (ventasBrutas > 0) {
-      addToConceptMap(conceptMaps.ventasNetas, 'Ventas Brutas', ventasBrutas, 'VENTAS');
+    if (ventasBrutasTabla > 0) {
+      addToConceptMap(conceptMaps.ventasNetas, 'Ventas (Módulo Ventas)', ventasBrutasTabla, 'VENTAS');
+    }
+    if (ventasLegacy > 0) {
+      addToConceptMap(conceptMaps.ventasNetas, 'Ventas (Registros Manuales)', ventasLegacy, 'COBRO.VENTA');
     }
     if (devolucionesGastos > 0) {
       addToConceptMap(conceptMaps.ventasNetas, 'Devoluciones', -devolucionesGastos, 'COBRO.VENTA');
@@ -206,19 +227,23 @@ const AccountingReport: React.FC = () => {
     let flujoCobros = 0;
 
     // Procesar cada gasto
-    console.log('Procesando gastos filtrados:', filteredGastos.length);
     filteredGastos.forEach(gasto => {
       const amount = gasto.tipoOperacion === 'entrada' ? (gasto.entrada || 0) : (gasto.salida || 0);
       
       if (gasto.tipoOperacion === 'entrada') {
-        // SEPARAR: Ingresos operacionales vs Flujo de cobranzas
+        // SEPARAR: Ingresos operacionales vs Ventas legacy vs Flujo de cobranzas
         if (gasto.rubro === 'COBRO.VENTA' && ['FLETE', 'COMISION', 'AJUSTE'].includes(gasto.subRubro)) {
-          // Ingresos operacionales (accesorios)
+          // Ingresos operacionales (accesorios de ventas)
           totalIngresosOperacionales += amount;
           addToConceptMap(conceptMaps.ingresosOperacionales, getOperationalIncomeCategory(gasto), amount, gasto.rubro);
-        } else if (gasto.subRubro === 'COBRO' || gasto.subRubro === 'ADEUDADO') {
-          // Flujo de cobranzas (NO es ingreso, solo conversión AR → Efectivo)
-          flujoCobros += amount;
+        } else if (gasto.rubro === 'COBRO.VENTA' && (gasto.subRubro === 'COBRO' || gasto.subRubro === 'ADEUDADO')) {
+          // COBRO/ADEUDADO en COBRO.VENTA → Son ventas legacy (ya contadas arriba)
+          // NO contar en flujo de cobros para evitar duplicación
+          // (Ya están incluidas en ventasLegacy)
+        } else if (gasto.rubro === 'BANCO' && (gasto.subRubro === 'AJUSTE DE BANCO' || gasto.subRubro === 'AJUSTE CAJA' || gasto.subRubro === 'AJUSTE')) {
+          // Ajustes bancarios/caja son ingresos operacionales
+          totalIngresosOperacionales += amount;
+          addToConceptMap(conceptMaps.ingresosOperacionales, 'Ajustes Bancarios', amount, gasto.rubro);
         }
         // NOTA: DEVOLUCION ya se procesó arriba como NEGATIVO en ventas
       } else if (gasto.tipoOperacion === 'salida') {
@@ -226,11 +251,9 @@ const AccountingReport: React.FC = () => {
         
         // Clasificar por tipo de gasto contable
         const category = classifyExpense(gasto);
-        console.log(`Gasto: ${gasto.detalleGastos}, SubRubro: ${gasto.subRubro}, Categoría: ${category}, Monto: ${amount}`);
         switch (category) {
           case 'fijo':
             const fixedCategory = getFixedExpenseCategory(gasto);
-            console.log(`Agregando a gastos fijos: ${fixedCategory}, Monto: ${amount}`);
             addToConceptMap(conceptMaps.gastosFijos, fixedCategory, amount, gasto.rubro);
             break;
           case 'variable':
@@ -270,9 +293,6 @@ const AccountingReport: React.FC = () => {
     const gastosAdministrativosItems = convertMapToItems(conceptMaps.gastosAdministrativos);
     const gastosOperacionalesItems = convertMapToItems(conceptMaps.gastosOperacionales);
     const gastosFinancierosItems = convertMapToItems(conceptMaps.gastosFinancieros);
-
-    console.log('Ventas Netas Map:', conceptMaps.ventasNetas);
-    console.log('Ventas Netas Items:', ventasNetasItems);
 
     const totalGastosFijos = gastosFijosItems.reduce((sum: number, item: AccountingItem) => sum + item.amount, 0);
     const totalGastosVariables = gastosVariablesItems.reduce((sum: number, item: AccountingItem) => sum + item.amount, 0);
