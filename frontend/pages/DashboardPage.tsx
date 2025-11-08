@@ -119,9 +119,75 @@ const DashboardPage: React.FC = () => {
     };
   });
 
+  // Función helper para calcular rango de fechas según el filtro
+  const calcularRangoFechas = () => {
+    const hoy = new Date();
+    let desde: Date;
+    let hasta: Date = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 23, 59, 59);
+
+    switch (filterType) {
+      case 'today':
+        desde = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 0, 0, 0);
+        break;
+      
+      case 'month': {
+        const [year, month] = selectedMonth.split('-').map(Number);
+        desde = new Date(year, month - 1, 1, 0, 0, 0);
+        hasta = new Date(year, month, 0, 23, 59, 59); // último día del mes
+        break;
+      }
+      
+      case 'quarter': {
+        const [year, quarterStr] = selectedQuarter.split('-Q');
+        const quarter = Number(quarterStr);
+        const startMonth = (quarter - 1) * 3;
+        desde = new Date(Number(year), startMonth, 1, 0, 0, 0);
+        hasta = new Date(Number(year), startMonth + 3, 0, 23, 59, 59);
+        break;
+      }
+      
+      case 'semester': {
+        const [year, semesterStr] = selectedSemester.split('-S');
+        const semester = Number(semesterStr);
+        const startMonth = semester === 1 ? 0 : 6;
+        desde = new Date(Number(year), startMonth, 1, 0, 0, 0);
+        hasta = new Date(Number(year), startMonth + 6, 0, 23, 59, 59);
+        break;
+      }
+      
+      case 'year': {
+        const year = Number(selectedYear);
+        desde = new Date(year, 0, 1, 0, 0, 0);
+        hasta = new Date(year, 11, 31, 23, 59, 59);
+        break;
+      }
+      
+      case 'total':
+      default:
+        // Para "total", no enviamos fechas (backend traerá todo)
+        return null;
+    }
+
+    return {
+      desde: desde.toISOString().split('T')[0],
+      hasta: hasta.toISOString().split('T')[0]
+    };
+  };
+
   useEffect(() => {
-    dispatch(fetchGastos());
-  }, [dispatch]);
+    const rangoFechas = calcularRangoFechas();
+    
+    if (rangoFechas) {
+      // Filtro con fechas específicas
+      dispatch(fetchGastos({ 
+        desde: rangoFechas.desde, 
+        hasta: rangoFechas.hasta 
+      }));
+    } else {
+      // Filtro "total" - traer todos los registros
+      dispatch(fetchGastos({ todosPeriodos: true }));
+    }
+  }, [dispatch, filterType, selectedMonth, selectedQuarter, selectedSemester, selectedYear]);
 
   useEffect(() => {
     if (error) {
@@ -293,14 +359,7 @@ const DashboardPage: React.FC = () => {
         
         {/* Componente de cheques pendientes */}
         {showPendingChecks && (
-          <PendingChecks 
-            filterType={filterType}
-            selectedMonth={selectedMonth}
-            selectedQuarter={selectedQuarter}
-            selectedSemester={selectedSemester}
-            selectedYear={selectedYear}
-            availableMonths={availableMonths}
-          />
+          <PendingChecks />
         )}
 
         {showChequesDisponibles && (

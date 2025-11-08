@@ -21,6 +21,7 @@ import ordenesProduccionRoutes from './routes/ordenesProduccion.js';
 import remitosRoutes from './routes/remitos.js';
 import recibosRoutes from './routes/recibos.js';
 import cuentaCorrienteRoutes from './routes/cuentaCorriente.js';
+import migrationChequesRoutes from './routes/migration-cheques.js';
 
 dotenv.config();
 
@@ -95,6 +96,7 @@ const start = async () => {
     app.use('/api/remitos', remitosRoutes);
     app.use('/api/recibos', recibosRoutes);
     app.use('/api/cuenta-corriente', cuentaCorrienteRoutes);
+    app.use('/api/migration', migrationChequesRoutes); // Endpoint temporal para migración de cheques
 
     const env = process.env.NODE_ENV || 'development';
     app.listen(PORT, () => {

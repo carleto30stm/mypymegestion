@@ -97,17 +97,20 @@ router.post('/:id/disponer-cheque', async (req, res) => {
       salida: chequeOriginal.entrada, // La misma cantidad que ingresó
       entrada: 0,
       estadoCheque: nuevoEstado,
-      chequeRelacionadoId: id
+      chequeRelacionadoId: id,
+      numeroCheque: chequeOriginal.numeroCheque // Copiar el número de cheque
     });
 
     // Si es depósito, crear también la entrada en el banco destino
     let movimientoEntrada = null;
     if (tipoDisposicion === 'depositar') {
+      console.log('🏦 Creando movimiento de entrada con numeroCheque:', chequeOriginal.numeroCheque);
+      
       movimientoEntrada = new Gasto({
         fecha: new Date(),
         rubro: 'BANCO',
         subRubro: 'MOV.BANC',
-        medioDePago: 'EFECTIVO', // Ahora es dinero en cuenta
+        medioDePago: 'CHEQUE TERCERO', // Mantener como CHEQUE TERCERO para que se muestre el numeroCheque
         banco: destino, // El banco donde depositamos (PROVINCIA, SANTANDER, etc.)
         clientes: chequeOriginal.clientes,
         detalleGastos: `Depósito cheque de tercero - ${detalleOperacion}`,
@@ -116,8 +119,12 @@ router.post('/:id/disponer-cheque', async (req, res) => {
         confirmado: true,
         entrada: chequeOriginal.entrada, // Entra el mismo monto
         salida: 0,
-        chequeRelacionadoId: id
+        chequeRelacionadoId: id,
+        numeroCheque: chequeOriginal.numeroCheque, // Copiar el número de cheque también en el depósito
+        estadoCheque: 'depositado' // Marcar como depositado para identificarlo
       });
+
+      console.log('✅ Movimiento entrada creado con numeroCheque:', movimientoEntrada.numeroCheque);
     }
 
     // Actualizar el estado del cheque original

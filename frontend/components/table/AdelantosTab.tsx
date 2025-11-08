@@ -69,9 +69,9 @@ const AdelantosTab: React.FC<AdelantosTabProps> = ({ periodo }) => {
         observaciones
       })).unwrap();
       
-      // Refrescar período y gastos
+      // Refrescar período y gastos (default: últimos 3 meses)
       await dispatch(fetchPeriodoById(periodo._id));
-      await dispatch(fetchGastos());
+      await dispatch(fetchGastos({}));
       
       handleCloseAdelanto();
     } catch (error) {

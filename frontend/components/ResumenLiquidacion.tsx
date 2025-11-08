@@ -115,9 +115,9 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
         banco
       })).unwrap();
       
-      // Refrescar el período y los gastos
+      // Refrescar el período y los gastos (default: últimos 3 meses)
       await dispatch(fetchPeriodoById(periodo._id));
-      await dispatch(fetchGastos());
+      await dispatch(fetchGastos({}));
       handleCloseLiquidar();
     } catch (error) {
       console.error('Error al liquidar empleado:', error);

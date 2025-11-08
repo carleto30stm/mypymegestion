@@ -391,47 +391,11 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
     });
   }
 
-  // Función para filtrar gastos según el tipo de filtro
-  // Función helper para determinar si una fecha coincide con el filtro
-  const matchesFilter = (fecha: Date): boolean => {
-    const fechaStr = fecha.toISOString();
-    const today = new Date().toISOString().split('T')[0];
-    
-    switch (filterType) {
-      case 'today':
-        return fechaStr.split('T')[0] === today;
-      case 'month':
-        return fechaStr.slice(0, 7) === selectedMonth;
-      case 'quarter': {
-        const [year, quarter] = selectedQuarter.split('-Q');
-        const fechaYear = fecha.getFullYear();
-        const fechaQuarter = Math.floor(fecha.getMonth() / 3) + 1;
-        return fechaYear === parseInt(year) && fechaQuarter === parseInt(quarter);
-      }
-      case 'semester': {
-        const [year, semester] = selectedSemester.split('-S');
-        const fechaYear = fecha.getFullYear();
-        const fechaSemester = fecha.getMonth() < 6 ? 1 : 2;
-        return fechaYear === parseInt(year) && fechaSemester === parseInt(semester);
-      }
-      case 'year':
-        return fecha.getFullYear() === parseInt(selectedYear);
-      case 'total':
-      default:
-        return true;
-    }
-  };
-
   const getFilteredGastos = () => {
-    // CAMBIO: Ya NO filtramos por fechaStandBy aquí - mostramos TODOS los registros
-    // La lógica de StandBy solo aplicará en los cálculos (BankSummary)
-    
-    if (filterType === 'total') {
-      return gastos; // Mostrar todos los gastos
-    } else {
-      // Filtrar por fecha según el tipo de filtro seleccionado
-      return gastos.filter(gasto => matchesFilter(new Date(gasto.fecha)));
-    }
+    // El backend ya filtró por fecha según el filtro seleccionado
+    // No necesitamos filtrar nuevamente aquí para evitar problemas de zona horaria
+    // Simplemente retornamos todos los gastos que vienen del backend
+    return gastos;
   };
 
   const gastosFiltered = getFilteredGastos();
