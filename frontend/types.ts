@@ -252,6 +252,7 @@ export interface ItemVenta {
   subtotal: number;
   descuento: number;
   total: number;
+  porcentajeDescuento?: number; // Porcentaje de descuento aplicado (0-100)
 }
 
 // Interface para venta

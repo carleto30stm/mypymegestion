@@ -44,7 +44,7 @@ import {
   Warning as WarningIcon,
   Info as InfoIcon
 } from '@mui/icons-material';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, parseCurrency } from '../utils/formatters';
 
 const VentasPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -98,7 +98,13 @@ const VentasPage: React.FC = () => {
       }
       setCarrito(carrito.map(i => 
         i.productoId === productoSeleccionado._id 
-          ? { ...i, cantidad: nuevaCantidad, subtotal: nuevaCantidad * i.precioUnitario }
+          ? { 
+              ...i, 
+              cantidad: nuevaCantidad,
+              subtotal: (nuevaCantidad * i.precioUnitario) * (1 - ((i.porcentajeDescuento || 0) / 100)),
+              total: (nuevaCantidad * i.precioUnitario) * (1 - ((i.porcentajeDescuento || 0) / 100)),
+              descuento: (nuevaCantidad * i.precioUnitario) * ((i.porcentajeDescuento || 0) / 100)
+            }
           : i
       ));
     } else {
@@ -110,7 +116,8 @@ const VentasPage: React.FC = () => {
         precioUnitario: productoSeleccionado.precioVenta,
         subtotal: cantidad * productoSeleccionado.precioVenta,
         descuento: 0,
-        total: cantidad * productoSeleccionado.precioVenta
+        total: cantidad * productoSeleccionado.precioVenta,
+        porcentajeDescuento: 0
       };
       setCarrito([...carrito, nuevoItem]);
     }
@@ -122,6 +129,33 @@ const VentasPage: React.FC = () => {
 
   const eliminarDelCarrito = (productoId: string) => {
     setCarrito(carrito.filter(i => i.productoId !== productoId));
+  };
+
+  const actualizarDescuentoItem = (productoId: string, porcentajeStr: string) => {
+    // Permitir que el usuario escriba mientras edita
+    const porcentaje = porcentajeStr === '' ? 0 : parseFloat(porcentajeStr.replace(',', '.'));
+    
+    // Validar que el porcentaje esté entre 0 y 100
+    const porcentajeValido = Math.max(0, Math.min(100, porcentaje || 0));
+    
+    const carritoActualizado = carrito.map(item => {
+      if (item.productoId === productoId) {
+        const subtotalSinDescuento = item.precioUnitario * item.cantidad;
+        const montoDescuento = (subtotalSinDescuento * porcentajeValido) / 100;
+        const subtotalConDescuento = subtotalSinDescuento - montoDescuento;
+        
+        return {
+          ...item,
+          descuento: montoDescuento, // Guardamos el monto del descuento
+          subtotal: subtotalConDescuento,
+          total: subtotalConDescuento,
+          porcentajeDescuento: porcentajeValido // Guardamos también el porcentaje para mostrarlo
+        };
+      }
+      return item;
+    });
+    
+    setCarrito(carritoActualizado);
   };
 
   const calcularTotales = () => {
@@ -263,6 +297,7 @@ const VentasPage: React.FC = () => {
                     <TableCell><strong>Producto</strong></TableCell>
                     <TableCell align="right"><strong>P. Unit</strong></TableCell>
                     <TableCell align="center"><strong>Cant</strong></TableCell>
+                    <TableCell align="right"><strong>Descuento</strong></TableCell>
                     <TableCell align="right"><strong>Subtotal</strong></TableCell>
                     <TableCell align="center"></TableCell>
                   </TableRow>
@@ -276,6 +311,26 @@ const VentasPage: React.FC = () => {
                       </TableCell>
                       <TableCell align="right">{formatCurrency(item.precioUnitario)}</TableCell>
                       <TableCell align="center">{item.cantidad}</TableCell>
+                      <TableCell align="right">
+                        <TextField
+                          size="small"
+                          value={item.porcentajeDescuento }
+                          onChange={(e) => actualizarDescuentoItem(item.productoId, e.target.value)}
+                          variant="outlined"
+                          sx={{ width: '80px' }}
+                          inputProps={{ 
+                            style: { textAlign: 'right', fontSize: '0.875rem' },
+                            min: 0,
+                            max: 100,
+                            step: 0.1
+                          }}
+                          type="text"
+                          placeholder=""
+                          InputProps={{
+                            endAdornment: '%'
+                          }}
+                        />
+                      </TableCell>
                       <TableCell align="right">{formatCurrency(item.subtotal)}</TableCell>
                       <TableCell align="center">
                         <IconButton size="small" color="error" onClick={() => eliminarDelCarrito(item.productoId)}>
@@ -286,7 +341,7 @@ const VentasPage: React.FC = () => {
                   ))}
                   {carrito.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={5} align="center">
+                      <TableCell colSpan={6} align="center">
                         <Typography variant="body2" color="textSecondary">Carrito vacío</Typography>
                       </TableCell>
                     </TableRow>
