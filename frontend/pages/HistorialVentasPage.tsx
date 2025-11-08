@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { AppDispatch, RootState } from '../redux/store';
-import { fetchVentas, anularVenta, confirmarVenta } from '../redux/slices/ventasSlice';
+import { fetchVentas, anularVenta, confirmarVenta, updateVenta } from '../redux/slices/ventasSlice';
 import { crearFacturaDesdeVenta, fetchFacturas } from '../redux/slices/facturasSlice';
 import { Venta } from '../types';
 import {
@@ -30,12 +31,14 @@ import {
   Visibility as ViewIcon,
   Cancel as CancelIcon,
   Description as DescriptionIcon,
-  CheckCircle as CheckCircleIcon
+  CheckCircle as CheckCircleIcon,
+  Edit as EditIcon
 } from '@mui/icons-material';
 import { formatCurrency, formatDate } from '../utils/formatters';
 
 const HistorialVentasPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
+  const navigate = useNavigate();
   const { items: ventas, status } = useSelector((state: RootState) => state.ventas);
   const { items: facturas } = useSelector((state: RootState) => state.facturas);
   const { user } = useSelector((state: RootState) => state.auth);
@@ -47,6 +50,9 @@ const HistorialVentasPage: React.FC = () => {
   const [motivoAnulacion, setMotivoAnulacion] = useState('');
   const [facturandoVenta, setFacturandoVenta] = useState<string | null>(null);
   const [confirmandoVenta, setConfirmandoVenta] = useState<string | null>(null);
+  const [openEditar, setOpenEditar] = useState(false);
+  const [ventaEditar, setVentaEditar] = useState<Venta | null>(null);
+  const [editandoVenta, setEditandoVenta] = useState<string | null>(null);
 
   useEffect(() => {
     dispatch(fetchVentas());
@@ -110,8 +116,45 @@ const HistorialVentasPage: React.FC = () => {
     return facturas.find((f) => f.ventaId === ventaId);
   };
 
+  const handleEditarVenta = (venta: Venta) => {
+    // Solo se pueden editar ventas pendientes
+    if (venta.estado !== 'pendiente') {
+      alert('Solo se pueden editar ventas en estado pendiente');
+      return;
+    }
+    
+    // Navegar a VentasPage con los datos de la venta para editar
+    navigate('/ventas', { state: { ventaParaEditar: venta } });
+  };
+
+  const handleConfirmEditar = async () => {
+    if (!ventaEditar) return;
+
+    setEditandoVenta(ventaEditar._id!);
+    try {
+      // Por ahora solo permitir editar observaciones
+      // En una implementación completa se podría editar items, cliente, etc.
+      await dispatch(updateVenta({ 
+        id: ventaEditar._id!, 
+        ventaData: {
+          observaciones: ventaEditar.observaciones
+        }
+      })).unwrap();
+      
+      setOpenEditar(false);
+      setVentaEditar(null);
+      dispatch(fetchVentas());
+      alert('Venta actualizada exitosamente');
+    } catch (err: any) {
+      alert(err.message || 'Error al actualizar la venta');
+    } finally {
+      setEditandoVenta(null);
+    }
+  };
+
   const canAnular = user?.userType === 'admin';
   const canConfirm = user?.userType === 'admin' || user?.userType === 'oper_ad';
+  const canEdit = user?.userType === 'admin' || user?.userType === 'oper_ad';
 
   return (
     <Box sx={{ p: 3 }}>
@@ -197,6 +240,18 @@ const HistorialVentasPage: React.FC = () => {
                           ) : (
                             <CheckCircleIcon fontSize="small" />
                           )}
+                        </IconButton>
+                      </Tooltip>
+                    )}
+
+                    {canEdit && venta.estado === 'pendiente' && (
+                      <Tooltip title="Editar Venta">
+                        <IconButton
+                          size="small"
+                          color="primary"
+                          onClick={() => handleEditarVenta(venta)}
+                        >
+                          <EditIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
                     )}
@@ -321,6 +376,49 @@ const HistorialVentasPage: React.FC = () => {
             disabled={!motivoAnulacion.trim()}
           >
             Confirmar Anulación
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog Editar Venta */}
+      <Dialog open={openEditar} onClose={() => setOpenEditar(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Editar Venta - {ventaEditar?.numeroVenta}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            Solo se pueden editar observaciones en ventas pendientes.
+          </Typography>
+          {ventaEditar && (
+            <TextField
+              fullWidth
+              label="Observaciones"
+              multiline
+              rows={3}
+              value={ventaEditar.observaciones || ''}
+              onChange={(e) => setVentaEditar({
+                ...ventaEditar,
+                observaciones: e.target.value
+              })}
+              sx={{ mt: 2 }}
+              placeholder="Ingrese observaciones adicionales..."
+            />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenEditar(false)}>Cancelar</Button>
+          <Button
+            onClick={handleConfirmEditar}
+            color="primary"
+            variant="contained"
+            disabled={editandoVenta === ventaEditar?._id}
+          >
+            {editandoVenta === ventaEditar?._id ? (
+              <>
+                <CircularProgress size={20} sx={{ mr: 1 }} />
+                Guardando...
+              </>
+            ) : (
+              'Guardar Cambios'
+            )}
           </Button>
         </DialogActions>
       </Dialog>

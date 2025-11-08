@@ -4,6 +4,7 @@ import {
   getVentasByRango,
   getVentaById,
   crearVenta,
+  actualizarVenta,
   anularVenta,
   registrarPago,
   getEstadisticasVentas,
@@ -23,7 +24,8 @@ router.get('/rango', getVentasByRango); // Filtrar por rango de fechas
 router.get('/estadisticas', getEstadisticasVentas); // Estadísticas de ventas
 
 router.route('/:id')
-  .get(getVentaById);
+  .get(getVentaById)
+  .put(actualizarVenta); // admin/oper_ad pueden actualizar ventas pendientes
 
 // Rutas especiales
 router.patch('/:id/confirmar', confirmarVenta); // admin/oper_ad pueden confirmar

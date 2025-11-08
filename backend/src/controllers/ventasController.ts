@@ -127,7 +127,7 @@ export const crearVenta = async (req: ExpressRequest, res: ExpressResponse) => {
             const total = subtotal - descuento;
 
             itemsVenta.push({
-                productoId: producto._id,
+                productoId: producto._id as mongoose.Types.ObjectId,
                 codigoProducto: producto.codigo,
                 nombreProducto: producto.nombre,
                 cantidad: item.cantidad,
@@ -139,9 +139,9 @@ export const crearVenta = async (req: ExpressRequest, res: ExpressResponse) => {
 
             subtotalVenta += subtotal;
 
-            // Descontar stock
-            producto.stock -= item.cantidad;
-            await producto.save({ session });
+            // NO descontar stock aquí - se descuenta al confirmar la venta
+            // producto.stock -= item.cantidad;
+            // await producto.save({ session });
         }
 
         // Calcular totales
@@ -190,6 +190,136 @@ export const crearVenta = async (req: ExpressRequest, res: ExpressResponse) => {
         await session.abortTransaction();
         res.status(500).json({ 
             message: 'Error al crear la venta', 
+            details: error.message 
+        });
+    } finally {
+        session.endSession();
+    }
+};
+
+// @desc    Actualizar una venta (solo ventas pendientes)
+// @route   PUT /api/ventas/:id
+// @access  Private (admin/oper_ad)
+export const actualizarVenta = async (req: ExpressRequest, res: ExpressResponse) => {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+        const { id } = req.params;
+        const { clienteId, items, observaciones, aplicaIVA } = req.body;
+
+        // Buscar la venta existente
+        const ventaExistente = await Venta.findById(id).session(session);
+        
+        if (!ventaExistente) {
+            await session.abortTransaction();
+            return res.status(404).json({ message: 'Venta no encontrada' });
+        }
+
+        // Solo se pueden editar ventas pendientes
+        if (ventaExistente.estado !== 'pendiente') {
+            await session.abortTransaction();
+            return res.status(400).json({ 
+                message: 'Solo se pueden editar ventas en estado pendiente' 
+            });
+        }
+
+        // Validaciones básicas
+        if (!clienteId || !items || items.length === 0) {
+            await session.abortTransaction();
+            return res.status(400).json({ 
+                message: 'Cliente e items son requeridos' 
+            });
+        }
+
+        // Verificar que el cliente existe
+        const cliente = await Cliente.findById(clienteId).session(session);
+        if (!cliente) {
+            await session.abortTransaction();
+            return res.status(404).json({ message: 'Cliente no encontrado' });
+        }
+
+        const nombreCliente = cliente.razonSocial || `${cliente.apellido || ''} ${cliente.nombre}`.trim();
+
+        // Validar stock (sin descontar, solo validar disponibilidad)
+        const itemsVenta = [];
+        let subtotalVenta = 0;
+
+        for (const item of items) {
+            const producto = await Producto.findById(item.productoId).session(session);
+            
+            if (!producto) {
+                await session.abortTransaction();
+                return res.status(404).json({ 
+                    message: `Producto ${item.productoId} no encontrado` 
+                });
+            }
+
+            if (producto.estado !== 'activo') {
+                await session.abortTransaction();
+                return res.status(400).json({ 
+                    message: `El producto ${producto.nombre} no está activo` 
+                });
+            }
+
+            if (producto.stock < item.cantidad) {
+                await session.abortTransaction();
+                return res.status(400).json({ 
+                    message: `Stock insuficiente para ${producto.nombre}. Stock disponible: ${producto.stock}` 
+                });
+            }
+
+            // Calcular subtotal y total del item
+            const precioUnitario = item.precioUnitario || producto.precioVenta;
+            const subtotal = precioUnitario * item.cantidad;
+            const descuento = item.descuento || 0;
+            const total = subtotal - descuento;
+
+            itemsVenta.push({
+                productoId: producto._id as mongoose.Types.ObjectId,
+                codigoProducto: producto.codigo,
+                nombreProducto: producto.nombre,
+                cantidad: item.cantidad,
+                precioUnitario,
+                subtotal,
+                descuento,
+                total,
+                porcentajeDescuento: item.porcentajeDescuento || 0
+            });
+
+            subtotalVenta += subtotal;
+        }
+
+        // Calcular totales
+        const descuentoTotal = itemsVenta.reduce((sum, item) => sum + item.descuento, 0);
+        const ivaCalculado = (aplicaIVA === true) ? (subtotalVenta - descuentoTotal) * 0.21 : 0;
+        const totalVenta = subtotalVenta - descuentoTotal + ivaCalculado;
+
+        // Actualizar la venta
+        ventaExistente.clienteId = clienteId;
+        ventaExistente.nombreCliente = nombreCliente;
+        ventaExistente.documentoCliente = cliente.numeroDocumento;
+        ventaExistente.items = itemsVenta;
+        ventaExistente.subtotal = subtotalVenta;
+        ventaExistente.descuentoTotal = descuentoTotal;
+        ventaExistente.iva = ivaCalculado;
+        ventaExistente.total = totalVenta;
+        ventaExistente.observaciones = observaciones;
+        ventaExistente.aplicaIVA = aplicaIVA === true;
+        ventaExistente.saldoPendiente = totalVenta; // Recalcular saldo pendiente
+
+        const ventaActualizada = await ventaExistente.save({ session });
+
+        await session.commitTransaction();
+
+        res.json({
+            message: 'Venta actualizada exitosamente',
+            venta: ventaActualizada
+        });
+    } catch (error: any) {
+        await session.abortTransaction();
+        res.status(500).json({ 
+            message: 'Error al actualizar la venta', 
             details: error.message 
         });
     } finally {
@@ -462,6 +592,39 @@ export const confirmarVenta = async (req: ExpressRequest, res: ExpressResponse) 
             await session.abortTransaction();
             res.status(400).json({ message: `No se puede confirmar una venta en estado ${venta.estado}` });
             return;
+        }
+
+        // Validar stock y descontarlo al confirmar
+        for (const item of venta.items) {
+            const producto = await Producto.findById(item.productoId).session(session);
+            
+            if (!producto) {
+                await session.abortTransaction();
+                res.status(404).json({ 
+                    message: `Producto ${item.nombreProducto} no encontrado` 
+                });
+                return;
+            }
+
+            if (producto.estado !== 'activo') {
+                await session.abortTransaction();
+                res.status(400).json({ 
+                    message: `El producto ${producto.nombre} no está activo` 
+                });
+                return;
+            }
+
+            if (producto.stock < item.cantidad) {
+                await session.abortTransaction();
+                res.status(400).json({ 
+                    message: `Stock insuficiente para ${producto.nombre}. Stock disponible: ${producto.stock}, requerido: ${item.cantidad}` 
+                });
+                return;
+            }
+
+            // Descontar stock al confirmar
+            producto.stock -= item.cantidad;
+            await producto.save({ session });
         }
 
         venta.estado = 'confirmada';
