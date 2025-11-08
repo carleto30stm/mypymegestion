@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from '../redux/store';
 import { 
@@ -17,6 +17,7 @@ import {
 import { formatCurrency, formatCurrencyWithSymbol, formatDate } from '../utils/formatters';
 import { Download as DownloadIcon } from '@mui/icons-material';
 import { BANCOS } from '../types';
+import api from '../services/api';
 
 interface BankSummaryProps {
   filterType: 'today' | 'month' | 'quarter' | 'semester' | 'year' | 'total';
@@ -46,6 +47,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({
   const { items: gastos } = useSelector((state: RootState) => state.gastos);
   
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [todosLosCheques, setTodosLosCheques] = useState<any[]>([]);
   
   // Referencia para el contenido del PDF
   const pdfContentRef = useRef<HTMLDivElement>(null);
@@ -53,8 +55,22 @@ const BankSummary: React.FC<BankSummaryProps> = ({
   // Todos los usuarios pueden descargar PDF (es solo lectura)
   const canDownloadPDF = true;
 
-  // Obtener fecha de hoy en formato YYYY-MM-DD
+  // Obtener fecha de hoy en formato YYYY-MM-DD para validar fechaStandBy
   const today = new Date().toISOString().split('T')[0];
+
+  // Efecto para cargar TODOS los cheques sin filtro de fecha
+  useEffect(() => {
+    const cargarTodosCheques = async () => {
+      try {
+        const response = await api.get('/api/gastos'); // Sin filtros de fecha
+        setTodosLosCheques(response.data);
+      } catch (error) {
+        console.error('Error al cargar todos los cheques:', error);
+      }
+    };
+    
+    cargarTodosCheques();
+  }, []);
   
   // Generar lista de meses disponibles (últimos 12 meses)
   const availableMonths = Array.from({ length: 12 }, (_, i) => {
@@ -66,49 +82,11 @@ const BankSummary: React.FC<BankSummaryProps> = ({
     };
   });
 
-  // Función helper para determinar si una fecha coincide con el filtro
-  const matchesFilter = (fecha: Date): boolean => {
-    const fechaStr = fecha.toISOString();
-    const today = new Date().toISOString().split('T')[0];
-    
-    switch (filterType) {
-      case 'today':
-        return fechaStr.split('T')[0] === today;
-      
-      case 'month':
-        return fechaStr.slice(0, 7) === selectedMonth;
-      
-      case 'quarter': {
-        const [year, quarter] = selectedQuarter.split('-Q');
-        const fechaYear = fecha.getFullYear();
-        const fechaQuarter = Math.floor(fecha.getMonth() / 3) + 1;
-        return fechaYear === parseInt(year) && fechaQuarter === parseInt(quarter);
-      }
-      
-      case 'semester': {
-        const [year, semester] = selectedSemester.split('-S');
-        const fechaYear = fecha.getFullYear();
-        const fechaSemester = fecha.getMonth() < 6 ? 1 : 2;
-        return fechaYear === parseInt(year) && fechaSemester === parseInt(semester);
-      }
-      
-      case 'year':
-        return fecha.getFullYear() === parseInt(selectedYear);
-      
-      case 'total':
-      default:
-        return true;
-    }
-  };
-
   // Función para filtrar gastos según el tipo de filtro
   const getFilteredGastos = () => {
-    // Filtrar gastos según el tipo de filtro de fecha
+    // El backend ya filtró por fecha, no necesitamos filtrar nuevamente aquí
+    // Solo aplicamos filtros adicionales específicos del componente
     let gastosFiltrados = gastos;
-    
-    if (filterType !== 'total') {
-      gastosFiltrados = gastos.filter(gasto => matchesFilter(new Date(gasto.fecha)));
-    }
 
     // Excluir gastos cancelados de los cálculos
     gastosFiltrados = gastosFiltrados.filter(gasto => gasto.estado !== 'cancelado');
@@ -137,14 +115,9 @@ const BankSummary: React.FC<BankSummaryProps> = ({
   const gastosActivos = getFilteredGastos();
 
   // Función para obtener Cheques Tercero sin depositar (confirmados pero aún en poder)
+  // IMPORTANTE: Usa todosLosCheques para que se vean sin importar el filtro de fecha
   const getChequesConfirmadosSinDepositar = () => {
-    let chequesFiltrados = gastos;
-    
-    if (filterType !== 'total') {
-      chequesFiltrados = gastos.filter(gasto => matchesFilter(new Date(gasto.fecha)));
-    }
-
-    return chequesFiltrados.filter(gasto => 
+    return todosLosCheques.filter(gasto => 
       gasto.medioDePago === 'CHEQUE TERCERO' && // Solo Cheques Tercero 
       gasto.confirmado === true &&
       gasto.estadoCheque === 'recibido' && // Solo cheques en estado 'recibido' (no depositados ni dispuestos)
@@ -155,14 +128,9 @@ const BankSummary: React.FC<BankSummaryProps> = ({
   const chequesConfirmados = getChequesConfirmadosSinDepositar();
 
   // Función para obtener Cheques Propios pendientes de confirmación
+  // IMPORTANTE: Usa todosLosCheques para que se vean sin importar el filtro de fecha
   const getChequesPropiosPendientes = () => {
-    let chequesFiltrados = gastos;
-    
-    if (filterType !== 'total') {
-      chequesFiltrados = gastos.filter(gasto => matchesFilter(new Date(gasto.fecha)));
-    }
-
-    return chequesFiltrados.filter(gasto => 
+    return todosLosCheques.filter(gasto => 
       gasto.medioDePago === 'CHEQUE PROPIO' && // Solo Cheques Propios
       gasto.confirmado === false && // Solo los pendientes de confirmación
       gasto.estado !== 'cancelado' // Excluir cancelados

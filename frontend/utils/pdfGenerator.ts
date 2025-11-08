@@ -5,9 +5,9 @@ import { formatCurrency, formatDate } from './formatters';
 
 // Configuración de la empresa
 const EMPRESA = {
-  nombre: 'KURT',
-  direccion: 'Dirección de la empresa',
-  telefono: 'Teléfono',
+  nombre: 'KURT argentina',
+  direccion: 'San Blas 1837',
+  telefono: '+5491160996332',
   email: 'email@empresa.com',
   cuit: 'CUIT XX-XXXXXXXX-X'
 };
@@ -34,7 +34,7 @@ export const generarPDFRecibo = (recibo: ReciboPago): void => {
   // Datos de la empresa (izquierda)
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
-  doc.text('EMPRESA:', 14, yPos);
+  doc.text('Kurt:', 14, yPos);
   doc.setFont('helvetica', 'normal');
   yPos += 5;
   doc.text(EMPRESA.nombre, 14, yPos);
@@ -221,7 +221,7 @@ export const generarPDFRemito = (remito: Remito): void => {
   // Datos de la empresa (izquierda)
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
-  doc.text('EMPRESA:', 14, yPos);
+  doc.text('Kurt:', 14, yPos);
   doc.setFont('helvetica', 'normal');
   yPos += 5;
   doc.text(EMPRESA.nombre, 14, yPos);

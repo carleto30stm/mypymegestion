@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AppDispatch, RootState } from '../redux/store';
 import { fetchProductos } from '../redux/slices/productosSlice';
 import { fetchClientesActivos } from '../redux/slices/clientesSlice';
-import { createVenta } from '../redux/slices/ventasSlice';
+import { createVenta, updateVenta } from '../redux/slices/ventasSlice';
 import { crearFacturaDesdeVenta } from '../redux/slices/facturasSlice';
-import { Producto, ItemVenta, Cliente } from '../types';
+import { Producto, ItemVenta, Cliente, Venta } from '../types';
 import {
   Box,
   Typography,
@@ -42,15 +43,22 @@ import {
   ShoppingCart as CartIcon,
   Receipt as ReceiptIcon,
   Warning as WarningIcon,
-  Info as InfoIcon
+  Info as InfoIcon,
+  ArrowBack as ArrowBackIcon
 } from '@mui/icons-material';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, parseCurrency } from '../utils/formatters';
 
 const VentasPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
+  const location = useLocation();
+  const navigate = useNavigate();
   const { items: productos } = useSelector((state: RootState) => state.productos);
   const { clientesActivos } = useSelector((state: RootState) => state.clientes);
   const { user } = useSelector((state: RootState) => state.auth);
+
+  // Detectar si se está editando una venta
+  const ventaParaEditar = location.state?.ventaParaEditar as Venta | undefined;
+  const esEdicion = !!ventaParaEditar;
 
   const [carrito, setCarrito] = useState<ItemVenta[]>([]);
   const [productoSeleccionado, setProductoSeleccionado] = useState<Producto | null>(null);
@@ -69,14 +77,24 @@ const VentasPage: React.FC = () => {
     dispatch(fetchClientesActivos());
   }, [dispatch]);
 
-  // Actualizar sugerencia de IVA cuando cambia el cliente seleccionado
+  // Inicializar formulario si es edición
   useEffect(() => {
-    if (clienteId) {
+    if (ventaParaEditar) {
+      setCarrito(ventaParaEditar.items || []);
+      setClienteId(ventaParaEditar.clienteId || '');
+      setObservaciones(ventaParaEditar.observaciones || '');
+      setAplicaIVAVenta(ventaParaEditar.aplicaIVA !== undefined ? ventaParaEditar.aplicaIVA : true);
+    }
+  }, [ventaParaEditar]);
+
+  // Actualizar sugerencia de IVA cuando cambia el cliente seleccionado (solo para nuevas ventas)
+  useEffect(() => {
+    if (clienteId && !esEdicion) {
       const clienteSeleccionado = clientesActivos.find(c => c._id === clienteId);
       // Sugerir el IVA del cliente, pero el usuario puede cambiarlo
       setAplicaIVAVenta(clienteSeleccionado?.aplicaIVA !== false);
     }
-  }, [clienteId, clientesActivos]);
+  }, [clienteId, clientesActivos, esEdicion]);
 
   const productosActivos = productos.filter(p => p.estado === 'activo');
 
@@ -98,7 +116,13 @@ const VentasPage: React.FC = () => {
       }
       setCarrito(carrito.map(i => 
         i.productoId === productoSeleccionado._id 
-          ? { ...i, cantidad: nuevaCantidad, subtotal: nuevaCantidad * i.precioUnitario }
+          ? { 
+              ...i, 
+              cantidad: nuevaCantidad,
+              subtotal: (nuevaCantidad * i.precioUnitario) * (1 - ((i.porcentajeDescuento || 0) / 100)),
+              total: (nuevaCantidad * i.precioUnitario) * (1 - ((i.porcentajeDescuento || 0) / 100)),
+              descuento: (nuevaCantidad * i.precioUnitario) * ((i.porcentajeDescuento || 0) / 100)
+            }
           : i
       ));
     } else {
@@ -110,7 +134,8 @@ const VentasPage: React.FC = () => {
         precioUnitario: productoSeleccionado.precioVenta,
         subtotal: cantidad * productoSeleccionado.precioVenta,
         descuento: 0,
-        total: cantidad * productoSeleccionado.precioVenta
+        total: cantidad * productoSeleccionado.precioVenta,
+        porcentajeDescuento: 0
       };
       setCarrito([...carrito, nuevoItem]);
     }
@@ -122,6 +147,33 @@ const VentasPage: React.FC = () => {
 
   const eliminarDelCarrito = (productoId: string) => {
     setCarrito(carrito.filter(i => i.productoId !== productoId));
+  };
+
+  const actualizarDescuentoItem = (productoId: string, porcentajeStr: string) => {
+    // Permitir que el usuario escriba mientras edita
+    const porcentaje = porcentajeStr === '' ? 0 : parseFloat(porcentajeStr.replace(',', '.'));
+    
+    // Validar que el porcentaje esté entre 0 y 100
+    const porcentajeValido = Math.max(0, Math.min(100, porcentaje || 0));
+    
+    const carritoActualizado = carrito.map(item => {
+      if (item.productoId === productoId) {
+        const subtotalSinDescuento = item.precioUnitario * item.cantidad;
+        const montoDescuento = (subtotalSinDescuento * porcentajeValido) / 100;
+        const subtotalConDescuento = subtotalSinDescuento - montoDescuento;
+        
+        return {
+          ...item,
+          descuento: montoDescuento, // Guardamos el monto del descuento
+          subtotal: subtotalConDescuento,
+          total: subtotalConDescuento,
+          porcentajeDescuento: porcentajeValido // Guardamos también el porcentaje para mostrarlo
+        };
+      }
+      return item;
+    });
+    
+    setCarrito(carritoActualizado);
   };
 
   const calcularTotales = () => {
@@ -165,18 +217,30 @@ const VentasPage: React.FC = () => {
     };
 
     try {
-      const result = await dispatch(createVenta(nuevaVenta)).unwrap();
-      // Guardar el ID de la venta para poder facturar
-      setVentaExitosa(result._id);
-      setShowFacturarDialog(true);
-      
-      // Limpiar formulario
-      setCarrito([]);
-      setClienteId('');
-      setObservaciones('');
-      setAplicaIVAVenta(true); // Resetear a true por defecto
-      setError('');
-      dispatch(fetchProductos()); // Actualizar stock
+      if (esEdicion && ventaParaEditar) {
+        // Actualizar venta existente
+        await dispatch(updateVenta({ id: ventaParaEditar._id!, ventaData: nuevaVenta })).unwrap();
+        
+        // Navegar de regreso al historial
+        navigate('/historial-ventas');
+        
+        return;
+      } else {
+        // Crear nueva venta
+        const result = await dispatch(createVenta(nuevaVenta)).unwrap();
+        
+        // Guardar el ID de la venta para poder facturar
+        setVentaExitosa(result._id);
+        setShowFacturarDialog(true);
+        
+        // Limpiar formulario
+        setCarrito([]);
+        setClienteId('');
+        setObservaciones('');
+        setAplicaIVAVenta(true); // Resetear a true por defecto
+        setError('');
+        dispatch(fetchProductos()); // Actualizar stock
+      }
     } catch (err: any) {
       setError(err.message || 'Error al registrar la venta');
     }
@@ -209,8 +273,23 @@ const VentasPage: React.FC = () => {
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
         <PosIcon sx={{ mr: 2, fontSize: 32, color: 'primary.main' }} />
-        <Typography variant="h4">Punto de Venta</Typography>
+        <Typography variant="h4">
+          {esEdicion ? `Editar Venta #${ventaParaEditar?.numeroVenta || ventaParaEditar?._id?.slice(-6)}` : 'Punto de Venta'}
+        </Typography>
       </Box>
+
+      {esEdicion && (
+        <Box sx={{ mb: 2 }}>
+          <Button
+            startIcon={<ArrowBackIcon />}
+            onClick={() => navigate('/historial-ventas')}
+            variant="outlined"
+            size="small"
+          >
+            Volver al Historial
+          </Button>
+        </Box>
+      )}
 
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
 
@@ -263,6 +342,7 @@ const VentasPage: React.FC = () => {
                     <TableCell><strong>Producto</strong></TableCell>
                     <TableCell align="right"><strong>P. Unit</strong></TableCell>
                     <TableCell align="center"><strong>Cant</strong></TableCell>
+                    <TableCell align="right"><strong>Descuento</strong></TableCell>
                     <TableCell align="right"><strong>Subtotal</strong></TableCell>
                     <TableCell align="center"></TableCell>
                   </TableRow>
@@ -276,6 +356,26 @@ const VentasPage: React.FC = () => {
                       </TableCell>
                       <TableCell align="right">{formatCurrency(item.precioUnitario)}</TableCell>
                       <TableCell align="center">{item.cantidad}</TableCell>
+                      <TableCell align="right">
+                        <TextField
+                          size="small"
+                          value={item.porcentajeDescuento }
+                          onChange={(e) => actualizarDescuentoItem(item.productoId, e.target.value)}
+                          variant="outlined"
+                          sx={{ width: '80px' }}
+                          inputProps={{ 
+                            style: { textAlign: 'right', fontSize: '0.875rem' },
+                            min: 0,
+                            max: 100,
+                            step: 0.1
+                          }}
+                          type="text"
+                          placeholder=""
+                          InputProps={{
+                            endAdornment: '%'
+                          }}
+                        />
+                      </TableCell>
                       <TableCell align="right">{formatCurrency(item.subtotal)}</TableCell>
                       <TableCell align="center">
                         <IconButton size="small" color="error" onClick={() => eliminarDelCarrito(item.productoId)}>
@@ -286,7 +386,7 @@ const VentasPage: React.FC = () => {
                   ))}
                   {carrito.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={5} align="center">
+                      <TableCell colSpan={6} align="center">
                         <Typography variant="body2" color="textSecondary">Carrito vacío</Typography>
                       </TableCell>
                     </TableRow>
@@ -399,15 +499,19 @@ const VentasPage: React.FC = () => {
             <Box sx={{ display: 'flex', gap: 2 }}>
               <Button
                 fullWidth
-                variant="outlined"
+                color="secondary"
                 onClick={() => {
-                  setCarrito([]);
-                  setClienteId('');
-                  setObservaciones('');
-                  setError('');
+                  if (esEdicion) {
+                    navigate('/historial-ventas');
+                  } else {
+                    setCarrito([]);
+                    setClienteId('');
+                    setObservaciones('');
+                    setError('');
+                  }
                 }}
               >
-                Cancelar
+                {esEdicion ? 'Cancelar Edición' : 'Cancelar'}
               </Button>
               <Button
                 fullWidth
@@ -415,7 +519,7 @@ const VentasPage: React.FC = () => {
                 onClick={handleConfirmarVenta}
                 disabled={carrito.length === 0 || !clienteId}
               >
-                Confirmar Venta
+                {esEdicion ? 'Guardar Cambios' : 'Confirmar Venta'}
               </Button>
             </Box>
           </Paper>

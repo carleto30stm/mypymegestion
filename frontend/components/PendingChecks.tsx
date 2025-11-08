@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../redux/store';
 import { confirmarCheque } from '../redux/slices/gastosSlice';
@@ -12,116 +12,76 @@ import {
   Button,
   Box,
   Chip,
-  Divider
+  Divider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  DialogContentText
 } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import WarningIcon from '@mui/icons-material/Warning';
 import { formatDate, formatCurrencyWithSymbol } from '../utils/formatters';
+import api from '../services/api';
 
-interface PendingChecksProps {
-  filterType: 'today' | 'month' | 'quarter' | 'semester' | 'year' | 'total';
-  selectedMonth: string;
-  selectedQuarter: string;
-  selectedSemester: string;
-  selectedYear: string;
-  availableMonths: Array<{ value: string; label: string }>;
-}
-
-const PendingChecks: React.FC<PendingChecksProps> = ({ 
-  filterType, 
-  selectedMonth,
-  selectedQuarter,
-  selectedSemester,
-  selectedYear
-}) => {
+const PendingChecks: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const { items: gastos } = useSelector((state: RootState) => state.gastos);
-  
-  // Función helper para determinar si una fecha coincide con el filtro
-  const matchesFilter = (fecha: Date): boolean => {
-    const fechaStr = fecha.toISOString();
-    const today = new Date().toISOString().split('T')[0];
+  const [todosLosCheques, setTodosLosCheques] = useState<any[]>([]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [chequeSeleccionado, setChequeSeleccionado] = useState<any>(null);
+
+  // Efecto para cargar TODOS los cheques sin filtro de fecha
+  useEffect(() => {
+    const cargarTodosCheques = async () => {
+      try {
+        const response = await api.get('/api/gastos'); // Sin filtros de fecha
+        setTodosLosCheques(response.data);
+      } catch (error) {
+        console.error('Error al cargar todos los cheques:', error);
+      }
+    };
     
-    switch (filterType) {
-      case 'today':
-        return fechaStr.split('T')[0] === today;
-      case 'month':
-        return fechaStr.slice(0, 7) === selectedMonth;
-      case 'quarter': {
-        const [year, quarter] = selectedQuarter.split('-Q');
-        const fechaYear = fecha.getFullYear();
-        const fechaQuarter = Math.floor(fecha.getMonth() / 3) + 1;
-        return fechaYear === parseInt(year) && fechaQuarter === parseInt(quarter);
-      }
-      case 'semester': {
-        const [year, semester] = selectedSemester.split('-S');
-        const fechaYear = fecha.getFullYear();
-        const fechaSemester = fecha.getMonth() < 6 ? 1 : 2;
-        return fechaYear === parseInt(year) && fechaSemester === parseInt(semester);
-      }
-      case 'year':
-        return fecha.getFullYear() === parseInt(selectedYear);
-      case 'total':
-      default:
-        return true;
-    }
-  };
-
-  // Función para filtrar cheques pendientes según el tipo de filtro
-  const getFilteredCheques = () => {
-    // Primero filtrar solo cheques pendientes
-    let chequesPendientes = gastos.filter(gasto => 
-      gasto.medioDePago?.toUpperCase().includes('CHEQUE') && !gasto.confirmado
-    );
-
-    // Luego aplicar filtro de fecha según el tipo
-    if (filterType === 'total') {
-      return chequesPendientes;
-    } else {
-      return chequesPendientes.filter(gasto => matchesFilter(new Date(gasto.fecha)));
-    }
-  };
+    cargarTodosCheques();
+  }, []);
   
-  // Filtrar solo cheques pendientes de confirmación
-  const chequesPendientes = getFilteredCheques();
+  // Filtrar solo cheques pendientes de confirmación (sin filtro de fecha - siempre visibles)
+  const chequesPendientes = todosLosCheques.filter(gasto => 
+    gasto.medioDePago?.toUpperCase().includes('CHEQUE') && !gasto.confirmado
+  );
 
-  const handleConfirmarCheque = (id: string) => {
-    dispatch(confirmarCheque(id));
+  const handleAbrirModal = (cheque: any) => {
+    setChequeSeleccionado(cheque);
+    setModalOpen(true);
   };
 
-  const getPeriodName = (): string => {
-    switch (filterType) {
-      case 'today':
-        return 'hoy';
-      case 'month':
-        return new Date(selectedMonth + '-01').toLocaleDateString('es-ES', { year: 'numeric', month: 'long' });
-      case 'quarter': {
-        const [year, quarter] = selectedQuarter.split('-Q');
-        return `el trimestre ${quarter} de ${year}`;
-      }
-      case 'semester': {
-        const [year, semester] = selectedSemester.split('-S');
-        return `el semestre ${semester} de ${year}`;
-      }
-      case 'year':
-        return `el año ${selectedYear}`;
-      case 'total':
-      default:
-        return 'en total';
+  const handleCerrarModal = () => {
+    setModalOpen(false);
+    setChequeSeleccionado(null);
+  };
+
+  const handleConfirmarCheque = async () => {
+    if (!chequeSeleccionado) return;
+
+    await dispatch(confirmarCheque(chequeSeleccionado._id));
+    // Recargar todos los cheques después de confirmar
+    try {
+      const response = await api.get('/api/gastos');
+      setTodosLosCheques(response.data);
+    } catch (error) {
+      console.error('Error al recargar cheques:', error);
     }
+    
+    handleCerrarModal();
   };
 
   if (chequesPendientes.length === 0) {
-    const filtroTexto = filterType === 'total' 
-      ? getPeriodName()
-      : `para ${getPeriodName()}`;
-      
     return (
       <Paper sx={{ p: 3, mt: 2 }}>
         <Typography variant="h6" gutterBottom>
           📝 Cheques Pendientes
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          No hay cheques pendientes de confirmación {filtroTexto}.
+          No hay cheques pendientes de confirmación.
         </Typography>
       </Paper>
     );
@@ -143,9 +103,7 @@ const PendingChecks: React.FC<PendingChecksProps> = ({
       
       <Typography variant="body2" color="text.secondary" gutterBottom>
         Estos cheques no se incluyen en los cálculos hasta que sean confirmados manualmente.
-        {filterType !== 'total' && (
-          <><br />Filtro aplicado: {getPeriodName()}</>
-        )}
+        Los cheques pendientes se muestran siempre, sin importar el filtro de fecha seleccionado.
       </Typography>
 
       <List>
@@ -202,7 +160,7 @@ const PendingChecks: React.FC<PendingChecksProps> = ({
                   color="success"
                   size="small"
                   startIcon={<CheckCircleIcon />}
-                  onClick={() => handleConfirmarCheque(cheque._id as string)}
+                  onClick={() => handleAbrirModal(cheque)}
                 >
                   Confirmar
                 </Button>
@@ -212,6 +170,80 @@ const PendingChecks: React.FC<PendingChecksProps> = ({
           </React.Fragment>
         ))}
       </List>
+
+      {/* Modal de confirmación */}
+      <Dialog
+        open={modalOpen}
+        onClose={handleCerrarModal}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <WarningIcon color="warning" />
+          Confirmar Cheque
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            ¿Estás seguro de que deseas confirmar este cheque? Esta acción hará que el cheque se incluya en los cálculos de caja.
+          </DialogContentText>
+          
+          {chequeSeleccionado && (
+            <Box sx={{ 
+              bgcolor: 'background.default', 
+              p: 2, 
+              borderRadius: 1,
+              border: '1px solid',
+              borderColor: 'divider'
+            }}>
+              <Typography variant="body2" gutterBottom>
+                <strong>Detalle:</strong> {chequeSeleccionado.detalleGastos}
+              </Typography>
+              <Typography variant="body2" gutterBottom>
+                <strong>Medio de Pago:</strong> {chequeSeleccionado.medioDePago}
+              </Typography>
+              <Typography variant="body2" gutterBottom>
+                <strong>Cliente:</strong> {chequeSeleccionado.clientes}
+              </Typography>
+              <Typography variant="body2" gutterBottom>
+                <strong>Fecha:</strong> {formatDate(chequeSeleccionado.fecha)}
+              </Typography>
+              <Typography variant="body2" gutterBottom>
+                <strong>Banco:</strong> {chequeSeleccionado.banco}
+              </Typography>
+              <Typography 
+                variant="h6" 
+                sx={{ 
+                  color: chequeSeleccionado.tipoOperacion === 'entrada' ? 'success.main' : 'error.main',
+                  mt: 1
+                }}
+              >
+                {chequeSeleccionado.tipoOperacion === 'entrada' 
+                  ? `+${formatCurrencyWithSymbol(chequeSeleccionado.entrada || 0)}`
+                  : `-${formatCurrencyWithSymbol(chequeSeleccionado.salida || 0)}`
+                }
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button 
+            onClick={handleCerrarModal}
+            variant="outlined"
+            color="inherit"
+          >
+            Cancelar
+          </Button>
+          <Button 
+            onClick={handleConfirmarCheque}
+            variant="contained"
+            color="success"
+            startIcon={<CheckCircleIcon />}
+            autoFocus
+          >
+            Confirmar Cheque
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Paper>
   );
 };

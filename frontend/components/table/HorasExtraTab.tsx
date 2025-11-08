@@ -89,10 +89,10 @@ const HorasExtraTab: React.FC<HorasExtraTabProps> = ({ periodo }) => {
         horaExtraId: selectedHoraExtraId
       })).unwrap();
       
-      // Refrescar período, horas extra y gastos
+      // Refrescar período, horas extra y gastos (default: últimos 3 meses)
       await dispatch(fetchPeriodoById(periodo._id));
       await dispatch(fetchHorasExtra());
-      await dispatch(fetchGastos());
+      await dispatch(fetchGastos({}));
       
       handleCloseAgregar();
     } catch (error) {

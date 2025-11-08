@@ -50,6 +50,18 @@ export const createVenta = createAsyncThunk(
   }
 );
 
+export const updateVenta = createAsyncThunk(
+  'ventas/update',
+  async ({ id, ventaData }: { id: string; ventaData: Partial<Venta> }, { rejectWithValue }) => {
+    try {
+      const response = await api.put(`/api/ventas/${id}`, ventaData);
+      return response.data.venta;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.message || 'Error al actualizar venta');
+    }
+  }
+);
+
 export const anularVenta = createAsyncThunk(
   'ventas/anular',
   async ({ id, motivoAnulacion }: { id: string; motivoAnulacion: string }, { rejectWithValue }) => {
@@ -126,6 +138,13 @@ const ventasSlice = createSlice({
       // Create venta
       .addCase(createVenta.fulfilled, (state, action: PayloadAction<Venta>) => {
         state.items.unshift(action.payload);
+      })
+      // Update venta
+      .addCase(updateVenta.fulfilled, (state, action: PayloadAction<Venta>) => {
+        const index = state.items.findIndex(v => v._id === action.payload._id);
+        if (index !== -1) {
+          state.items[index] = action.payload;
+        }
       })
       // Confirmar venta
       .addCase(confirmarVenta.fulfilled, (state, action: PayloadAction<Venta>) => {

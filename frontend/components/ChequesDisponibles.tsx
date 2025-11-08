@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../redux/store';
 import { 
@@ -26,7 +26,8 @@ import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
 import PaymentIcon from '@mui/icons-material/Payment';
 import { formatDate, formatCurrencyWithSymbol } from '../utils/formatters';
 import { fetchGastos } from '../redux/slices/gastosSlice';
-import { gastosAPI } from '../services/api';
+import api, { gastosAPI, proveedoresAPI } from '../services/api';
+import { Proveedor } from '../types';
 
 interface ChequesDisponiblesProps {
   filterType: 'today' | 'month' | 'quarter' | 'semester' | 'year' | 'total';
@@ -49,54 +50,51 @@ const ChequesDisponibles: React.FC<ChequesDisponiblesProps> = ({
   
   const [dialogOpen, setDialogOpen] = useState(false);
   const [chequeSeleccionado, setChequeSeleccionado] = useState<any>(null);
+  const [todosLosCheques, setTodosLosCheques] = useState<any[]>([]);
   const [tipoDisposicion, setTipoDisposicion] = useState<'depositar' | 'pagar_proveedor'>('depositar');
   const [bancoDestino, setBancoDestino] = useState('');
   const [detalleOperacion, setDetalleOperacion] = useState('');
+  const [proveedorSeleccionado, setProveedorSeleccionado] = useState('');
+  const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Función helper para determinar si una fecha coincide con el filtro
-  const matchesFilter = (fecha: Date): boolean => {
-    const fechaStr = fecha.toISOString();
-    const today = new Date().toISOString().split('T')[0];
+  // Efecto para cargar TODOS los cheques sin filtro de fecha
+  useEffect(() => {
+    const cargarTodosCheques = async () => {
+      try {
+        const response = await api.get('/api/gastos'); // Sin filtros de fecha
+        setTodosLosCheques(response.data);
+      } catch (error) {
+        console.error('Error al cargar todos los cheques:', error);
+      }
+    };
     
-    switch (filterType) {
-      case 'today':
-        return fechaStr.split('T')[0] === today;
-      case 'month':
-        return fechaStr.slice(0, 7) === selectedMonth;
-      case 'quarter': {
-        const [year, quarter] = selectedQuarter.split('-Q');
-        const fechaYear = fecha.getFullYear();
-        const fechaQuarter = Math.floor(fecha.getMonth() / 3) + 1;
-        return fechaYear === parseInt(year) && fechaQuarter === parseInt(quarter);
+    cargarTodosCheques();
+  }, []);
+
+  // Efecto para cargar proveedores activos
+  useEffect(() => {
+    const cargarProveedores = async () => {
+      try {
+        const data = await proveedoresAPI.obtenerTodos({ estado: 'activo' });
+        setProveedores(data);
+      } catch (error) {
+        console.error('Error al cargar proveedores:', error);
       }
-      case 'semester': {
-        const [year, semester] = selectedSemester.split('-S');
-        const fechaYear = fecha.getFullYear();
-        const fechaSemester = fecha.getMonth() < 6 ? 1 : 2;
-        return fechaYear === parseInt(year) && fechaSemester === parseInt(semester);
-      }
-      case 'year':
-        return fecha.getFullYear() === parseInt(selectedYear);
-      case 'total':
-      default:
-        return true;
-    }
-  };
+    };
+    
+    cargarProveedores();
+  }, []);
 
   // Función para filtrar cheques disponibles para disposición
+  // IMPORTANTE: Usa todosLosCheques para que se vean sin importar el filtro de fecha
   const getChequesDisponibles = () => {
     // Filtrar cheques de tercero confirmados y en estado 'recibido'
-    let chequesDisponibles = gastos.filter(gasto => 
+    let chequesDisponibles = todosLosCheques.filter(gasto => 
       gasto.medioDePago === 'CHEQUE TERCERO' && 
       gasto.confirmado === true &&
       (!gasto.estadoCheque || gasto.estadoCheque === 'recibido')
     );
-
-    // Aplicar filtro de fecha
-    if (filterType !== 'total') {
-      chequesDisponibles = chequesDisponibles.filter(gasto => matchesFilter(new Date(gasto.fecha)));
-    }
 
     return chequesDisponibles;
   };
@@ -108,6 +106,7 @@ const ChequesDisponibles: React.FC<ChequesDisponiblesProps> = ({
     setTipoDisposicion(tipo);
     setBancoDestino('');
     setDetalleOperacion('');
+    setProveedorSeleccionado('');
     setDialogOpen(true);
   };
 
@@ -116,27 +115,50 @@ const ChequesDisponibles: React.FC<ChequesDisponiblesProps> = ({
     setChequeSeleccionado(null);
     setBancoDestino('');
     setDetalleOperacion('');
+    setProveedorSeleccionado('');
   };
 
   const handleConfirmarDisposicion = async () => {
-    if (!chequeSeleccionado || !detalleOperacion) return;
+    // Validaciones
+    if (!chequeSeleccionado) return;
     
-    if (tipoDisposicion === 'depositar' && !bancoDestino) {
-      alert('Selecciona el banco destino');
-      return;
+    if (tipoDisposicion === 'depositar') {
+      if (!bancoDestino) {
+        alert('Selecciona el banco destino');
+        return;
+      }
+      if (!detalleOperacion) {
+        alert('Ingresa el detalle del depósito');
+        return;
+      }
+    } else {
+      // pagar_proveedor
+      if (!proveedorSeleccionado) {
+        alert('Selecciona un proveedor');
+        return;
+      }
     }
 
     setLoading(true);
     try {
+      // Para pago a proveedor, el detalle será el nombre del proveedor seleccionado
+      const detalleFinal = tipoDisposicion === 'pagar_proveedor' 
+        ? proveedores.find(p => p._id === proveedorSeleccionado)?.razonSocial || proveedorSeleccionado
+        : detalleOperacion;
+
       await gastosAPI.disponerCheque(
         chequeSeleccionado._id,
         tipoDisposicion,
         bancoDestino,
-        detalleOperacion
+        detalleFinal
       );
       
-      // Recargar los gastos para actualizar la lista
-      dispatch(fetchGastos());
+      // Recargar todos los cheques sin filtro de fecha
+      const response = await api.get('/api/gastos');
+      setTodosLosCheques(response.data);
+      
+      // También actualizar Redux con el filtro actual
+      dispatch(fetchGastos({}));
       
       handleCerrarDialog();
       alert(`Cheque ${tipoDisposicion === 'depositar' ? 'depositado' : 'utilizado para pago'} exitosamente`);
@@ -249,31 +271,54 @@ const ChequesDisponibles: React.FC<ChequesDisponiblesProps> = ({
                 <strong>Cheque:</strong> {formatCurrencyWithSymbol(chequeSeleccionado.entrada || 0)} de {chequeSeleccionado.clientes}
               </Typography>
               
-              {tipoDisposicion === 'depositar' && (
+              {tipoDisposicion === 'depositar' ? (
+                <>
+                  <FormControl fullWidth sx={{ mt: 2 }}>
+                    <InputLabel>Banco Destino</InputLabel>
+                    <Select
+                      value={bancoDestino}
+                      label="Banco Destino"
+                      onChange={(e) => setBancoDestino(e.target.value)}
+                    >
+                      <MenuItem value="PROVINCIA">PROVINCIA</MenuItem>
+                      <MenuItem value="SANTANDER">SANTANDER</MenuItem>
+                      <MenuItem value="EFECTIVO">EFECTIVO</MenuItem>
+                      <MenuItem value="FCI">FCI</MenuItem>
+                      <MenuItem value="RESERVA">RESERVA</MenuItem>
+                    </Select>
+                  </FormControl>
+                  
+                  <TextField
+                    fullWidth
+                    label="Detalle del depósito"
+                    value={detalleOperacion}
+                    onChange={(e) => setDetalleOperacion(e.target.value)}
+                    sx={{ mt: 2 }}
+                    placeholder="Ej: Depósito en sucursal Centro"
+                  />
+                </>
+              ) : (
                 <FormControl fullWidth sx={{ mt: 2 }}>
-                  <InputLabel>Banco Destino</InputLabel>
+                  <InputLabel>Proveedor</InputLabel>
                   <Select
-                    value={bancoDestino}
-                    label="Banco Destino"
-                    onChange={(e) => setBancoDestino(e.target.value)}
+                    value={proveedorSeleccionado}
+                    label="Proveedor"
+                    onChange={(e) => setProveedorSeleccionado(e.target.value)}
                   >
-                    <MenuItem value="PROVINCIA">PROVINCIA</MenuItem>
-                    <MenuItem value="SANTANDER">SANTANDER</MenuItem>
-                    <MenuItem value="EFECTIVO">EFECTIVO</MenuItem>
-                    <MenuItem value="FCI">FCI</MenuItem>
-                    <MenuItem value="RESERVA">RESERVA</MenuItem>
+                    {proveedores.length === 0 ? (
+                      <MenuItem value="" disabled>
+                        No hay proveedores activos
+                      </MenuItem>
+                    ) : (
+                      proveedores.map((proveedor) => (
+                        <MenuItem key={proveedor._id} value={proveedor._id}>
+                          {proveedor.razonSocial} - {proveedor.numeroDocumento}
+                        </MenuItem>
+                      ))
+                    )}
                   </Select>
                 </FormControl>
               )}
-              
-              <TextField
-                fullWidth
-                label={tipoDisposicion === 'depositar' ? 'Detalle del depósito' : 'Proveedor/Detalle del pago'}
-                value={detalleOperacion}
-                onChange={(e) => setDetalleOperacion(e.target.value)}
-                sx={{ mt: 2 }}
-                placeholder={tipoDisposicion === 'depositar' ? 'Ej: Depósito en sucursal Centro' : 'Ej: Pago a Proveedor XYZ'}
-              />
             </Box>
           )}
         </DialogContent>
@@ -282,7 +327,11 @@ const ChequesDisponibles: React.FC<ChequesDisponiblesProps> = ({
           <Button 
             onClick={handleConfirmarDisposicion}
             variant="contained"
-            disabled={loading || !detalleOperacion || (tipoDisposicion === 'depositar' && !bancoDestino)}
+            disabled={
+              loading || 
+              (tipoDisposicion === 'depositar' && (!bancoDestino || !detalleOperacion)) ||
+              (tipoDisposicion === 'pagar_proveedor' && !proveedorSeleccionado)
+            }
           >
             {loading ? 'Procesando...' : 'Confirmar'}
           </Button>

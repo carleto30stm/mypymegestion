@@ -14,14 +14,44 @@ const initialState: GastosState = {
   error: null,
 };
 
-export const fetchGastos = createAsyncThunk('gastos/fetchGastos', async (_, { rejectWithValue }) => {
-  try {
-    const response = await api.get('/api/gastos');
-    return response.data;
-  } catch (error: any) {
-    return rejectWithValue(error.response?.data?.message || 'Failed to fetch expenses');
+interface FetchGastosParams {
+  desde?: string;  // Formato: YYYY-MM-DD
+  hasta?: string;  // Formato: YYYY-MM-DD
+  limite?: number;
+  todosPeriodos?: boolean; // Flag para traer todos los registros
+}
+
+export const fetchGastos = createAsyncThunk(
+  'gastos/fetchGastos', 
+  async (params: FetchGastosParams = {}, { rejectWithValue }) => {
+    try {
+      // Si explícitamente pide todos los períodos, no enviar filtros de fecha
+      if (params.todosPeriodos) {
+        const response = await api.get('/api/gastos');
+        return response.data;
+      }
+      
+      // Por defecto: últimos 3 meses
+      const hasta = params.hasta || new Date().toISOString().split('T')[0];
+      const tresMesesAtras = new Date();
+      tresMesesAtras.setMonth(tresMesesAtras.getMonth() - 3);
+      const desde = params.desde || tresMesesAtras.toISOString().split('T')[0];
+      
+      // Construir query params
+      const queryParams = new URLSearchParams();
+      queryParams.append('desde', desde);
+      queryParams.append('hasta', hasta);
+      if (params.limite) {
+        queryParams.append('limite', params.limite.toString());
+      }
+      
+      const response = await api.get(`/api/gastos?${queryParams.toString()}`);
+      return response.data;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to fetch expenses');
+    }
   }
-});
+);
 
 export const createGasto = createAsyncThunk('/api/gastos/createGasto', async (newGasto: Omit<Gasto, '_id'>, { rejectWithValue }) => {
   try {
