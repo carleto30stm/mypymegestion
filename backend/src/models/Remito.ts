@@ -19,6 +19,7 @@ export interface IRemito extends Document {
   }[];
   estado: 'pendiente' | 'en_transito' | 'entregado' | 'devuelto' | 'cancelado';
   repartidor?: string;
+  numeroBultos?: string;
   vehiculo?: string;
   horaDespacho?: Date;
   horaEntrega?: Date;
@@ -126,6 +127,11 @@ const remitoSchema = new Schema<IRemito>(
       type: String,
       trim: true,
       maxlength: [100, 'El nombre del repartidor no puede exceder 100 caracteres']
+    },
+    numeroBultos: {
+      type: String,
+      trim: true,
+      maxlength: [20, 'El número de bultos no puede exceder 20 caracteres']
     },
     vehiculo: {
       type: String,

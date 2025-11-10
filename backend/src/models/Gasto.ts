@@ -12,7 +12,7 @@ const gastoSchema = new mongoose.Schema({
     enum: 
     ['COBRO.VENTA', 'SERVICIOS', 'PROOV.MATERIA.PRIMA', 
      'PROOVMANO.DE.OBRA', 'BANCO', 'ARCA','GASTOS.ADMIN',
-     'GASTOS ADMINISTRATIVOS', 'MANT.MAQ','SUELDOS','MOVILIDAD'
+     'GASTOS ADMINISTRATIVOS', 'MANT.MAQ','MANT.EMPRESA','SUELDOS','MOVILIDAD'
     ] },
   subRubro: { 
     type: String,

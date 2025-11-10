@@ -8,8 +8,8 @@ const EMPRESA = {
   nombre: 'KURT argentina',
   direccion: 'San Blas 1837',
   telefono: '+5491160996332',
-  email: 'email@empresa.com',
-  cuit: 'CUIT XX-XXXXXXXX-X'
+  email: 'kurtargentina@gmail.com',
+  cuit: 'CUIT 30-71483603-8'
 };
 
 /**
@@ -372,4 +372,294 @@ export const generarPDFRemito = (remito: Remito): void => {
 
   // Guardar PDF
   doc.save(`Remito_${remito.numeroRemito}.pdf`);
+};
+// crear caratula para envio en correo el cual debe poder impimirse las veces que indique numeroBultos ejemplo 1/3, 2/3, 3/3 datos de la empresa, del remito, del cliente(provincia, localidad, direccion) y un espacio grande para pegar la etiqueta de envio
+export const generarPDFCaratulaEnvio = (remito: Remito, numeroBulto: number, totalBultos: number): void => {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  let yPos = 20;
+
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`BULTO ${numeroBulto}/${totalBultos}`, pageWidth / 2, yPos, { align: 'center' });
+  yPos += 15;
+
+doc.setFontSize(10);
+doc.setFont('helvetica', 'normal');
+
+// Calcular el ancho de cada línea
+const nombreWidth = doc.getTextWidth(EMPRESA.nombre);
+const direccionWidth = doc.getTextWidth(EMPRESA.direccion);
+const telefonoWidth = doc.getTextWidth(`Tel: ${EMPRESA.telefono}`);
+const cuitWidth = doc.getTextWidth(`CUIT: ${EMPRESA.cuit}`);
+
+// Función helper para centrar texto
+const centerText = (text: string, y: number) => {
+  const textWidth = doc.getTextWidth(text);
+  const startX = (pageWidth - textWidth) / 2;
+  doc.text(text, startX, y);
+};
+
+// Imprimir líneas centradas
+centerText(EMPRESA.nombre, yPos);
+yPos += 5;
+centerText(EMPRESA.direccion, yPos);
+yPos += 5;
+centerText(`Tel: ${EMPRESA.telefono}`, yPos);
+yPos += 5;
+centerText(`CUIT: ${EMPRESA.cuit}`, yPos);
+yPos += 7; // Reducido de 10 a 5 para menos espacio
+
+doc.setFont('helvetica', 'normal');
+
+const x = 14;          // margen izquierdo
+const padding = 3;     // espacio interno superior e inferior
+const lineHeight = 5;  // espacio entre líneas
+const boxWidth = 80;   // ancho del rectángulo (ajustalo según necesites)
+const boxHeight = lineHeight * 2 + padding * 2; // alto total del bloque
+
+// 🔹 Dibujar el rectángulo antes del texto
+doc.rect(x - 2, yPos - (padding + 2), pageWidth - 26, boxHeight); // (x, y, width, height)
+
+// 🔹 Escribir el contenido dentro del rectángulo
+let textY = yPos;
+doc.text(`Número de Remito: ${remito.numeroRemito}`, x, textY);
+textY += lineHeight;
+doc.text(`Fecha: ${formatDate(remito.fecha)}`, x, textY);
+
+// 🔹 Actualizar yPos para continuar debajo del bloque
+yPos = yPos + boxHeight + 3; // Reducido de 5 a 3 para menos espacio
+
+// 🔹 Datos del cliente - extraer del objeto cliente populado
+const cliente = typeof remito.clienteId === 'string' ? null : remito.clienteId;
+
+// Calcular el alto necesario para el bloque de datos del cliente
+let clienteLines = 2; // Nombre y Dirección siempre están
+if (cliente && typeof cliente === 'object') {
+  if (cliente.ciudad) clienteLines++;
+  if (cliente.provincia) clienteLines++;
+}
+const clienteBoxHeight = lineHeight * clienteLines + padding * 2;
+
+// 🔹 Dibujar el rectángulo para datos del cliente
+doc.rect(x - 2, yPos - (padding + 2), pageWidth - 26, clienteBoxHeight);
+
+// 🔹 Escribir el contenido dentro del rectángulo con espaciado
+let clienteY = yPos;
+doc.text(`Nombre: ${remito.nombreCliente}`, x, clienteY);
+clienteY += lineHeight;
+doc.text(`Dirección: ${remito.direccionEntrega}`, x, clienteY);
+clienteY += lineHeight;
+
+// Extraer localidad y provincia del cliente si está populado
+if (cliente && typeof cliente === 'object') {
+  if (cliente.ciudad) {
+    doc.text(`Localidad: ${cliente.ciudad}`, x, clienteY);
+    clienteY += lineHeight;
+  }
+  if (cliente.provincia) {
+    doc.text(`Provincia: ${cliente.provincia}`, x, clienteY);
+    clienteY += lineHeight;
+  }
+}
+
+// 🔹 Actualizar yPos para continuar debajo del bloque del cliente
+yPos = yPos + clienteBoxHeight + 3; // Reducido de 5 a 3 para menos espacio
+
+  // Espacio para la etiqueta de envío
+  doc.setFont('helvetica', 'bold');
+  doc.text('ETIQUETA DE ENVÍO', 14, yPos);
+  yPos += 7;
+
+  doc.setFont('helvetica', 'normal');
+  doc.rect(14, yPos, pageWidth - 28, 50);
+  yPos += 55;
+
+  // Footer
+  yPos = doc.internal.pageSize.getHeight() - 20;
+  doc.setLineWidth(0.3);
+  doc.line(14, yPos, pageWidth - 14, yPos);
+  yPos += 5;
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'italic');
+  doc.text(
+    `Documento generado el ${formatDate(new Date())}`,
+    pageWidth / 2,
+    yPos,
+    { align: 'center' }
+  );
+
+  // Guardar PDF
+  doc.save(`Caratula_Envio_${remito.numeroRemito}_Bulto_${numeroBulto}_de_${totalBultos}.pdf`);
+};
+
+/**
+ * Genera y muestra una vista previa del PDF de carátula de envío en el navegador
+ */
+export const generarPDFCaratulaEnvioPreview = (remito: Remito, numeroBulto: number, totalBultos: number): void => {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  let yPos = 20;
+
+  // Header - Número de bulto
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`BULTO ${numeroBulto}/${totalBultos}`, pageWidth / 2, yPos, { align: 'center' });
+  yPos += 15;
+
+  // Datos de la empresa
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('DATOS DE LA EMPRESA', 14, yPos);
+  yPos += 7;
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(EMPRESA.nombre, 14, yPos);
+  yPos += 5;
+  doc.text(EMPRESA.direccion, 14, yPos);
+  yPos += 5;
+  doc.text(`Tel: ${EMPRESA.telefono}`, 14, yPos);
+  yPos += 5;
+  doc.text(`CUIT: ${EMPRESA.cuit}`, 14, yPos);
+  yPos += 5;
+
+  doc.setFont('helvetica', 'normal');
+
+  const x = 14;          // margen izquierdo
+  const padding = 3;     // espacio interno superior e inferior
+  const lineHeight = 5;  // espacio entre líneas
+  const boxWidth = 80;   // ancho del rectángulo (ajustalo según necesites)
+  const boxHeight = lineHeight * 2 + padding * 2; // alto total del bloque
+
+  // 🔹 Dibujar el rectángulo antes del texto
+  doc.rect(x - 2, yPos - (padding + 2), pageWidth - 26, boxHeight); // (x, y, width, height)
+
+  // 🔹 Escribir el contenido dentro del rectángulo
+  let textY = yPos;
+  doc.text(`Número de Remito: ${remito.numeroRemito}`, x, textY);
+  textY += lineHeight;
+  doc.text(`Fecha: ${formatDate(remito.fecha)}`, x, textY);
+
+  // 🔹 Actualizar yPos para continuar debajo del bloque
+  yPos = yPos + boxHeight + 3;
+
+  // 🔹 Datos del cliente - extraer del objeto cliente populado
+  const cliente = typeof remito.clienteId === 'string' ? null : remito.clienteId;
+
+  // Calcular el alto necesario para el bloque de datos del cliente
+  let clienteLines = 2; // Nombre y Dirección siempre están
+  if (cliente && typeof cliente === 'object') {
+    if (cliente.ciudad) clienteLines++;
+    if (cliente.provincia) clienteLines++;
+  }
+  const clienteBoxHeight = lineHeight * clienteLines + padding * 2;
+
+  // 🔹 Dibujar el rectángulo para datos del cliente
+  doc.rect(x - 2, yPos - (padding + 2), pageWidth - 26, clienteBoxHeight);
+
+  // 🔹 Escribir el contenido dentro del rectángulo con espaciado
+  let clienteY = yPos;
+  doc.text(`Nombre: ${remito.nombreCliente}`, x, clienteY);
+  clienteY += lineHeight;
+  doc.text(`Dirección: ${remito.direccionEntrega}`, x, clienteY);
+  clienteY += lineHeight;
+
+  // Extraer localidad y provincia del cliente si está populado
+  if (cliente && typeof cliente === 'object') {
+    if (cliente.ciudad) {
+      doc.text(`Localidad: ${cliente.ciudad}`, x, clienteY);
+      clienteY += lineHeight;
+    }
+    if (cliente.provincia) {
+      doc.text(`Provincia: ${cliente.provincia}`, x, clienteY);
+      clienteY += lineHeight;
+    }
+  }
+
+  // 🔹 Actualizar yPos para continuar debajo del bloque del cliente
+  yPos = yPos + clienteBoxHeight + 3;
+
+  // Espacio para la etiqueta de envío
+  doc.setFont('helvetica', 'bold');
+  doc.text('ETIQUETA DE ENVÍO', 14, yPos);
+  yPos += 7;
+
+  doc.setFont('helvetica', 'normal');
+  doc.rect(14, yPos, pageWidth - 28, 50);
+  yPos += 55;
+
+  // Footer
+  yPos = doc.internal.pageSize.getHeight() - 20;
+  doc.setLineWidth(0.3);
+  doc.line(14, yPos, pageWidth - 14, yPos);
+  yPos += 5;
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'italic');
+  doc.text(
+    `Documento generado el ${formatDate(new Date())}`,
+    pageWidth / 2,
+    yPos,
+    { align: 'center' }
+  );
+
+  // Mostrar vista previa en nueva ventana
+  const pdfDataUri = doc.output('datauristring');
+  const newWindow = window.open();
+  if (newWindow) {
+    newWindow.document.write(`
+      <html>
+        <head>
+          <title>Carátula de Envío - ${remito.numeroRemito}</title>
+          <style>
+            body { margin: 0; padding: 20px; background: #f5f5f5; }
+            .pdf-container { 
+              max-width: 100%; 
+              margin: 0 auto; 
+              background: white; 
+              padding: 20px;
+              border-radius: 8px;
+              box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+            iframe { width: 100%; height: 600px; border: none; }
+            .header { 
+              text-align: center; 
+              margin-bottom: 20px; 
+              color: #333;
+            }
+            .download-btn {
+              display: block;
+              margin: 20px auto;
+              padding: 10px 20px;
+              background: #1976d2;
+              color: white;
+              border: none;
+              border-radius: 4px;
+              cursor: pointer;
+              text-decoration: none;
+              text-align: center;
+            }
+            .download-btn:hover {
+              background: #1565c0;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="pdf-container">
+            <div class="header">
+              <h2>Carátula de Envío</h2>
+              <p>Remito: ${remito.numeroRemito} - Bulto ${numeroBulto}/${totalBultos}</p>
+            </div>
+            <iframe src="${pdfDataUri}"></iframe>
+            <a href="${pdfDataUri}" download="Caratula_Envio_${remito.numeroRemito}_Bulto_${numeroBulto}_de_${totalBultos}.pdf" class="download-btn">
+              Descargar PDF
+            </a>
+          </div>
+        </body>
+      </html>
+    `);
+    newWindow.document.close();
+  }
 };

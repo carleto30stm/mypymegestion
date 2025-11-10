@@ -87,6 +87,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
     concepto: 'sueldo',
     comentario: '',
     fechaStandBy: '',
+    numeroCheque: '',
     entrada: '',
     salida: '',
     banco: '',
@@ -213,6 +214,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
         concepto: gastoToEdit.concepto || 'sueldo',
         comentario: gastoToEdit.comentario || '',
         fechaStandBy: gastoToEdit.fechaStandBy ? new Date(gastoToEdit.fechaStandBy).toISOString().split('T')[0] : '',
+        numeroCheque: gastoToEdit.numeroCheque || '',
         entrada: gastoToEdit.entrada?.toString() || '',
         salida: gastoToEdit.salida?.toString() || '',
         banco: gastoToEdit.banco || '',
@@ -436,6 +438,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
       tipoOperacion: formData.tipoOperacion,
       comentario: formData.comentario,
       fechaStandBy: formData.fechaStandBy,
+      numeroCheque: formData.numeroCheque,
       entrada: entradaValue,
       salida: salidaValue,
       montoTransferencia: montoTransferenciaValue,
@@ -581,6 +584,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
                   <MenuItem value="PROOVMANO.DE.OBRA">PROOVMANO.DE.OBRA</MenuItem>
                   <MenuItem value="BANCO">BANCO</MenuItem>
                   <MenuItem value="MANT.MAQ">MANT.MAQ</MenuItem>
+                  <MenuItem value="MANT.EMPRESA">MANT.EMPRESA</MenuItem>
                   <MenuItem value="SUELDOS">SUELDOS</MenuItem>
                   <MenuItem value="GASTOS ADMINISTRATIVOS">GASTOS ADMINISTRATIVOS</MenuItem>
                   <MenuItem value="ARCA">ARCA</MenuItem>
@@ -757,6 +761,21 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
               fullWidth
               InputLabelProps={{ shrink: true }}
               helperText="Fecha en que el cheque será efectivo"
+            />
+          </Grid>
+        )}
+        {formData.tipoOperacion !== 'transferencia' && 
+         (formData.medioDePago === 'CHEQUE PROPIO' || formData.medioDePago === 'CHEQUE TERCERO') && (
+          <Grid item xs={12} sm={6}>
+            <TextField
+              name="numeroCheque"
+              label="Número de Cheque"
+              type="text"
+              value={formData.numeroCheque}
+              onChange={handleInputChange}
+              fullWidth
+              InputLabelProps={{ shrink: true }}
+              helperText="Número de cheque"
             />
           </Grid>
         )}

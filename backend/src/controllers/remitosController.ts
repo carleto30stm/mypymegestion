@@ -72,7 +72,9 @@ export const generarRemitoDesdeVenta = async (req: ExpressRequest, res: ExpressR
   session.startTransaction();
 
   try {
-    const { ventaId, direccionEntrega, repartidor, vehiculo, observaciones, creadoPor } = req.body;
+    const { ventaId, direccionEntrega, repartidor, vehiculo, observaciones, creadoPor, numeroBultos } = req.body;
+    console.log(req.body);
+    
 
     // Validaciones básicas
     if (!ventaId || !creadoPor) {
@@ -156,6 +158,7 @@ export const generarRemitoDesdeVenta = async (req: ExpressRequest, res: ExpressR
       items: itemsRemito,
       estado: 'pendiente',
       repartidor,
+      numeroBultos,
       vehiculo,
       observaciones,
       creadoPor
