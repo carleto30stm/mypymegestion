@@ -140,6 +140,7 @@ export const subRubrosByRubro: Record<string, string[]> = {
   'GASTOS.ADMIN': ['MANT.CTA', 'B.PERSONALES', 'CONVENIO MULT','IMP.DEB.CRED','HONORARIOS MARKETING','ARCA','SIRCREB'],
   'GASTOS ADMINISTRATIVOS': ['HONORARIOS', 'IMPUESTO BANCARIOS', 'IMPUESTO TARJETAS', 'VEPS', 'PLAN DE PAGO', 'MONOTRIBUTO', 'II.BB/SIRCREB', 'MANT. CTA.', 'CONSULTORIAS'],
   'ARCA': ['IVA'],
+  'MANT.EMPRESA': ['GASTOS OFICINA', 'REFRIGERIO', 'BOTIQUIN','ELECT./PLOMERIA/PINTURA','INDUMENTARIA','PAPELERA','COMPUTACION','ARTICULOS DE LIMPIEZA','OTROS'],
   'MANT.MAQ': ['MECANICO', 'MATERIALES', 'TORNERO','MAQ. NUEVA'],
   'MOVILIDAD': ['COMBUSTIBLE', 'PEAJES', 'ESTACIONAMIENTO','MECANICO','SERVICE']
 };
@@ -147,7 +148,7 @@ export const subRubrosByRubro: Record<string, string[]> = {
 export interface Gasto {
   _id?: string;
   fecha: string;
-  rubro: 'COBRO.VENTA' | 'SERVICIOS' | 'PROOV.MATERIA.PRIMA' | 'PROOVMANO.DE.OBRA' | 'BANCO' | 'ARCA' | 'GASTOS.ADMIN' | 'GASTOS ADMINISTRATIVOS' | 'MANT.MAQ' | 'SUELDOS' | 'MOVILIDAD';
+  rubro: 'COBRO.VENTA' | 'SERVICIOS' | 'PROOV.MATERIA.PRIMA' | 'PROOVMANO.DE.OBRA' | 'BANCO' | 'ARCA' | 'GASTOS.ADMIN' | 'GASTOS ADMINISTRATIVOS' | 'MANT.MAQ' | 'MANT.EMPRESA' | 'SUELDOS' | 'MOVILIDAD';
   subRubro: string;
   // Allow empty string as a valid initial value for Select components
   medioDePago: typeof MEDIOS_PAGO_GASTOS[number];
@@ -353,13 +354,14 @@ export interface Remito {
   numeroRemito: string;
   fecha: string;
   ventaId: string;
-  clienteId: string;
+  clienteId: string | Cliente; // Puede ser string o Cliente populado
   nombreCliente: string;
   documentoCliente: string;
   direccionEntrega: string;
   items: ItemRemito[];
   estado: typeof ESTADOS_REMITO[number];
   repartidor?: string;
+  numeroBultos?: string;
   vehiculo?: string;
   horaDespacho?: string;
   horaEntrega?: string;

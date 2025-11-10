@@ -11,7 +11,7 @@ import {
 } from '../redux/slices/remitosSlice';
 import { fetchVentas } from '../redux/slices/ventasSlice';
 import { ESTADOS_REMITO, Remito } from '../types';
-import { generarPDFRemito } from '../utils/pdfGenerator';
+import { generarPDFRemito, generarPDFCaratulaEnvio } from '../utils/pdfGenerator';
 import {
   Box,
   Typography,
@@ -69,6 +69,7 @@ const RemitosPage: React.FC = () => {
   const [ventaId, setVentaId] = useState('');
   const [direccionEntrega, setDireccionEntrega] = useState('');
   const [repartidor, setRepartidor] = useState('');
+  const [numeroBultos, setNumeroBultos] = useState('');
   const [vehiculo, setVehiculo] = useState('');
   const [observacionesGenerar, setObservacionesGenerar] = useState('');
 
@@ -120,6 +121,7 @@ const RemitosPage: React.FC = () => {
         ventaId,
         direccionEntrega: direccionEntrega || undefined,
         repartidor: repartidor || undefined,
+        numeroBultos: numeroBultos || undefined,
         vehiculo: vehiculo || undefined,
         observaciones: observacionesGenerar || undefined,
         creadoPor: user.id
@@ -197,6 +199,26 @@ const RemitosPage: React.FC = () => {
     } catch (err) {
       console.error('Error al generar PDF del remito:', err);
       alert('Error al generar el PDF del remito');
+    }
+  };
+
+  const handleGenerarCaratulas = async (remito: Remito) => {
+    try {
+      // Obtener el remito completo con cliente populado
+      const response = await fetch(`/api/remitos/${remito._id}`);
+      const remitoCompleto = await response.json();
+      
+      const totalBultos = parseInt(remito.numeroBultos || '1');
+      
+      // Generar una carátula para cada bulto
+      for (let i = 1; i <= totalBultos; i++) {
+        generarPDFCaratulaEnvio(remitoCompleto, i, totalBultos);
+        // Pequeña pausa entre descargas para evitar problemas
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    } catch (err) {
+      console.error('Error al generar carátulas de envío:', err);
+      alert('Error al generar las carátulas de envío');
     }
   };
 
@@ -445,6 +467,11 @@ const RemitosPage: React.FC = () => {
                         <PrintIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
+                    <Tooltip title="Generar Carátulas de Envío">
+                      <IconButton size="small" color="secondary" onClick={() => handleGenerarCaratulas(remito)}>
+                        <ShippingIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
                     {user?.userType === 'admin' && remito.estado !== 'entregado' && (
                       <Tooltip title="Eliminar">
                         <IconButton
@@ -510,13 +537,27 @@ const RemitosPage: React.FC = () => {
               sx={{ mb: 2 }}
             />
 
-            <TextField
-              fullWidth
-              label="Repartidor"
-              value={repartidor}
-              onChange={(e) => setRepartidor(e.target.value)}
-              sx={{ mb: 2 }}
-            />
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel>Repartidor</InputLabel>
+              <Select
+                value={repartidor}
+                onChange={(e) => setRepartidor(e.target.value)}
+                label="Repartidor"
+              >
+                <MenuItem value="correo">Correo</MenuItem>
+                <MenuItem value="kurt">Kurt</MenuItem>
+              </Select>
+            </FormControl>
+            {/* si es correo agregar otro campo para ingresar numero de bultos */}
+            {repartidor === 'correo' && (
+              <TextField
+                fullWidth
+                label="Número de Bultos"
+                value={numeroBultos}
+                onChange={(e) => setNumeroBultos(e.target.value)}
+                sx={{ mb: 2 }}
+              />
+            )}
 
             <TextField
               fullWidth
@@ -679,6 +720,12 @@ const RemitosPage: React.FC = () => {
                     <Grid item xs={6}>
                       <Typography variant="caption" color="textSecondary">Repartidor</Typography>
                       <Typography variant="body1">{remitoSeleccionado.repartidor}</Typography>
+                    </Grid>
+                  )}
+                  {remitoSeleccionado.numeroBultos && (
+                    <Grid item xs={6}>
+                      <Typography variant="caption" color="textSecondary">Número de Bultos</Typography>
+                      <Typography variant="body1">{remitoSeleccionado.numeroBultos}</Typography>
                     </Grid>
                   )}
                   {remitoSeleccionado.vehiculo && (
