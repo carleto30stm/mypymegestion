@@ -192,7 +192,7 @@ const LiquidacionPage: React.FC = () => {
               <RefreshIcon />
             </IconButton>
           </Tooltip>
-          {user?.userType === 'admin' && (
+          {user?.userType === 'admin' || user?.userType === 'oper_ad' && (
             <Button
               variant="contained"
               startIcon={<AddIcon />}
@@ -306,7 +306,7 @@ const LiquidacionPage: React.FC = () => {
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Crea un nuevo período para comenzar a gestionar la liquidación de sueldos
           </Typography>
-          {user?.userType === 'admin' && (
+          {user?.userType === 'admin' || user?.userType === 'oper_ad' && (
             <Button variant="contained" startIcon={<AddIcon />} onClick={handleOpenNuevoPeriodo}>
               Crear Primer Período
             </Button>

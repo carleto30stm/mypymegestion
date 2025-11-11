@@ -64,7 +64,7 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
   const [openAgregarEmpleado, setOpenAgregarEmpleado] = useState(false);
   const [nuevoEmpleadoId, setNuevoEmpleadoId] = useState('');
 
-  const isEditable = periodo.estado === 'abierto' && user?.userType === 'admin';
+  const isEditable = periodo.estado === 'abierto' && (user?.userType === 'admin' || user?.userType === 'oper_ad');
 
   // Cargar empleados si no están cargados
   React.useEffect(() => {
