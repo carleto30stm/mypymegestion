@@ -286,8 +286,9 @@ export const liquidarEmpleado = async (req: Request, res: Response) => {
     const medioFinal = medioDePago || 'EFECTIVO';
     const bancoFinal = banco || 'EFECTIVO';
 
-    // Crear gasto del sueldo base (lo que falta por pagar después de adelantos)
-    const montoSueldoBase = liquidacion.sueldoBase - liquidacion.adelantos;
+    // Calcular el monto del sueldo base según el tipo de período
+    const sueldoBasePeriodo = periodo.tipo === 'quincenal' ? liquidacion.sueldoBase / 2 : liquidacion.sueldoBase;
+    const montoSueldoBase = sueldoBasePeriodo - liquidacion.adelantos;
     
     const gastosSueldoCreados = [];
     
