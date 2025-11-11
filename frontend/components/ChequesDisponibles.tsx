@@ -46,7 +46,7 @@ const ChequesDisponibles: React.FC<ChequesDisponiblesProps> = ({
   selectedYear
 }) => {
   const dispatch = useDispatch<AppDispatch>();
-  const { items: gastos } = useSelector((state: RootState) => state.gastos);
+  const { items: gastos, lastUpdated } = useSelector((state: RootState) => state.gastos);
   
   const [dialogOpen, setDialogOpen] = useState(false);
   const [chequeSeleccionado, setChequeSeleccionado] = useState<any>(null);
@@ -70,7 +70,7 @@ const ChequesDisponibles: React.FC<ChequesDisponiblesProps> = ({
     };
     
     cargarTodosCheques();
-  }, []);
+  }, [lastUpdated]);
 
   // Efecto para cargar proveedores activos
   useEffect(() => {
@@ -153,18 +153,42 @@ const ChequesDisponibles: React.FC<ChequesDisponiblesProps> = ({
         detalleFinal
       );
       
-      // Recargar todos los cheques sin filtro de fecha
-      const response = await api.get('/api/gastos');
-      setTodosLosCheques(response.data);
-      
+      // No necesitamos recargar manualmente, el useEffect se encargará cuando cambie lastUpdated
       // También actualizar Redux con el filtro actual
       dispatch(fetchGastos({}));
       
       handleCerrarDialog();
       alert(`Cheque ${tipoDisposicion === 'depositar' ? 'depositado' : 'utilizado para pago'} exitosamente`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error al disponer cheque:', error);
-      alert('Error al procesar la operación');
+      
+      // Manejo específico de errores
+      let mensajeError = 'Error al procesar la operación';
+      
+      if (error.response?.data?.message) {
+        mensajeError = error.response.data.message;
+      } else if (error.message) {
+        mensajeError = error.message;
+      }
+      
+      // Mensajes específicos para errores comunes
+      if (mensajeError.includes('cheque ya fue depositado') || mensajeError.includes('ya depositado')) {
+        mensajeError = 'Este cheque ya fue depositado anteriormente';
+      } else if (mensajeError.includes('cheque no encontrado') || mensajeError.includes('no encontrado')) {
+        mensajeError = 'El cheque seleccionado ya no está disponible';
+      } else if (mensajeError.includes('banco destino') || mensajeError.includes('destino')) {
+        mensajeError = 'Error en la selección del banco destino';
+      } else if (mensajeError.includes('proveedor') || mensajeError.includes('proveedor')) {
+        mensajeError = 'Error en la selección del proveedor';
+      } else if (mensajeError.includes('saldo insuficiente') || mensajeError.includes('insuficiente')) {
+        mensajeError = 'Saldo insuficiente para realizar la operación';
+      } else if (tipoDisposicion === 'depositar' && mensajeError.includes('depósito')) {
+        mensajeError = 'Error al depositar el cheque. Verifique los datos e intente nuevamente';
+      } else if (tipoDisposicion === 'pagar_proveedor' && mensajeError.includes('pago')) {
+        mensajeError = 'Error al procesar el pago al proveedor. Verifique los datos e intente nuevamente';
+      }
+      
+      alert(`❌ Error: ${mensajeError}`);
     } finally {
       setLoading(false);
     }
@@ -174,7 +198,7 @@ const ChequesDisponibles: React.FC<ChequesDisponiblesProps> = ({
     return (
       <Paper sx={{ p: 3, mt: 2 }}>
         <Typography variant="h6" gutterBottom>
-          📝 Cheques Disponibles para Disposición
+          📝 Cheques Terceros para Disposición
         </Typography>
         <Typography color="text.secondary">
           No hay cheques de terceros disponibles para depositar o utilizar.
@@ -187,7 +211,7 @@ const ChequesDisponibles: React.FC<ChequesDisponiblesProps> = ({
     <Paper sx={{ p: 3, mt: 2 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
         <Typography variant="h6" gutterBottom>
-          📝 Cheques Disponibles para Disposición
+          📝 Cheques Terceros para Disposición
         </Typography>
         <Chip 
             label={chequesDisponibles.length} 
@@ -218,7 +242,8 @@ const ChequesDisponibles: React.FC<ChequesDisponiblesProps> = ({
                     <Typography variant="body2" color="text.secondary">
                       <strong>Fecha:</strong> {formatDate(cheque.fecha)} | 
                       <strong> Cliente:</strong> {cheque.clientes} | 
-                      <strong> Banco:</strong> {cheque.banco}
+                      <strong> Banco:</strong> {cheque.banco} |
+                      <strong> Nro. Cheque:</strong> {cheque.numeroCheque}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                        <strong>Rubro:</strong> {cheque.rubro} - {cheque.subRubro}

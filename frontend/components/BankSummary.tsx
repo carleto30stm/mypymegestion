@@ -810,7 +810,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({
                     fontWeight="medium"
                     sx={{ 
                       color: cheque.saldo > 0 ? 'orange.main' : cheque.saldo < 0 ? 'error.main' : 'text.primary',
-                      backgroundColor: cheque.saldo > 0 ? 'orange.light' : cheque.saldo < 0 ? 'error.light' : 'grey.100',
+                      backgroundColor: cheque.saldo > 0 ? 'orange' : cheque.saldo < 0 ? 'error' : 'grey.100',
                       padding: '2px 6px',
                       borderRadius: 1,
                       display: 'inline-block',
@@ -879,7 +879,7 @@ const BankSummary: React.FC<BankSummaryProps> = ({
                     fontWeight="medium"
                     sx={{ 
                       color: cheque.saldo > 0 ? 'warning.main' : cheque.saldo < 0 ? 'error.main' : 'text.primary',
-                      backgroundColor: cheque.saldo > 0 ? 'warning.light' : cheque.saldo < 0 ? 'error.light' : 'grey.100',
+                      backgroundColor: cheque.saldo > 0 ? 'warning' : cheque.saldo < 0 ? 'error' : 'grey.100',
                       padding: '2px 6px',
                       borderRadius: 1,
                       display: 'inline-block',

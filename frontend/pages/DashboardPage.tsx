@@ -34,7 +34,7 @@ interface LayoutContextType {
 const DashboardPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const { error } = useSelector((state: RootState) => state.gastos);
+  const { error, lastUpdated } = useSelector((state: RootState) => state.gastos);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   
   // Obtener estados del Layout a través del contexto
@@ -187,7 +187,7 @@ const DashboardPage: React.FC = () => {
       // Filtro "total" - traer todos los registros
       dispatch(fetchGastos({ todosPeriodos: true }));
     }
-  }, [dispatch, filterType, selectedMonth, selectedQuarter, selectedSemester, selectedYear]);
+  }, [dispatch, filterType, selectedMonth, selectedQuarter, selectedSemester, selectedYear, lastUpdated]);
 
   useEffect(() => {
     if (error) {

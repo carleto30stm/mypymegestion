@@ -36,6 +36,8 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
     estado: 'activo',
     email: '',
     telefono: '',
+    direccion: '',
+    fechaNacimiento: '',
     observaciones: ''
   });
 
@@ -124,6 +126,8 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
         estado: employee.estado,
         email: employee.email || '',
         telefono: employee.telefono || '',
+        direccion: employee.direccion || '',
+        fechaNacimiento: employee.fechaNacimiento || '',
         observaciones: employee.observaciones || ''
       });
       
@@ -148,6 +152,8 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
         estado: 'activo',
         email: '',
         telefono: '',
+        direccion: '',
+        fechaNacimiento: '',
         observaciones: ''
       });
       setSueldoFormatted('');
@@ -325,6 +331,29 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
               value={formData.telefono}
               onChange={handleChange('telefono')}
               fullWidth
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={6}>
+            <TextField
+              label="Dirección"
+              value={formData.direccion}
+              onChange={handleChange('direccion')}
+              fullWidth
+              placeholder="Ej: Calle 123, Ciudad, Provincia"
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={6}>
+            <TextField
+              label="Fecha de Nacimiento"
+              type="date"
+              value={formData.fechaNacimiento}
+              onChange={handleChange('fechaNacimiento')}
+              fullWidth
+              InputLabelProps={{
+                shrink: true,
+              }}
             />
           </Grid>
           

@@ -11,6 +11,8 @@ export interface IEmployee extends mongoose.Document {
   estado: 'activo' | 'inactivo';
   email?: string;
   telefono?: string;
+  direccion?: string;
+  fechaNacimiento?: string;
   observaciones?: string;
   fechaCreacion: Date;
   fechaActualizacion: Date;
@@ -76,6 +78,15 @@ const employeeSchema = new mongoose.Schema<IEmployee>({
     type: String,
     trim: true,
     maxlength: [20, 'El teléfono no puede exceder 20 caracteres']
+  },
+  direccion: {
+    type: String,
+    trim: true,
+    maxlength: [200, 'La dirección no puede exceder 200 caracteres']
+  },
+  fechaNacimiento: {
+    type: String,
+    trim: true
   },
   observaciones: {
     type: String,

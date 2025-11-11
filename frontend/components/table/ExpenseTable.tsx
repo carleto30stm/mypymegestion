@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../redux/store';
 import { Gasto } from '../../types';
-import { deleteGasto, confirmarCheque, cancelGasto, reactivateGasto } from '../../redux/slices/gastosSlice';
+import { deleteGasto, confirmarCheque, cancelGasto, reactivateGasto, fetchGastos } from '../../redux/slices/gastosSlice';
 import { DataGrid, GridColDef, GridActionsCellItem } from '@mui/x-data-grid';
 import { 
   Box, 
@@ -46,7 +46,7 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
   selectedYear
 }) => {
   const dispatch = useDispatch<AppDispatch>();
-  const { items: gastos, status } = useSelector((state: RootState) => state.gastos);
+  const { items: gastos, status, lastUpdated } = useSelector((state: RootState) => state.gastos);
   const { user } = useSelector((state: RootState) => state.auth);
   const authDebug = useAuthDebug();
   const [gastoToEdit, setGastoToEdit] = useState<Gasto | null>(null);
@@ -58,6 +58,11 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
   const [reactivateConfirmOpen, setReactivateConfirmOpen] = useState(false);
   const [gastoToReactivate, setGastoToReactivate] = useState<Gasto | null>(null);
   const [comentarioReactivacion, setComentarioReactivacion] = useState('');
+
+  useEffect(() => {
+     dispatch(fetchGastos({ todosPeriodos: true }));   
+  }, [lastUpdated]);
+  
   
   // Obtener fecha de hoy en formato YYYY-MM-DD
   const today = new Date().toISOString().split('T')[0];

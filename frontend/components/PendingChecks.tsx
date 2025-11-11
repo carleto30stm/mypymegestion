@@ -29,6 +29,7 @@ const PendingChecks: React.FC = () => {
   const [todosLosCheques, setTodosLosCheques] = useState<any[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [chequeSeleccionado, setChequeSeleccionado] = useState<any>(null);
+   const {lastUpdated } = useSelector((state: RootState) => state.gastos);
 
   // Efecto para cargar TODOS los cheques sin filtro de fecha
   useEffect(() => {
@@ -42,7 +43,7 @@ const PendingChecks: React.FC = () => {
     };
     
     cargarTodosCheques();
-  }, []);
+  }, [lastUpdated]);
   
   // Filtrar solo cheques pendientes de confirmación (sin filtro de fecha - siempre visibles)
   const chequesPendientes = todosLosCheques.filter(gasto => 
@@ -129,7 +130,8 @@ const PendingChecks: React.FC = () => {
                     <Typography variant="body2" color="text.secondary">
                       <strong>Fecha:</strong> {formatDate(cheque.fecha)} | 
                       <strong> Cliente:</strong> {cheque.clientes} | 
-                      <strong> Banco:</strong> {cheque.banco}
+                      <strong> Banco:</strong> {cheque.banco} |
+                      <strong> Nro. Cheque:</strong> {cheque.numeroCheque}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       <strong>Rubro:</strong> {cheque.rubro} - {cheque.subRubro}
