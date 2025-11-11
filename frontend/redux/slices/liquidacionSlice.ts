@@ -193,7 +193,23 @@ const liquidacionSlice = createSlice({
       .addCase(createPeriodo.rejected, (state, action) => {
         state.loading = false;
         state.status = 'failed';
-        state.error = action.error.message || 'Error al crear período';
+        // Capturar el mensaje específico del backend
+        let errorMessage = null;
+
+        if (action.payload) {
+          const error = action.payload as any;
+          errorMessage = error?.message || error?.error || error?.data?.message || errorMessage;
+        } else if (action.error?.message) {
+          // Intentar extraer mensaje específico del error de axios
+          try {
+            const parsedError = JSON.parse(action.error.message);
+            errorMessage = parsedError?.message || parsedError?.error || action.error.message;
+          } catch {
+            errorMessage = 'Error al crear período';
+          }
+        }
+
+        state.error = errorMessage;
       })
       
       // Agregar empleado

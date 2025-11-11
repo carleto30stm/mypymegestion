@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
-import { useSelector } from 'react-redux';
-import { RootState } from '../redux/store';
+import React, { useEffect, useMemo } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { AppDispatch, RootState } from '../redux/store';
 import { EmployeePayroll } from '../types';
 import {
   Paper,
@@ -19,16 +19,20 @@ import {
   AccountBalance as PayrollIcon
 } from '@mui/icons-material';
 import { formatCurrency } from '../utils/formatters';
+import { fetchGastos } from '../redux/slices';
 
 interface EmployeePayrollProps {
   filterType: 'total' | 'month';
   selectedMonth: string;
 }
-
 const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, selectedMonth }) => {
+  const dispatch = useDispatch<AppDispatch>();
   const { items: employees } = useSelector((state: RootState) => state.employees);
   const { items: gastos } = useSelector((state: RootState) => state.gastos);
 
+ useEffect(() => {
+  dispatch(fetchGastos({todosPeriodos: true}));
+  }, []);
   // Obtener fecha de hoy para filtros StandBy
   const today = new Date().toISOString().split('T')[0];
 

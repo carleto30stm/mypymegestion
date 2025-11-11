@@ -221,7 +221,7 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
         <Paper sx={{ flex: 1, p: 2 }}>
           <Typography variant="body2" color="text.secondary">Total a Liquidar</Typography>
           <Typography variant="h4" fontWeight="bold" color="primary.main">
-            {formatCurrency(periodo.totalGeneral)}
+            {formatCurrency(periodo.tipo === 'quincenal' ? periodo.totalGeneral / 2 : periodo.totalGeneral)}
           </Typography>
         </Paper>
       </Box>
@@ -283,7 +283,7 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
                   </TableCell>
                   <TableCell align="right">
                     <Typography variant="body2" color="text.secondary">
-                      {formatCurrency(liquidacion.sueldoBase)}
+                      {formatCurrency(periodo.tipo === 'quincenal' ? liquidacion.sueldoBase / 2 : liquidacion.sueldoBase)}
                     </Typography>
                   </TableCell>
                   <TableCell align="right">
@@ -298,7 +298,7 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
                   </TableCell>
                   <TableCell align="right">
                     <Typography variant="body2" fontWeight="bold" color="primary.main">
-                      {formatCurrency(liquidacion.totalAPagar)}
+                      {formatCurrency(periodo.tipo === 'quincenal' ? liquidacion.totalAPagar / 2 : liquidacion.totalAPagar)}
                     </Typography>
                   </TableCell>
                   <TableCell align="center">
@@ -465,7 +465,7 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1, pt: 1, borderTop: 1, borderColor: 'divider' }}>
                     <Typography variant="subtitle2" fontWeight="bold">Total a Pagar:</Typography>
                     <Typography variant="subtitle2" fontWeight="bold" color="primary.main">
-                      {formatCurrency(selectedEmpleado.totalAPagar)}
+                      {formatCurrency(periodo.tipo === 'quincenal' ? selectedEmpleado.totalAPagar / 2 : selectedEmpleado.totalAPagar)}
                     </Typography>
                   </Box>
                 </Box>
