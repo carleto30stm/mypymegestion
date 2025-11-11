@@ -192,7 +192,7 @@ const LiquidacionPage: React.FC = () => {
               <RefreshIcon />
             </IconButton>
           </Tooltip>
-          {user?.userType === 'admin' || user?.userType === 'oper_ad' && (
+          {(user?.userType === 'admin' || user?.userType === 'oper_ad') && (
             <Button
               variant="contained"
               startIcon={<AddIcon />}

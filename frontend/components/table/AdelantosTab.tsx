@@ -40,7 +40,7 @@ const AdelantosTab: React.FC<AdelantosTabProps> = ({ periodo }) => {
   const [banco, setBanco] = useState('EFECTIVO');
   const [observaciones, setObservaciones] = useState('');
   
-  const isEditable = periodo.estado === 'abierto' && user?.userType === 'admin';
+  const isEditable = periodo.estado === 'abierto' && (user?.userType === 'admin' || user?.userType === 'oper_ad');
 
   const handleOpenAdelanto = () => {
     setSelectedEmpleadoId('');

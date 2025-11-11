@@ -46,7 +46,7 @@ const HorasExtraTab: React.FC<HorasExtraTabProps> = ({ periodo }) => {
   const [selectedEmpleadoId, setSelectedEmpleadoId] = useState('');
   const [selectedHoraExtraId, setSelectedHoraExtraId] = useState('');
   
-  const isEditable = periodo.estado === 'abierto' && user?.userType === 'admin';
+  const isEditable = periodo.estado === 'abierto' && (user?.userType === 'admin' || user?.userType === 'oper_ad');
 
   useEffect(() => {
     dispatch(fetchHorasExtra());
