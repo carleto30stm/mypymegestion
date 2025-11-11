@@ -6,12 +6,14 @@ interface GastosState {
   items: Gasto[];
   status: 'idle' | 'loading' | 'succeeded' | 'failed';
   error: string | null;
+  lastUpdated: number; // Timestamp para tracking de cambios
 }
 
 const initialState: GastosState = {
   items: [],
   status: 'idle',
   error: null,
+  lastUpdated: Date.now(),
 };
 
 interface FetchGastosParams {
@@ -168,6 +170,7 @@ const gastosSlice = createSlice({
         state.status = 'succeeded';
         state.items.push(action.payload);
         state.error = null;
+        state.lastUpdated = Date.now();
       })
       .addCase(createGasto.rejected, (state, action) => {
         state.status = 'failed';
@@ -185,6 +188,7 @@ const gastosSlice = createSlice({
           state.items[index] = action.payload;
         }
         state.error = null;
+        state.lastUpdated = Date.now();
       })
       .addCase(updateGasto.rejected, (state, action) => {
         state.status = 'failed';
@@ -193,6 +197,7 @@ const gastosSlice = createSlice({
       // Delete
       .addCase(deleteGasto.fulfilled, (state, action: PayloadAction<string>) => {
         state.items = state.items.filter(item => item._id !== action.payload);
+        state.lastUpdated = Date.now();
       })
       // Cancel
       .addCase(cancelGasto.fulfilled, (state, action: PayloadAction<Gasto>) => {
@@ -200,6 +205,7 @@ const gastosSlice = createSlice({
         if (index !== -1) {
           state.items[index] = action.payload;
         }
+        state.lastUpdated = Date.now();
       })
       // Reactivate
       .addCase(reactivateGasto.fulfilled, (state, action: PayloadAction<Gasto>) => {
@@ -207,6 +213,7 @@ const gastosSlice = createSlice({
         if (index !== -1) {
           state.items[index] = action.payload;
         }
+        state.lastUpdated = Date.now();
       })
       // Confirmar cheque
       .addCase(confirmarCheque.fulfilled, (state, action: PayloadAction<Gasto>) => {
@@ -214,11 +221,13 @@ const gastosSlice = createSlice({
         if (index !== -1) {
           state.items[index] = action.payload;
         }
+        state.lastUpdated = Date.now();
       })
       // Disponer cheque - recargar todos los gastos ya que se crean nuevas entradas
       .addCase(disponerCheque.fulfilled, (state, action) => {
         // La acción devuelve múltiples operaciones, mejor recargar todo
         // Esto se maneja desde el componente con fetchGastos()
+        state.lastUpdated = Date.now();
       });
   },
 });

@@ -41,7 +41,8 @@ import {
   FilterList as FilterIcon,
   MonetizationOn as MoneyIcon,
   AccountBalance as AccountBalanceIcon,
-  LocalShipping as LocalShippingIcon
+  LocalShipping as LocalShippingIcon,
+  Warning as WarningIcon
 } from '@mui/icons-material';
 import { AppDispatch, RootState } from '../redux/store';
 import { fetchVentas } from '../redux/slices/ventasSlice';
@@ -126,6 +127,10 @@ const CobranzasPage: React.FC = () => {
   // Estados para cuenta corriente
   const [clienteCuentaCorriente, setClienteCuentaCorriente] = useState<Cliente | null>(null);
 
+  // Estados para deudores
+  const [filtroDeudores, setFiltroDeudores] = useState<'todos' | 'morosos' | 'criticos'>('todos');
+  const [ordenDeudores, setOrdenDeudores] = useState<'monto' | 'antiguedad'>('monto');
+
   // Estados para generar remito
   const [modalRemitoOpen, setModalRemitoOpen] = useState(false);
   const [ventaParaRemito, setVentaParaRemito] = useState<Venta | null>(null);
@@ -174,6 +179,70 @@ const CobranzasPage: React.FC = () => {
 
     return true;
   });
+
+  // Calcular deudores (clientes con saldo pendiente)
+  const calcularDeudores = () => {
+    // Agrupar ventas pendientes por cliente
+    const deudoresPorCliente = new Map<string, {
+      cliente: Cliente;
+      totalDeuda: number;
+      ventasPendientes: number;
+      ventaMasAntigua: string;
+      diasDeuda: number;
+    }>();
+
+    ventasPendientes.forEach((venta) => {
+      const clienteId = typeof venta.clienteId === 'object' && venta.clienteId !== null
+        ? (venta.clienteId as any)._id || (venta.clienteId as any).id
+        : venta.clienteId;
+      
+      const cliente = clientes.find((c) => c._id === clienteId);
+      if (!cliente) return;
+
+      const existente = deudoresPorCliente.get(clienteId);
+      const diasVencimiento = Math.floor(
+        (new Date().getTime() - new Date(venta.fecha).getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      if (existente) {
+        existente.totalDeuda += venta.saldoPendiente;
+        existente.ventasPendientes += 1;
+        if (new Date(venta.fecha) < new Date(existente.ventaMasAntigua)) {
+          existente.ventaMasAntigua = venta.fecha;
+          existente.diasDeuda = diasVencimiento;
+        }
+      } else {
+        deudoresPorCliente.set(clienteId, {
+          cliente,
+          totalDeuda: venta.saldoPendiente,
+          ventasPendientes: 1,
+          ventaMasAntigua: venta.fecha,
+          diasDeuda: diasVencimiento
+        });
+      }
+    });
+
+    // Convertir a array y filtrar
+    let deudoresArray = Array.from(deudoresPorCliente.values());
+
+    // Aplicar filtros
+    if (filtroDeudores === 'morosos') {
+      deudoresArray = deudoresArray.filter(d => d.diasDeuda > 30);
+    } else if (filtroDeudores === 'criticos') {
+      deudoresArray = deudoresArray.filter(d => d.diasDeuda > 60 || d.totalDeuda > d.cliente.limiteCredito);
+    }
+
+    // Ordenar
+    if (ordenDeudores === 'monto') {
+      deudoresArray.sort((a, b) => b.totalDeuda - a.totalDeuda);
+    } else {
+      deudoresArray.sort((a, b) => b.diasDeuda - a.diasDeuda);
+    }
+
+    return deudoresArray;
+  };
+
+  const deudores = calcularDeudores();
 
   // Handler para abrir modal de pago
   const handleAbrirModalPago = (venta: Venta) => {
@@ -395,6 +464,20 @@ const CobranzasPage: React.FC = () => {
     return estado === 'activo' ? 'success' : 'error';
   };
 
+  // Función para obtener color según días de deuda
+  const getColorDeuda = (dias: number): 'success' | 'warning' | 'error' => {
+    if (dias <= 30) return 'success';
+    if (dias <= 60) return 'warning';
+    return 'error';
+  };
+
+  // Función para obtener etiqueta según días de deuda
+  const getEtiquetaDeuda = (dias: number): string => {
+    if (dias <= 30) return 'Corriente';
+    if (dias <= 60) return 'Vencida';
+    return 'Morosa';
+  };
+
   const canEdit = user?.userType === 'admin' || user?.userType === 'oper_ad';
 
   return (
@@ -483,6 +566,11 @@ const CobranzasPage: React.FC = () => {
           <Tab
             label={`Recibos Emitidos (${recibos.filter((r) => r.estadoRecibo === 'activo').length})`}
             icon={<ReceiptIcon />}
+            iconPosition="start"
+          />
+          <Tab
+            label={`Deudores (${deudores.length})`}
+            icon={<WarningIcon />}
             iconPosition="start"
           />
           <Tab label="Cuenta Corriente" icon={<AccountBalanceIcon />} iconPosition="start" />
@@ -770,8 +858,203 @@ const CobranzasPage: React.FC = () => {
           </TableContainer>
         </TabPanel>
 
-        {/* TAB 3: Cuenta Corriente */}
+        {/* TAB 3: Deudores */}
         <TabPanel value={tabValue} index={2}>
+          {/* Controles de filtro */}
+          <Box mb={2}>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6} md={4}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Filtrar por Estado</InputLabel>
+                  <Select
+                    value={filtroDeudores}
+                    label="Filtrar por Estado"
+                    onChange={(e) => setFiltroDeudores(e.target.value as any)}
+                  >
+                    <MenuItem value="todos">Todos los Deudores</MenuItem>
+                    <MenuItem value="morosos">Morosos (+30 días)</MenuItem>
+                    <MenuItem value="criticos">Críticos (+60 días o límite excedido)</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} sm={6} md={4}>
+                <FormControl fullWidth size="small">
+                  <InputLabel>Ordenar por</InputLabel>
+                  <Select
+                    value={ordenDeudores}
+                    label="Ordenar por"
+                    onChange={(e) => setOrdenDeudores(e.target.value as any)}
+                  >
+                    <MenuItem value="monto">Mayor Deuda</MenuItem>
+                    <MenuItem value="antiguedad">Mayor Antigüedad</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+            </Grid>
+          </Box>
+
+          {/* Resumen de deudores */}
+          <Grid container spacing={2} mb={3}>
+            <Grid item xs={12} sm={6} md={3}>
+              <Card>
+                <CardContent>
+                  <Typography color="text.secondary" gutterBottom variant="body2">
+                    Total Deudores
+                  </Typography>
+                  <Typography variant="h5">{deudores.length}</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <Card>
+                <CardContent>
+                  <Typography color="text.secondary" gutterBottom variant="body2">
+                    Deuda Total
+                  </Typography>
+                  <Typography variant="h5" color="error.main">
+                    {formatCurrency(deudores.reduce((sum, d) => sum + d.totalDeuda, 0))}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <Card>
+                <CardContent>
+                  <Typography color="text.secondary" gutterBottom variant="body2">
+                    Morosos (+30d)
+                  </Typography>
+                  <Typography variant="h5" color="warning.main">
+                    {deudores.filter(d => d.diasDeuda > 30).length}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <Card>
+                <CardContent>
+                  <Typography color="text.secondary" gutterBottom variant="body2">
+                    Críticos (+60d)
+                  </Typography>
+                  <Typography variant="h5" color="error.main">
+                    {deudores.filter(d => d.diasDeuda > 60).length}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
+
+          {/* Tabla de deudores */}
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Cliente</TableCell>
+                  <TableCell>Documento</TableCell>
+                  <TableCell align="right">Deuda Total</TableCell>
+                  <TableCell align="center">Ventas Pendientes</TableCell>
+                  <TableCell>Desde</TableCell>
+                  <TableCell align="center">Días de Deuda</TableCell>
+                  <TableCell>Estado</TableCell>
+                  <TableCell align="right">Límite Crédito</TableCell>
+                  <TableCell align="center">Acciones</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {deudores.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} align="center">
+                      No hay deudores registrados
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  deudores.map((deudor) => (
+                    <TableRow 
+                      key={deudor.cliente._id} 
+                      hover
+                      sx={{
+                        bgcolor: deudor.diasDeuda > 60 ? 'error.50' : 
+                                deudor.diasDeuda > 30 ? 'warning.50' : 'inherit'
+                      }}
+                    >
+                      <TableCell>
+                        <Typography variant="body2" fontWeight="medium">
+                          {deudor.cliente.nombre} {deudor.cliente.apellido || ''}
+                        </Typography>
+                        {deudor.cliente.razonSocial && (
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            {deudor.cliente.razonSocial}
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {deudor.cliente.numeroDocumento}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" fontWeight="bold" color="error.main">
+                          {formatCurrency(deudor.totalDeuda)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="center">
+                        <Chip 
+                          label={deudor.ventasPendientes}
+                          size="small"
+                          color="primary"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {formatDate(deudor.ventaMasAntigua)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="center">
+                        <Chip
+                          label={`${deudor.diasDeuda} días`}
+                          size="small"
+                          color={getColorDeuda(deudor.diasDeuda)}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={getEtiquetaDeuda(deudor.diasDeuda)}
+                          size="small"
+                          color={getColorDeuda(deudor.diasDeuda)}
+                          variant="outlined"
+                        />
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" color="text.secondary">
+                          {formatCurrency(deudor.cliente.limiteCredito)}
+                        </Typography>
+                        {deudor.totalDeuda > deudor.cliente.limiteCredito && (
+                          <Typography variant="caption" color="error.main" display="block">
+                            ¡Límite Excedido!
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell align="center">
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={() => {
+                            setClienteCuentaCorriente(deudor.cliente);
+                            setTabValue(3); // Cambiar a tab de Cuenta Corriente
+                          }}
+                        >
+                          Ver Detalle
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </TabPanel>
+
+        {/* TAB 4: Cuenta Corriente */}
+        <TabPanel value={tabValue} index={3}>
           <Box mb={3}>
             <Autocomplete
               options={clientes}

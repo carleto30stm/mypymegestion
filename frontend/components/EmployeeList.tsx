@@ -134,6 +134,16 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, onEdit }) => {
                       {employee.telefono}
                     </Typography>
                   )}
+                  {employee.direccion && (
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      {employee.direccion}
+                    </Typography>
+                  )}
+                  {employee.fechaNacimiento && (
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      {employee.fechaNacimiento}
+                    </Typography>
+                  )}
                 </TableCell>
                 
                 <TableCell>

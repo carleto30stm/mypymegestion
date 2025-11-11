@@ -54,6 +54,8 @@ router.post('/', async (req, res) => {
       nombre,
       apellido,
       documento,
+      direccion,
+      fechaNacimiento,
       puesto,
       fechaIngreso,
       sueldoBase,
@@ -83,6 +85,8 @@ router.post('/', async (req, res) => {
       nombre: nombre.trim(),
       apellido: apellido.trim(),
       documento: documento.trim(),
+      direccion: direccion?.trim(),
+      fechaNacimiento: fechaNacimiento?.trim(),
       puesto: puesto.trim(),
       fechaIngreso,
       sueldoBase: Number(sueldoBase),
@@ -130,6 +134,8 @@ router.put('/:id', async (req, res) => {
       nombre,
       apellido,
       documento,
+      direccion,
+      fechaNacimiento,
       puesto,
       fechaIngreso,
       sueldoBase,
@@ -170,6 +176,8 @@ router.put('/:id', async (req, res) => {
     employee.nombre = nombre.trim();
     employee.apellido = apellido.trim();
     employee.documento = documento.trim();
+    employee.direccion = direccion?.trim();
+    employee.fechaNacimiento = fechaNacimiento?.trim();
     employee.puesto = puesto.trim();
     employee.fechaIngreso = fechaIngreso;
     employee.sueldoBase = Number(sueldoBase);

@@ -48,6 +48,8 @@ export interface Employee {
   estado: 'activo' | 'inactivo';
   email?: string;
   telefono?: string;
+  direccion?: string;
+  fechaNacimiento?: string;
   observaciones?: string;
 }
 

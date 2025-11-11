@@ -8,6 +8,7 @@ import {
 import { protect } from '../middleware/authMiddleware.js';
 import { requireEditDeletePermission } from '../middleware/operAuth.js';
 import Gasto from '../models/Gasto.js';
+import ReciboPago from '../models/ReciboPago.js';
 import mongoose from 'mongoose';
 
 const router = express.Router();
@@ -129,6 +130,36 @@ router.post('/:id/disponer-cheque', async (req, res) => {
 
     // Actualizar el estado del cheque original
     chequeOriginal.estadoCheque = nuevoEstado;
+    
+    // CRÍTICO: Actualizar también el estadoCheque en ReciboPago.formasPago[].datosCheque
+    // para que el contador de "Cheques Pendientes" refleje correctamente los cheques dispuestos
+    if (chequeOriginal.numeroCheque) {
+      try {
+        const reciboConCheque = await mongoose.model('ReciboPago').findOne({
+          'formasPago.medioPago': 'CHEQUE',
+          'formasPago.datosCheque.numeroCheque': chequeOriginal.numeroCheque,
+          estadoRecibo: 'activo'
+        });
+
+        if (reciboConCheque) {
+          // Encontrar el índice de la forma de pago que contiene este cheque
+          const indiceFP = reciboConCheque.formasPago.findIndex(
+            (fp: any) => fp.medioPago === 'CHEQUE' && 
+                        fp.datosCheque?.numeroCheque === chequeOriginal.numeroCheque
+          );
+
+          if (indiceFP !== -1) {
+            // Actualizar el estado del cheque en ReciboPago
+            reciboConCheque.formasPago[indiceFP].datosCheque.estadoCheque = nuevoEstado;
+            await reciboConCheque.save();
+            console.log(`✅ Estado del cheque ${chequeOriginal.numeroCheque} actualizado en ReciboPago a: ${nuevoEstado}`);
+          }
+        }
+      } catch (error) {
+        console.error('⚠️ Error actualizando estadoCheque en ReciboPago:', error);
+        // No fallar la operación principal si esto falla, solo loguear
+      }
+    }
     
     // Guardar todas las operaciones
     await chequeOriginal.save();
