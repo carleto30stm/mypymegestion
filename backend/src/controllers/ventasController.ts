@@ -172,6 +172,7 @@ export const crearVenta = async (req: ExpressRequest, res: ExpressResponse) => {
             vendedor,
             estado: estadoVenta,
             aplicaIVA: aplicaIVA === true,
+            creadoPor: req.user?.username, // Registrar usuario que crea la venta
             // Campos de cobranza se actualizan desde ReciboPago
             estadoCobranza: 'sin_cobrar',
             montoCobrado: 0,

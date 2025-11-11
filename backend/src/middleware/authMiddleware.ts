@@ -1,6 +1,7 @@
-// No usamos jwt: validación simple mediante el id del usuario como token
+// Validación de JWT usando jsonwebtoken
 // Fix: Aliased Request and Response to avoid global type conflicts.
 import type { Request as ExpressRequest, Response as ExpressResponse, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 
 // Fix: Use declaration merging to add the 'user' property to the Express Request type.
@@ -25,29 +26,35 @@ export const protect = async (req: ExpressRequest, res: ExpressResponse, next: N
       // Obtener token del header
       token = req.headers.authorization.split(' ')[1];
 
-      // Token simple: enviamos el user id directamente como token
-      const userId = token;
-
-      // Obtener usuario por id (sin la contraseña)
-      try {
-        req.user = await User.findById(userId).select('-password');
-      } catch (err) {
-        console.error('Error buscando usuario por token simple:', err);
-        return res.status(401).json({ message: 'No autorizado, token inválido' });
+      // Verificar que el token existe
+      if (!token) {
+        return res.status(401).json({ message: 'No autorizado, token no proporcionado' });
       }
+
+      // Verificar y decodificar el JWT
+      const secret = String(process.env.JWT_SECRET || 'secret');
+      const decoded = jwt.verify(token, secret) as unknown as { id: string };
+
+      // Obtener usuario por id extraído del JWT (sin la contraseña)
+      req.user = await User.findById(decoded.id).select('-password');
       
       if (!req.user) {
         return res.status(401).json({ message: 'No autorizado, usuario no encontrado' });
       }
 
       next();
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      console.error('Error en autenticación JWT:', error.message);
+      
+      if (error.name === 'TokenExpiredError') {
+        return res.status(401).json({ message: 'Token expirado' });
+      } else if (error.name === 'JsonWebTokenError') {
+        return res.status(401).json({ message: 'Token inválido' });
+      }
+      
       return res.status(401).json({ message: 'No autorizado, token fallido' });
     }
-  }
-
-  if (!token) {
+  } else {
     return res.status(401).json({ message: 'No autorizado, no hay token' });
   }
 };

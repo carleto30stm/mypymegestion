@@ -85,7 +85,7 @@ const ComprasPage: React.FC = () => {
     iva: 0,
     total: 0,
     estado: 'presupuesto',
-    comprador: (user as any)?.nombre || (user as any)?.name || 'Sistema' || '',
+    comprador: (user as any)?.username || (user as any)?.name || 'Sistema' || '',
     observaciones: ''
   });
 
@@ -143,7 +143,7 @@ const ComprasPage: React.FC = () => {
         iva: 0,
         total: 0,
         estado: 'presupuesto',
-        comprador: (user as any)?.nombre || (user as any)?.name || 'Sistema' || '',
+        comprador: (user as any)?.username || (user as any)?.name || 'Sistema' || '',
         observaciones: ''
       });
     }
@@ -164,7 +164,7 @@ const ComprasPage: React.FC = () => {
       iva: 0,
       total: 0,
       estado: 'presupuesto',
-      comprador: (user as any)?.nombre || (user as any)?.name || 'Sistema' || '',
+      comprador: (user as any)?.username || (user as any)?.name || 'Sistema' || '',
       observaciones: ''
     });
   };

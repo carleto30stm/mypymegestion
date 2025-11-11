@@ -168,7 +168,11 @@ const gastoSchema = new mongoose.Schema({
       message: () => `Banco debe ser uno de los valores válidos: ${CAJAS.join(', ')}`
     }
   },
-  // user: { type: mongoose.Schema.Types.ObjectId, required: true, ref: 'User' } // Opcional: para asociar gastos a usuarios
+  // Campo para auditoría: usuario que creó el registro
+  creadoPor: { 
+    type: String, // Username del usuario que creó el registro
+    required: false // Opcional para compatibilidad con registros antiguos
+  }
 }, { timestamps: true });
 
 // MongoDB usa _id por defecto, no es necesario declararlo

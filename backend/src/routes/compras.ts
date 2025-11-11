@@ -11,19 +11,20 @@ import {
   anularCompra,
   getEstadisticasCompras
 } from '../controllers/comprasController.js';
+import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
 // Rutas de compras
-router.get('/', getCompras);
-router.get('/estadisticas', getEstadisticasCompras);
-router.get('/:id', getCompraById);
-router.post('/', createCompra);
-router.put('/:id', updateCompra);
-router.patch('/:id/estado', cambiarEstadoCompra);
-router.delete('/:id', deleteCompra);
-router.post('/:id/confirmar-recepcion', confirmarRecepcion);
-router.post('/:id/confirmar-pago', confirmarPago);
-router.post('/:id/anular', anularCompra);
+router.get('/', protect, getCompras);
+router.get('/estadisticas', protect, getEstadisticasCompras);
+router.get('/:id', protect, getCompraById);
+router.post('/', protect, createCompra);
+router.put('/:id', protect, updateCompra);
+router.patch('/:id/estado', protect, cambiarEstadoCompra);
+router.delete('/:id', protect, deleteCompra);
+router.post('/:id/confirmar-recepcion', protect, confirmarRecepcion);
+router.post('/:id/confirmar-pago', protect, confirmarPago);
+router.post('/:id/anular', protect, anularCompra);
 
 export default router;

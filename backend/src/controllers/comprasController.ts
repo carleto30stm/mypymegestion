@@ -66,7 +66,13 @@ export const createCompra = async (req: Request, res: Response): Promise<void> =
   session.startTransaction();
   
   try {
-    const nuevaCompra = new Compra(req.body);
+    // Agregar el usuario que crea la compra desde la sesión
+    const datosCompra = {
+      ...req.body,
+      creadoPor: req.user?.username // Obtener ID del usuario autenticado
+    };
+    
+    const nuevaCompra = new Compra(datosCompra);
     const compraGuardada = await nuevaCompra.save({ session });
     
     await session.commitTransaction();
