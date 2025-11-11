@@ -52,7 +52,7 @@ export interface IVenta extends Document {
   motivoAnulacion?: string;
   usuarioAnulacion?: string; // Usuario que realizó la anulación
   usuarioConfirmacion?: string; // Usuario que confirmó la venta
-  creadoPor?: string; // Usuario que creó la venta
+  creadoPor?: string; // Username del usuario que creó la venta
   
   // Campos fiscales
   aplicaIVA: boolean;
@@ -244,6 +244,11 @@ const VentaSchema = new Schema({
   usuarioConfirmacion: {
     type: String,
     trim: true
+  },
+  // Campo para auditoría: usuario que creó el registro
+  creadoPor: {
+    type: String, // Username del usuario que creó el registro
+    required: false // Opcional para compatibilidad con registros antiguos
   },
   // Campos fiscales
   aplicaIVA: {

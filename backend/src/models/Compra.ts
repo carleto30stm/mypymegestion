@@ -40,6 +40,7 @@ export interface ICompra extends Document {
   numeroComprobante?: string;
   observaciones?: string;
   comprador: string; // Usuario que realizó la compra
+  creadoPor?: string; // Username del usuario que creó la compra
   gastoRelacionadoId?: mongoose.Types.ObjectId; // Relación con tabla Gasto
   fechaCreacion: Date;
   fechaActualizacion: Date;
@@ -190,6 +191,11 @@ const CompraSchema = new Schema({
     type: String,
     required: [true, 'El comprador es requerido'],
     trim: true
+  },
+  // Campo para auditoría: usuario que creó el registro
+  creadoPor: {
+    type: String, // Username del usuario que creó el registro
+    required: false // Opcional para compatibilidad con registros antiguos
   },
   gastoRelacionadoId: {
     type: Schema.Types.ObjectId,

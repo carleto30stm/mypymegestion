@@ -66,7 +66,13 @@ export const getGastos = async (req: ExpressRequest, res: ExpressResponse) => {
 // Fix: Use the standard Express Request type. The 'user' property is added via declaration merging.
 export const createGasto = async (req: ExpressRequest, res: ExpressResponse) => {
     try {
-        const nuevoGasto = new Gasto(req.body);
+        // Agregar el usuario que crea el gasto desde la sesión
+        const datosGasto = {
+            ...req.body,
+            creadoPor: req.user?.username // Guardar username en lugar de id
+        };
+        
+        const nuevoGasto = new Gasto(datosGasto);
         const gastoGuardado = await nuevoGasto.save();
         res.status(201).json(gastoGuardado);
     } catch (error: any) {

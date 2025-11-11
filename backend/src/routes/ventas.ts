@@ -16,22 +16,22 @@ const router = express.Router();
 
 // Rutas públicas (requieren autenticación básica)
 router.route('/')
-  .get(getVentas)
-  .post(crearVenta); // Todos los usuarios pueden crear ventas
+  .get(protect, getVentas)
+  .post(protect, crearVenta); // Todos los usuarios autenticados pueden crear ventas
 
-router.get('/rango', getVentasByRango); // Filtrar por rango de fechas
+router.get('/rango', protect, getVentasByRango); // Filtrar por rango de fechas
 
-router.get('/estadisticas', getEstadisticasVentas); // Estadísticas de ventas
+router.get('/estadisticas', protect, getEstadisticasVentas); // Estadísticas de ventas
 
 router.route('/:id')
-  .get(getVentaById)
-  .put(actualizarVenta); // admin/oper_ad pueden actualizar ventas pendientes
+  .get(protect, getVentaById)
+  .put(protect, actualizarVenta); // admin/oper_ad pueden actualizar ventas pendientes
 
 // Rutas especiales
-router.patch('/:id/confirmar', confirmarVenta); // admin/oper_ad pueden confirmar
+router.patch('/:id/confirmar', protect, confirmarVenta); // admin/oper_ad pueden confirmar
 
-router.patch('/:id/anular', anularVenta); // Solo admin puede anular
+router.patch('/:id/anular', protect, anularVenta); // Solo admin puede anular
 
-router.patch('/:id/registrar-pago', registrarPago); // admin/oper_ad pueden registrar pagos
+router.patch('/:id/registrar-pago', protect, registrarPago); // admin/oper_ad pueden registrar pagos
 
 export default router;

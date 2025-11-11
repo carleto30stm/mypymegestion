@@ -14,11 +14,8 @@ import mongoose from 'mongoose';
 const router = express.Router();
 
 router.route('/')
-  .get( getGastos)
-  .post( createGasto); // OPER puede crear gastos
-  // .get(protect, getGastos)
-  // .post(protect, createGasto); // OPER puede crear gastos
-  // TODO: agregar el protected si se usa JWDT a confirmar
+  .get(protect, getGastos)
+  .post(protect, createGasto); // OPER puede crear gastos
 
 // Confirmar un cheque (cambiar confirmado a true)
 router.patch('/:id/confirmar', async (req, res) => {
