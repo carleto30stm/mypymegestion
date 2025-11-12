@@ -8,6 +8,7 @@ export interface ICliente extends Document {
   apellido?: string;
   email?: string;
   telefono?: string;
+  telefonoAlt?: string;
   direccion?: string;
   ciudad?: string;
   provincia?: string;
@@ -86,6 +87,11 @@ const clienteSchema = new mongoose.Schema<ICliente>({
     type: String,
     trim: true,
     maxlength: [20, 'El teléfono no puede exceder 20 caracteres']
+  },
+  telefonoAlt: {
+    type: String,
+    trim: true,
+    maxlength: [20, 'El teléfono alternativo no puede exceder 20 caracteres']
   },
   direccion: {
     type: String,

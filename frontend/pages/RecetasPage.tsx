@@ -84,6 +84,7 @@ const RecetasPage: React.FC = () => {
   const [costoManoObraFormatted, setCostoManoObraFormatted] = useState('');
   const [costoIndirectoFormatted, setCostoIndirectoFormatted] = useState('');
   const [precioVentaSugeridoFormatted, setPrecioVentaSugeridoFormatted] = useState('');
+  const [margenDeseado, setMargenDeseado] = useState<number>(0);
 
   // Función para formatear el número mientras se escribe (con decimales)
   const formatNumberInput = (value: string): string => {
@@ -229,6 +230,7 @@ const RecetasPage: React.FC = () => {
       } else {
         setPrecioVentaSugeridoFormatted('');
       }
+      setMargenDeseado(0); // Reset margen deseado al editar
     } else {
       setRecetaEditando(null);
       setRecetaForm({
@@ -247,6 +249,7 @@ const RecetasPage: React.FC = () => {
       setCostoManoObraFormatted('');
       setCostoIndirectoFormatted('');
       setPrecioVentaSugeridoFormatted('');
+      setMargenDeseado(0);
     }
     setOpenReceta(true);
   };
@@ -256,6 +259,7 @@ const RecetasPage: React.FC = () => {
     setRecetaEditando(null);
     setMpSeleccionada('');
     setCantidadMp(0);
+    setMargenDeseado(0);
   };
 
   const handleAgregarMateriaPrima = () => {
@@ -397,6 +401,14 @@ const RecetasPage: React.FC = () => {
     const precio = recetaForm.precioVentaSugerido || 0;
     if (precio > 0 && costoUnitario > 0) {
       return ((precio - costoUnitario) / precio) * 100;
+    }
+    return 0;
+  };
+
+  const calcularPrecioSugerido = () => {
+    const costoUnitario = calcularCostoUnitario();
+    if (costoUnitario > 0 && margenDeseado > 0 && margenDeseado < 100) {
+      return costoUnitario / (1 - margenDeseado / 100);
     }
     return 0;
   };
@@ -730,6 +742,38 @@ const RecetasPage: React.FC = () => {
                 helperText="Formato: 1.000,50 (usar coma para decimales)"
                 inputProps={{ min: 0, step: 0.01 }}
               />
+            </Grid>
+
+            {/* Margen Deseado y Cálculo Automático */}
+            <Grid item xs={12} md={4}>
+              <TextField
+                fullWidth
+                label="Margen Deseado (%)"
+                type="number"
+                value={margenDeseado}
+                onChange={(e) => setMargenDeseado(parseFloat(e.target.value))}
+                placeholder="Ej: 35"
+                helperText="Margen objetivo para calcular precio"
+                inputProps={{ min: 0, max: 99, step: 0.1 }}
+              />
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <Button
+                fullWidth
+                variant="outlined"
+                onClick={() => {
+                  const precioCalculado = calcularPrecioSugerido();
+                  if (precioCalculado > 0) {
+                    const formatted = formatCurrency(precioCalculado);
+                    setPrecioVentaSugeridoFormatted(formatted);
+                    setRecetaForm(prev => ({ ...prev, precioVentaSugerido: precioCalculado }));
+                  }
+                }}
+                startIcon={<CalculateIcon />}
+                disabled={calcularCostoUnitario() <= 0 || margenDeseado <= 0}
+              >
+                Calcular Precio
+              </Button>
             </Grid>
 
             {/* Resumen de Costos */}

@@ -209,6 +209,7 @@ export interface Cliente {
   apellido?: string;
   email?: string;
   telefono?: string;
+  telefonoAlt?: string;
   direccion?: string;
   ciudad?: string;
   provincia?: string;

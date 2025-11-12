@@ -258,7 +258,7 @@ const ProductosPage: React.FC = () => {
               <TableCell><strong>Nombre</strong></TableCell>
               <TableCell><strong>Categoría</strong></TableCell>
               <TableCell align="right"><strong>Stock</strong></TableCell>
-              <TableCell align="right"><strong>Precio Compra</strong></TableCell>
+              <TableCell align="right"><strong>Costo</strong></TableCell>
               <TableCell align="right"><strong>Precio Venta</strong></TableCell>
               <TableCell align="center"><strong>Margen</strong></TableCell>
               <TableCell><strong>Estado</strong></TableCell>
@@ -402,7 +402,7 @@ const ProductosPage: React.FC = () => {
             <Grid item xs={12} md={4}>
               <TextField
                 fullWidth
-                label="Precio Compra *"
+                label="Costo *"
                 type="number"
                 value={formData.precioCompra}
                 onChange={(e) => setFormData({ ...formData, precioCompra: parseFloat(e.target.value) })}

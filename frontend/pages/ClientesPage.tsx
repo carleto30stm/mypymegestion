@@ -183,7 +183,7 @@ const ClientesPage: React.FC = () => {
               <TableCell><strong>Nombre/Razón Social</strong></TableCell>
               <TableCell><strong>Contacto</strong></TableCell>
               <TableCell><strong>Provincia</strong></TableCell>
-              <TableCell><strong>Ciudad</strong></TableCell>
+              <TableCell><strong>Observaciones</strong></TableCell>
               <TableCell align="center"><strong>Fiscal</strong></TableCell>
               <TableCell align="right"><strong>Saldo Cuenta</strong></TableCell>
               <TableCell align="right"><strong>Límite Crédito</strong></TableCell>
@@ -204,13 +204,15 @@ const ClientesPage: React.FC = () => {
                 </TableCell>
                 <TableCell>
                   <Typography variant="caption" display="block">{cliente.telefono || '-'}</Typography>
+                  <Typography variant="caption" display="block">{cliente.telefonoAlt || '-'}</Typography>
                   <Typography variant="caption" display="block">{cliente.email || '-'}</Typography>
                 </TableCell>
                 <TableCell>
                   <Typography variant="caption" display="block">{cliente.provincia || '-'}</Typography>
+                  <Typography variant="caption" display="block">{cliente.ciudad || '-'}</Typography>
                 </TableCell>
                 <TableCell>
-                  <Typography variant="caption" display="block">{cliente.ciudad || '-'}</Typography>
+                  <Typography variant="caption" display="block">{cliente.observaciones || '-'}</Typography>
                 </TableCell>
                 <TableCell align="center">
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, justifyContent: 'center' }}>
@@ -353,6 +355,14 @@ const ClientesPage: React.FC = () => {
             <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
+                label="Teléfono Alternativo"
+                value={formData.telefonoAlt}
+                onChange={(e) => setFormData({ ...formData, telefonoAlt: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
                 label="Provincia"
                 value={formData.provincia}
                 onChange={(e) => setFormData({ ...formData, provincia: e.target.value })}
@@ -366,12 +376,20 @@ const ClientesPage: React.FC = () => {
                 onChange={(e) => setFormData({ ...formData, ciudad: e.target.value })}
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid item xs={6}>
               <TextField
                 fullWidth
                 label="Dirección"
                 value={formData.direccion}
                 onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Observaciones"
+                value={formData.observaciones}
+                onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
               />
             </Grid>
             <Grid item xs={12} md={6}>

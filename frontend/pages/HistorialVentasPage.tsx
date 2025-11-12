@@ -53,6 +53,8 @@ const HistorialVentasPage: React.FC = () => {
   const [openEditar, setOpenEditar] = useState(false);
   const [ventaEditar, setVentaEditar] = useState<Venta | null>(null);
   const [editandoVenta, setEditandoVenta] = useState<string | null>(null);
+  const [openConfirmar, setOpenConfirmar] = useState(false);
+  const [ventaConfirmar, setVentaConfirmar] = useState<Venta | null>(null);
 
   useEffect(() => {
     dispatch(fetchVentas());
@@ -67,6 +69,11 @@ const HistorialVentasPage: React.FC = () => {
   const handleOpenAnular = (venta: Venta) => {
     setVentaAnular(venta);
     setOpenAnular(true);
+  };
+
+  const handleOpenConfirmar = (venta: Venta) => {
+    setVentaConfirmar(venta);
+    setOpenConfirmar(true);
   };
 
   const handleConfirmAnular = async () => {
@@ -92,6 +99,22 @@ const HistorialVentasPage: React.FC = () => {
     try {
       await dispatch(confirmarVenta({ id: ventaId, usuarioConfirmacion: user.username })).unwrap();
       dispatch(fetchVentas());
+    } catch (err: any) {
+      alert(err.message || 'Error al confirmar la venta');
+    } finally {
+      setConfirmandoVenta(null);
+    }
+  };
+
+  const handleConfirmConfirmar = async () => {
+    if (!ventaConfirmar || !user?.username) return;
+
+    setConfirmandoVenta(ventaConfirmar._id!);
+    try {
+      await dispatch(confirmarVenta({ id: ventaConfirmar._id!, usuarioConfirmacion: user.username })).unwrap();
+      dispatch(fetchVentas());
+      setOpenConfirmar(false);
+      setVentaConfirmar(null);
     } catch (err: any) {
       alert(err.message || 'Error al confirmar la venta');
     } finally {
@@ -232,7 +255,7 @@ const HistorialVentasPage: React.FC = () => {
                         <IconButton
                           size="small"
                           color="success"
-                          onClick={() => handleConfirmarVenta(venta._id!)}
+                          onClick={() => handleOpenConfirmar(venta)}
                           disabled={confirmandoVenta === venta._id}
                         >
                           {confirmandoVenta === venta._id ? (
@@ -418,6 +441,86 @@ const HistorialVentasPage: React.FC = () => {
               </>
             ) : (
               'Guardar Cambios'
+            )}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog Confirmar Venta */}
+      <Dialog
+        open={openConfirmar}
+        onClose={() => setOpenConfirmar(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <CheckCircleIcon color="success" />
+          Confirmar Venta
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" gutterBottom sx={{ mb: 2 }}>
+            ¿Estás seguro de que deseas confirmar la venta <strong>{ventaConfirmar?.numeroVenta}</strong>?
+          </Typography>
+          <Typography variant="caption" color="textSecondary" gutterBottom>
+            Esta acción confirmará la venta, actualizará el stock de productos y afectará el saldo del cliente.
+          </Typography>
+
+          {ventaConfirmar && (
+            <Box sx={{
+              bgcolor: 'background.default',
+              p: 2,
+              borderRadius: 1,
+              border: '1px solid',
+              borderColor: 'divider',
+              mt: 2
+            }}>
+              <Typography variant="body2" gutterBottom>
+                <strong>Cliente:</strong> {ventaConfirmar.nombreCliente}
+              </Typography>
+              <Typography variant="body2" gutterBottom>
+                <strong>Fecha:</strong> {formatDate(ventaConfirmar.fecha)}
+              </Typography>
+              <Typography variant="body2" gutterBottom>
+                <strong>Items:</strong> {ventaConfirmar.items.length}
+              </Typography>
+              <Typography variant="body2" gutterBottom>
+                <strong>Medio de Pago:</strong> {ventaConfirmar.medioPago}
+              </Typography>
+              <Typography
+                variant="h6"
+                sx={{
+                  color: 'success.main',
+                  mt: 1
+                }}
+              >
+                <strong>Total:</strong> {formatCurrency(ventaConfirmar.total)}
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={() => setOpenConfirmar(false)}
+            variant="outlined"
+            color="inherit"
+          >
+            Cancelar
+          </Button>
+          <Button
+            onClick={handleConfirmConfirmar}
+            variant="contained"
+            color="success"
+            startIcon={<CheckCircleIcon />}
+            disabled={confirmandoVenta === ventaConfirmar?._id}
+            autoFocus
+          >
+            {confirmandoVenta === ventaConfirmar?._id ? (
+              <>
+                <CircularProgress size={20} sx={{ mr: 1 }} />
+                Confirmando...
+              </>
+            ) : (
+              'Confirmar Venta'
             )}
           </Button>
         </DialogActions>
