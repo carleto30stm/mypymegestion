@@ -4,6 +4,7 @@ import {
   getRemitoById,
   generarRemitoDesdeVenta,
   actualizarEstadoRemito,
+  actualizarRemito,
   actualizarItemsRemito,
   eliminarRemito,
   getEstadisticasRemitos
@@ -22,6 +23,9 @@ router.post('/desde-venta', generarRemitoDesdeVenta);
 
 // Actualizar estado - admin, oper_ad y oper pueden hacerlo
 router.patch('/:id/estado', actualizarEstadoRemito);
+
+// Actualizar remito (campos generales) - admin, oper_ad y oper pueden hacerlo
+router.patch('/:id', actualizarRemito);
 
 // Actualizar items - admin, oper_ad y oper pueden hacerlo
 router.patch('/:id/items', actualizarItemsRemito);
