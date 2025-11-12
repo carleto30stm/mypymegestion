@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../redux/store';
 import {
   fetchRemitos,
+  fetchRemitoById,
   generarRemitoDesdeVenta,
   actualizarEstadoRemito,
   eliminarRemito,
@@ -204,10 +205,14 @@ const RemitosPage: React.FC = () => {
 
   const handleGenerarCaratulas = async (remito: Remito) => {
     try {
-      // Obtener el remito completo con cliente populado
-      const response = await fetch(`/api/remitos/${remito._id}`);
-      const remitoCompleto = await response.json();
+      // Obtener el remito completo con cliente populado usando Redux
+      const resultAction = await dispatch(fetchRemitoById(remito._id!));
       
+      if (fetchRemitoById.rejected.match(resultAction)) {
+        throw new Error('Error al obtener datos del remito');
+      }
+      
+      const remitoCompleto = resultAction.payload as Remito;
       const totalBultos = parseInt(remito.numeroBultos || '1');
       
       // Generar una carátula para cada bulto
