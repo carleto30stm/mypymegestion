@@ -85,6 +85,23 @@ export const actualizarItemsRemito = createAsyncThunk(
   }
 );
 
+export const actualizarRemito = createAsyncThunk(
+  'remitos/actualizarRemito',
+  async (data: {
+    id: string;
+    direccionEntrega?: string;
+    repartidor?: string;
+    numeroBultos?: string;
+    vehiculo?: string;
+    observaciones?: string;
+    modificadoPor: string;
+  }) => {
+    const { id, ...updateData } = data;
+    const response = await api.patch(`/api/remitos/${id}`, updateData);
+    return response.data;
+  }
+);
+
 export const eliminarRemito = createAsyncThunk(
   'remitos/eliminarRemito',
   async (id: string) => {
@@ -190,6 +207,23 @@ const remitosSlice = createSlice({
       .addCase(actualizarItemsRemito.rejected, (state, action) => {
         state.loading = false;
         state.error = action.error.message || 'Error al actualizar items';
+      })
+      
+      // Actualizar remito
+      .addCase(actualizarRemito.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(actualizarRemito.fulfilled, (state, action: PayloadAction<Remito>) => {
+        state.loading = false;
+        const index = state.items.findIndex(r => r._id === action.payload._id);
+        if (index !== -1) {
+          state.items[index] = action.payload;
+        }
+      })
+      .addCase(actualizarRemito.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.error.message || 'Error al actualizar remito';
       })
       
       // Eliminar remito

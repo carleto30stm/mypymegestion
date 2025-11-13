@@ -173,15 +173,25 @@ const AccountingReport: React.FC = () => {
   };
 
   const calculateAccountingSummary = (filteredGastos: Gasto[]): AccountingSummary => {
-    // ===== PASO 1: CALCULAR VENTAS NETAS =====
+    // ===== PASO 1: CALCULAR VENTAS NETAS (DISCRIMINANDO IVA) =====
     
     // 1A. Ventas desde tabla Venta (nuevo sistema)
     const ventasDelPeriodo = filterVentasByPeriod();
-    const ventasBrutasTabla = ventasDelPeriodo
-      .filter(v => v.estado === 'confirmada' && !v.motivoAnulacion)
-      .reduce((sum, v) => sum + v.total, 0);
+    const ventasConfirmadas = ventasDelPeriodo.filter(v => v.estado === 'confirmada' && !v.motivoAnulacion);
+    
+    // Separar ventas con IVA de ventas sin IVA
+    const ventasConIVA = ventasConfirmadas.filter(v => v.aplicaIVA);
+    const ventasSinIVA = ventasConfirmadas.filter(v => !v.aplicaIVA);
+    
+    // Para ventas CON IVA: restar el IVA del total para obtener el ingreso neto
+    const ventasNetasConIVA = ventasConIVA.reduce((sum, v) => sum + (v.total - v.iva), 0);
+    const totalIVADebito = ventasConIVA.reduce((sum, v) => sum + v.iva, 0);
+    
+    // Para ventas SIN IVA: el total es el ingreso neto (no hay IVA que restar)
+    const ventasNetasSinIVA = ventasSinIVA.reduce((sum, v) => sum + v.total, 0);
     
     // 1B. Ventas legacy: registradas manualmente como gastos COBRO.VENTA (antes del módulo de ventas)
+    // IMPORTANTE: Estas ventas legacy se asumen SIN desglose de IVA (sistema antiguo)
     const ventasLegacy = filteredGastos
       .filter(g => 
         g.tipoOperacion === 'entrada' && 
@@ -190,15 +200,15 @@ const AccountingReport: React.FC = () => {
       )
       .reduce((sum, g) => sum + (g.entrada || 0), 0);
     
-    // Total ventas brutas (tabla + legacy)
-    const ventasBrutas = ventasBrutasTabla + ventasLegacy;
+    // Total ventas netas (sin IVA incluido)
+    const ventasNetas = ventasNetasConIVA + ventasNetasSinIVA + ventasLegacy;
     
     // Devoluciones: obtener de gastos con subRubro DEVOLUCION (son NEGATIVAS)
     const devolucionesGastos = filteredGastos
       .filter(g => g.tipoOperacion === 'entrada' && g.subRubro === 'DEVOLUCION')
       .reduce((sum, g) => sum + (g.entrada || 0), 0);
     
-    const ventasNetas = ventasBrutas - devolucionesGastos;
+    const ventasNetasFinales = ventasNetas - devolucionesGastos;
 
     // ===== PASO 2: INGRESOS OPERACIONALES (Flete, Comisiones, Ajustes) =====
     const conceptMaps = {
@@ -212,12 +222,16 @@ const AccountingReport: React.FC = () => {
       gastosFinancieros: new Map<string, { amount: number; count: number; rubros: Set<string> }>()
     };
 
-    // Agregar ventas brutas y devoluciones a conceptMaps
-    if (ventasBrutasTabla > 0) {
-      addToConceptMap(conceptMaps.ventasNetas, 'Ventas (Módulo Ventas)', ventasBrutasTabla, 'VENTAS');
+    // Agregar ventas discriminadas por tipo a conceptMaps
+    if (ventasNetasConIVA > 0) {
+      addToConceptMap(conceptMaps.ventasNetas, `Ventas con IVA (${ventasConIVA.length} ops)`, ventasNetasConIVA, 'VENTAS');
+      addToConceptMap(conceptMaps.ventasNetas, '  → IVA Débito Fiscal', totalIVADebito, 'IVA_DEBITO');
+    }
+    if (ventasNetasSinIVA > 0) {
+      addToConceptMap(conceptMaps.ventasNetas, `Ventas sin IVA (${ventasSinIVA.length} ops)`, ventasNetasSinIVA, 'VENTAS_EXENTAS');
     }
     if (ventasLegacy > 0) {
-      addToConceptMap(conceptMaps.ventasNetas, 'Ventas (Registros Manuales)', ventasLegacy, 'COBRO.VENTA');
+      addToConceptMap(conceptMaps.ventasNetas, 'Ventas (Registros Manuales Legacy)', ventasLegacy, 'COBRO.VENTA');
     }
     if (devolucionesGastos > 0) {
       addToConceptMap(conceptMaps.ventasNetas, 'Devoluciones', -devolucionesGastos, 'COBRO.VENTA');
@@ -318,17 +332,18 @@ const AccountingReport: React.FC = () => {
       return sum + item.amount;
     }, 0);
 
-    // ===== CALCULOS FINALES =====
-    const totalIngresos = ventasNetas + totalIngresosOperacionales;
+    // ===== CALCULOS FINALES (USANDO VENTAS SIN IVA) =====
+    // IMPORTANTE: Todos los cálculos deben usar ventasNetasFinales (sin IVA incluido)
+    const totalIngresos = ventasNetasFinales + totalIngresosOperacionales;
     const costoVentas = totalGastosVariables; // Simplificación: gastos variables = costo de ventas
-    const utilidadBruta = ventasNetas - costoVentas;
+    const utilidadBruta = ventasNetasFinales - costoVentas;
     const gastosOperacionalesCombinados = totalGastosFijos + totalGastosPersonal + totalGastosAdministrativos + totalGastosOperacionales;
     const EBITDA = utilidadBruta - gastosOperacionalesCombinados;
     const resultadoNeto = EBITDA - totalGastosFinancieros + totalIngresosOperacionales;
     
-    // Métricas financieras
-    const margenBruto = ventasNetas > 0 ? (utilidadBruta / ventasNetas) * 100 : 0;
-    const margenOperacional = ventasNetas > 0 ? (EBITDA / ventasNetas) * 100 : 0;
+    // Métricas financieras (calculadas sobre ventas NETAS sin IVA)
+    const margenBruto = ventasNetasFinales > 0 ? (utilidadBruta / ventasNetasFinales) * 100 : 0;
+    const margenOperacional = ventasNetasFinales > 0 ? (EBITDA / ventasNetasFinales) * 100 : 0;
     const margenNeto = totalIngresos > 0 ? (resultadoNeto / totalIngresos) * 100 : 0;
     const puntoEquilibrio = totalGastosFijos + totalGastosPersonal;
 
@@ -338,10 +353,10 @@ const AccountingReport: React.FC = () => {
       totalEgresos,
       resultadoNeto,
       ventasNetas: {
-        name: 'Ventas Netas',
-        description: 'Ventas confirmadas menos devoluciones',
+        name: 'Ventas Netas (sin IVA)',
+        description: 'Ingresos reales por ventas discriminando IVA débito fiscal',
         items: ventasNetasItems,
-        total: ventasNetas,
+        total: ventasNetasFinales,
         percentage: 100
       },
       ingresosOperacionales: {
@@ -349,7 +364,7 @@ const AccountingReport: React.FC = () => {
         description: 'Fletes, comisiones y ajustes',
         items: ingresosOperacionalesItems,
         total: totalIngresosOperacionales,
-        percentage: ventasNetas > 0 ? (totalIngresosOperacionales / ventasNetas) * 100 : 0
+        percentage: ventasNetasFinales > 0 ? (totalIngresosOperacionales / ventasNetasFinales) * 100 : 0
       },
       gastosFijos: {
         name: 'Gastos Fijos',
@@ -737,7 +752,7 @@ const AccountingReport: React.FC = () => {
     yPos += 7;
 
     const summaryData = [
-      ['Ventas Netas', formatCurrency(reportData.ventasNetas.total)],
+      ['Ventas Netas (sin IVA)', formatCurrency(reportData.ventasNetas.total)],
       ['Otros Ingresos', formatCurrency(reportData.ingresosOperacionales.total)],
       ['Total Ingresos', formatCurrency(reportData.totalIngresos)],
       ['Total Egresos', formatCurrency(reportData.totalEgresos)],
@@ -746,6 +761,14 @@ const AccountingReport: React.FC = () => {
       ['Margen Operacional', `${reportData.margenOperacional.toFixed(1)}%`],
       ['Margen Neto', `${reportData.margenNeto.toFixed(1)}%`]
     ];
+    
+    // Nota aclaratoria sobre IVA
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(100, 100, 100);
+    doc.text('Nota: Las ventas se discriminan sin IVA para reflejar el ingreso neto. El IVA débito se muestra por separado.', 14, yPos);
+    yPos += 5;
+    doc.setTextColor(0, 0, 0);
 
     autoTable(doc, {
       startY: yPos,

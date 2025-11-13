@@ -336,6 +336,71 @@ export interface EstadisticasVentas {
   }>;
 }
 
+// Interface para métricas de producto individual
+export interface MetricaProducto {
+  _id: string;
+  codigoProducto: string;
+  nombreProducto: string;
+  categoria: string;
+  
+  // Métricas de cantidad
+  unidadesVendidas: number;
+  numeroVentas: number;
+  
+  // Métricas de montos
+  totalVendido: number;
+  totalNetoSinIVA: number;
+  totalDescuentos: number;
+  
+  // Precios
+  precioPromedioVenta: number;
+  precioVentaActual: number;
+  precioCompraActual: number;
+  ticketPromedio: number;
+  
+  // Márgenes
+  margenBrutoUnitario: number;
+  porcentajeMargenBruto: number;
+  utilidadNetaEstimada: number;
+  porcentajeUtilidadNeta: number;
+  
+  // Costos
+  costoTotalEstimado: number;
+  
+  // Stock
+  stockActual: number;
+  
+  // Ranking y clasificación
+  ranking: number;
+  participacionVentas: number;
+  clasificacionABC: 'A' | 'B' | 'C';
+}
+
+// Interface para totales de estadísticas de productos
+export interface TotalesEstadisticasProductos {
+  totalUnidadesVendidas: number;
+  totalMontoVendido: number;
+  totalUtilidadEstimada: number;
+  totalDescuentos: number;
+  totalProductos: number;
+  margenPromedioGeneral: number;
+}
+
+// Interface para filtros de estadísticas de productos
+export interface FiltrosEstadisticasProductos {
+  fechaInicio: string;
+  fechaFin: string;
+  categoria: string;
+  limit: string;
+}
+
+// Interface para respuesta completa de estadísticas de productos
+export interface EstadisticasProductos {
+  productos: MetricaProducto[];
+  totales: TotalesEstadisticasProductos;
+  filtros: FiltrosEstadisticasProductos;
+}
+
 // ========== SISTEMA DE REMITOS ==========
 
 // Estados de remito

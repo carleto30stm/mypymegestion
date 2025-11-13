@@ -9,6 +9,7 @@ import EmployeesPage from './pages/EmployeesPage';
 import LiquidacionPage from './pages/LiquidacionPage';
 import ReportsPage from './pages/ReportsPage';
 import ProductosPage from './pages/ProductosPage';
+import MetricasProductosPage from './pages/MetricasProductosPage';
 import ClientesPage from './pages/ClientesPage';
 import VentasPage from './pages/VentasPage';
 import HistorialVentasPage from './pages/HistorialVentasPage';
@@ -44,6 +45,7 @@ const App: React.FC = () => {
           {/* <Route path="/horas-extra" element={<HorasExtraPage />} /> */}
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/productos" element={<ProductosPage />} />
+          <Route path="/metricas-productos" element={<MetricasProductosPage />} />
           <Route path="/clientes" element={<ClientesPage />} />
           <Route path="/ventas" element={<VentasPage />} />
           <Route path="/historial-ventas" element={<HistorialVentasPage />} />

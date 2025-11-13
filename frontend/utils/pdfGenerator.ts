@@ -444,24 +444,60 @@ const clienteBoxHeight = lineHeight * clienteLines + padding * 2;
 // 🔹 Dibujar el rectángulo para datos del cliente
 doc.rect(x - 2, yPos - (padding + 2), pageWidth - 26, clienteBoxHeight);
 
-// 🔹 Escribir el contenido dentro del rectángulo con espaciado
+// 🔹 Escribir el contenido dentro del rectángulo distribuyendo horizontalmente
 let clienteY = yPos;
-doc.text(`Nombre: ${remito.nombreCliente}`, x, clienteY);
-clienteY += lineHeight;
-doc.text(`Dirección: ${remito.direccionEntrega}`, x, clienteY);
-clienteY += lineHeight;
+const clienteContent = [];
+
+// Agregar líneas de contenido
+clienteContent.push(`Nombre: ${remito.nombreCliente}`);
+clienteContent.push(`Dirección: ${remito.direccionEntrega}`);
 
 // Extraer localidad y provincia del cliente si está populado
 if (cliente && typeof cliente === 'object') {
   if (cliente.ciudad) {
-    doc.text(`Localidad: ${cliente.ciudad}`, x, clienteY);
-    clienteY += lineHeight;
+    clienteContent.push(`Localidad: ${cliente.ciudad}`);
   }
   if (cliente.provincia) {
-    doc.text(`Provincia: ${cliente.provincia}`, x, clienteY);
-    clienteY += lineHeight;
+    clienteContent.push(`Provincia: ${cliente.provincia}`);
   }
 }
+
+// Agregar envío por si hay vehículo
+if (remito.vehiculo) {
+  clienteContent.push(`Envío por: ${remito.vehiculo}`);
+}
+
+// Distribuir contenido horizontalmente aprovechando el ancho disponible
+const availableWidth = pageWidth - 26 - (x * 2); // Ancho disponible dentro del rectángulo
+const maxLineWidth = availableWidth / 2 - 10; // Mitad del ancho para 2 columnas, con margen
+
+let currentRow: string[] = [];
+let rowY = clienteY;
+
+clienteContent.forEach((line, index) => {
+  currentRow.push(line);
+
+  // Si tenemos 2 elementos o es el último elemento, renderizar la fila
+  if (currentRow.length === 2 || index === clienteContent.length - 1) {
+    // Calcular posiciones X para las columnas
+    const col1X = x;
+    const col2X = x + availableWidth / 2 + 10;
+
+    // Renderizar primera columna
+    if (currentRow[0]) {
+      doc.text(currentRow[0], col1X, rowY);
+    }
+
+    // Renderizar segunda columna si existe
+    if (currentRow[1]) {
+      doc.text(currentRow[1], col2X, rowY);
+    }
+
+    // Preparar siguiente fila
+    currentRow = [];
+    rowY += lineHeight;
+  }
+});
 
 // 🔹 Actualizar yPos para continuar debajo del bloque del cliente
 yPos = yPos + clienteBoxHeight + 3; // Reducido de 5 a 3 para menos espacio

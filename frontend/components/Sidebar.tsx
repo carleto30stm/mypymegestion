@@ -34,6 +34,7 @@ import MenuBookIcon from '@mui/icons-material/MenuBook';
 import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturing';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import ShowChartIcon from '@mui/icons-material/ShowChart';
 
 export const drawerWidth = 240;
 export const drawerHandleWidth = 40;
@@ -182,6 +183,18 @@ const Sidebar: React.FC<SidebarProps> = ({
               <InventoryIcon />
             </ListItemIcon>
             <ListItemText primary="Productos" />
+          </ListItemButton>
+        </ListItem>
+        
+        <ListItem disablePadding>
+          <ListItemButton 
+            onClick={() => navigate('/metricas-productos')}
+            selected={location.pathname === '/metricas-productos'}
+          >
+            <ListItemIcon>
+              <ShowChartIcon />
+            </ListItemIcon>
+            <ListItemText primary="Métricas Productos" />
           </ListItemButton>
         </ListItem>
         

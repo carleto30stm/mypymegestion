@@ -278,7 +278,54 @@ export const actualizarEstadoRemito = async (req: ExpressRequest, res: ExpressRe
   }
 };
 
-// @desc    Actualizar items entregados del remito
+// @desc    Actualizar remito (campos generales)
+// @route   PATCH /api/remitos/:id
+// @access  Private (admin/oper_ad/oper)
+export const actualizarRemito = async (req: ExpressRequest, res: ExpressResponse) => {
+  try {
+    const { direccionEntrega, repartidor, numeroBultos, vehiculo, observaciones, modificadoPor } = req.body;
+
+    if (!modificadoPor) {
+      return res.status(400).json({ message: 'El modificador es obligatorio' });
+    }
+
+    const remito = await Remito.findById(req.params.id);
+    if (!remito) {
+      return res.status(404).json({ message: 'Remito no encontrado' });
+    }
+
+    // Solo permitir actualizar remitos que no estén entregados o cancelados
+    if (remito.estado === 'entregado' || remito.estado === 'cancelado') {
+      return res.status(400).json({ 
+        message: 'No se puede editar un remito que ya fue entregado o cancelado' 
+      });
+    }
+
+    // Actualizar campos proporcionados
+    if (direccionEntrega !== undefined) remito.direccionEntrega = direccionEntrega;
+    if (repartidor !== undefined) remito.repartidor = repartidor;
+    if (numeroBultos !== undefined) remito.numeroBultos = numeroBultos;
+    if (vehiculo !== undefined) remito.vehiculo = vehiculo;
+    if (observaciones !== undefined) remito.observaciones = observaciones;
+    
+    remito.modificadoPor = modificadoPor;
+
+    await remito.save();
+
+    const remitoActualizado = await Remito.findById(remito._id)
+      .populate('clienteId')
+      .populate('ventaId');
+
+    res.json(remitoActualizado);
+  } catch (error: any) {
+    console.error('Error al actualizar remito:', error);
+    res.status(500).json({ 
+      message: error.message || 'Error al actualizar remito' 
+    });
+  }
+};
+
+// @desc    Actualizar items de remito (cantidades entregadas)
 // @route   PATCH /api/remitos/:id/items
 // @access  Private (admin/oper_ad/oper)
 export const actualizarItemsRemito = async (req: ExpressRequest, res: ExpressResponse) => {

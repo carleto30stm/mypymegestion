@@ -6,6 +6,7 @@ import {
   fetchRemitoById,
   generarRemitoDesdeVenta,
   actualizarEstadoRemito,
+  actualizarRemito,
   eliminarRemito,
   fetchEstadisticasRemitos,
   clearError
@@ -64,6 +65,7 @@ const RemitosPage: React.FC = () => {
   const [showGenerarDialog, setShowGenerarDialog] = useState(false);
   const [showEstadoDialog, setShowEstadoDialog] = useState(false);
   const [showDetalleDialog, setShowDetalleDialog] = useState(false);
+  const [showEditarDialog, setShowEditarDialog] = useState(false);
   const [remitoSeleccionado, setRemitoSeleccionado] = useState<Remito | null>(null);
 
   // Estados para generar remito
@@ -114,13 +116,36 @@ const RemitosPage: React.FC = () => {
     setShowGenerarDialog(true);
   };
 
+  const handleActualizarRemito = async () => {
+    if (!remitoSeleccionado || !user?.id) return;
+
+    try {
+      await dispatch(actualizarRemito({
+        id: remitoSeleccionado._id!,
+        direccionEntrega,
+        repartidor: repartidor || undefined,
+        numeroBultos: numeroBultos || undefined,
+        vehiculo: vehiculo || undefined,
+        observaciones: observacionesGenerar || undefined,
+        modificadoPor: user.id
+      })).unwrap();
+
+      alert('Remito actualizado correctamente.');
+      setShowEditarDialog(false);
+      dispatch(fetchRemitos());
+      dispatch(fetchEstadisticasRemitos());
+    } catch (err) {
+      console.error('Error al actualizar remito:', err);
+    }
+  };
+
   const handleGenerarRemito = async () => {
     if (!ventaId || !user?.id) return;
 
     try {
       await dispatch(generarRemitoDesdeVenta({
         ventaId,
-        direccionEntrega: direccionEntrega || undefined,
+        direccionEntrega,
         repartidor: repartidor || undefined,
         numeroBultos: numeroBultos || undefined,
         vehiculo: vehiculo || undefined,
@@ -129,7 +154,8 @@ const RemitosPage: React.FC = () => {
       })).unwrap();
 
       setShowGenerarDialog(false);
-      dispatch(fetchVentas()); // Actualizar lista de ventas
+      dispatch(fetchRemitos());
+      dispatch(fetchVentas()); // Actualizar lista de ventas para reflejar cambios
       dispatch(fetchEstadisticasRemitos());
     } catch (err) {
       console.error('Error al generar remito:', err);
@@ -192,6 +218,18 @@ const RemitosPage: React.FC = () => {
   const handleVerDetalle = (remito: Remito) => {
     setRemitoSeleccionado(remito);
     setShowDetalleDialog(true);
+  };
+
+  const handleEditarRemito = (remito: Remito) => {
+    setRemitoSeleccionado(remito);
+    // Cargar datos del remito en el formulario
+    setVentaId(remito.ventaId || '');
+    setDireccionEntrega(remito.direccionEntrega);
+    setRepartidor(remito.repartidor || '');
+    setNumeroBultos(remito.numeroBultos || '');
+    setVehiculo(remito.vehiculo || '');
+    setObservacionesGenerar(remito.observaciones || '');
+    setShowEditarDialog(true);
   };
 
   const handleImprimirRemito = (remito: Remito) => {
@@ -505,12 +543,17 @@ const RemitosPage: React.FC = () => {
         </Table>
       </TableContainer>
 
-      {/* Dialog: Generar Remito */}
-      <Dialog open={showGenerarDialog} onClose={() => setShowGenerarDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Generar Remito desde Venta</DialogTitle>
+      {/* Dialog: Generar/Editar Remito */}
+      <Dialog open={showGenerarDialog || showEditarDialog} onClose={() => {
+        setShowGenerarDialog(false);
+        setShowEditarDialog(false);
+      }} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          {showEditarDialog ? 'Editar Remito' : 'Generar Remito desde Venta'}
+        </DialogTitle>
         <DialogContent>
           <Box sx={{ pt: 2 }}>
-            <FormControl fullWidth sx={{ mb: 2 }}>
+            <FormControl fullWidth sx={{ mb: 2 }} disabled={showEditarDialog}>
               <InputLabel>Venta *</InputLabel>
               <Select
                 value={ventaId}
@@ -522,6 +565,7 @@ const RemitosPage: React.FC = () => {
                   }
                 }}
                 label="Venta *"
+                disabled={showEditarDialog}
               >
                 {ventasDisponibles.map((venta) => (
                   <MenuItem key={venta._id} value={venta._id}>
@@ -584,13 +628,16 @@ const RemitosPage: React.FC = () => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setShowGenerarDialog(false)}>Cancelar</Button>
+          <Button onClick={() => {
+            setShowGenerarDialog(false);
+            setShowEditarDialog(false);
+          }}>Cancelar</Button>
           <Button
             variant="contained"
-            onClick={handleGenerarRemito}
-            disabled={!ventaId || loading}
+            onClick={showEditarDialog ? handleActualizarRemito : handleGenerarRemito}
+            disabled={(!ventaId && !showEditarDialog) || loading}
           >
-            Generar Remito
+            {showEditarDialog ? 'Actualizar Remito' : 'Generar Remito'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -825,6 +872,21 @@ const RemitosPage: React.FC = () => {
           )}
         </DialogContent>
         <DialogActions>
+          {canEdit && remitoSeleccionado?.estado !== 'entregado' && remitoSeleccionado?.estado !== 'cancelado' && (
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={() => {
+                setShowDetalleDialog(false);
+                if (remitoSeleccionado) {
+                  handleEditarRemito(remitoSeleccionado);
+                }
+              }}
+              sx={{ mr: 1 }}
+            >
+              Editar
+            </Button>
+          )}
           <Button onClick={() => setShowDetalleDialog(false)}>Cerrar</Button>
         </DialogActions>
       </Dialog>

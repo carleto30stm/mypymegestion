@@ -8,6 +8,7 @@ import {
   anularVenta,
   registrarPago,
   getEstadisticasVentas,
+  getEstadisticasProductos,
   confirmarVenta
 } from '../controllers/ventasController.js';
 import { protect } from '../middleware/authMiddleware.js';
@@ -22,6 +23,8 @@ router.route('/')
 router.get('/rango', protect, getVentasByRango); // Filtrar por rango de fechas
 
 router.get('/estadisticas', protect, getEstadisticasVentas); // Estadísticas de ventas
+
+router.get('/estadisticas-productos', protect, getEstadisticasProductos); // Métricas detalladas por producto
 
 router.route('/:id')
   .get(protect, getVentaById)
