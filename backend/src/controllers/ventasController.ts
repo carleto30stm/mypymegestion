@@ -679,3 +679,267 @@ export const confirmarVenta = async (req: ExpressRequest, res: ExpressResponse) 
         session.endSession();
     }
 };
+
+// @desc    Obtener estadísticas detalladas por productos
+// @route   GET /api/ventas/estadisticas-productos
+// @access  Private
+export const getEstadisticasProductos = async (req: ExpressRequest, res: ExpressResponse) => {
+    try {
+        const { fechaInicio, fechaFin, categoria, limit } = req.query;
+
+        // Filtro de fechas
+        const filtroFecha: any = {};
+        if (fechaInicio && fechaFin) {
+            filtroFecha.fecha = {
+                $gte: new Date(fechaInicio as string),
+                $lte: new Date(fechaFin as string)
+            };
+        }
+
+        // Filtro de categoría (buscar en productos)
+        const filtroCategoria: any = categoria ? { categoria: categoria as string } : {};
+
+        // Pipeline de agregación optimizado
+        const estadisticas = await Venta.aggregate([
+            // Paso 1: Filtrar ventas confirmadas (no anuladas)
+            {
+                $match: {
+                    ...filtroFecha,
+                    estado: 'confirmada'
+                }
+            },
+            // Paso 2: Desenrollar items (un documento por cada producto vendido)
+            {
+                $unwind: '$items'
+            },
+            // Paso 3: Lookup para obtener datos actuales del producto
+            {
+                $lookup: {
+                    from: 'productos',
+                    localField: 'items.productoId',
+                    foreignField: '_id',
+                    as: 'producto'
+                }
+            },
+            // Paso 4: Desenrollar el array de producto
+            {
+                $unwind: {
+                    path: '$producto',
+                    preserveNullAndEmptyArrays: true // Mantener items aunque el producto ya no exista
+                }
+            },
+            // Paso 5: Filtrar por categoría si se especificó
+            ...(categoria ? [{
+                $match: {
+                    'producto.categoria': categoria as string
+                }
+            }] : []),
+            // Paso 6: Agrupar por producto y calcular métricas
+            {
+                $group: {
+                    _id: '$items.productoId',
+                    codigoProducto: { $first: '$items.codigoProducto' },
+                    nombreProducto: { $first: '$items.nombreProducto' },
+                    categoria: { $first: '$producto.categoria' },
+                    
+                    // Métricas de cantidad
+                    unidadesVendidas: { $sum: '$items.cantidad' },
+                    numeroVentas: { $sum: 1 },
+                    
+                    // Métricas de montos (con IVA incluido)
+                    totalVendido: { $sum: '$items.total' },
+                    
+                    // Precio promedio de venta (real)
+                    precioPromedioVenta: { $avg: '$items.precioUnitario' },
+                    
+                    // Descuentos aplicados
+                    totalDescuentos: { $sum: '$items.descuento' },
+                    
+                    // Datos actuales del producto
+                    precioVentaActual: { $first: '$producto.precioVenta' },
+                    precioCompraActual: { $first: '$producto.precioCompra' },
+                    stockActual: { $first: '$producto.stock' },
+                    
+                    // Para calcular IVA después (ventas con IVA)
+                    ventasConIVA: {
+                        $sum: {
+                            $cond: [
+                                { $eq: ['$aplicaIVA', true] },
+                                1,
+                                0
+                            ]
+                        }
+                    }
+                }
+            },
+            // Paso 7: Proyectar campos calculados
+            {
+                $project: {
+                    _id: 1,
+                    codigoProducto: 1,
+                    nombreProducto: 1,
+                    categoria: 1,
+                    unidadesVendidas: 1,
+                    numeroVentas: 1,
+                    totalVendido: 1,
+                    totalDescuentos: 1,
+                    precioPromedioVenta: { $round: ['$precioPromedioVenta', 2] },
+                    precioVentaActual: 1,
+                    precioCompraActual: 1,
+                    stockActual: 1,
+                    
+                    // Calcular total neto (sin IVA para análisis de margen)
+                    totalNetoSinIVA: {
+                        $round: [
+                            {
+                                $divide: [
+                                    '$totalVendido',
+                                    1.21 // Aproximación: si >50% ventas con IVA, ajustar
+                                ]
+                            },
+                            2
+                        ]
+                    },
+                    
+                    // Calcular costo total estimado (unidades * precio compra actual)
+                    costoTotalEstimado: {
+                        $multiply: ['$unidadesVendidas', '$precioCompraActual']
+                    },
+                    
+                    // Margen bruto unitario (precio venta actual - precio compra)
+                    margenBrutoUnitario: {
+                        $subtract: ['$precioVentaActual', '$precioCompraActual']
+                    },
+                    
+                    // Porcentaje margen bruto (sobre precio venta)
+                    porcentajeMargenBruto: {
+                        $cond: [
+                            { $gt: ['$precioVentaActual', 0] },
+                            {
+                                $round: [
+                                    {
+                                        $multiply: [
+                                            {
+                                                $divide: [
+                                                    { $subtract: ['$precioVentaActual', '$precioCompraActual'] },
+                                                    '$precioVentaActual'
+                                                ]
+                                            },
+                                            100
+                                        ]
+                                    },
+                                    2
+                                ]
+                            },
+                            0
+                        ]
+                    },
+                    
+                    // Ticket promedio (monto promedio por venta)
+                    ticketPromedio: {
+                        $round: [
+                            { $divide: ['$totalVendido', '$numeroVentas'] },
+                            2
+                        ]
+                    }
+                }
+            },
+            // Paso 8: Calcular utilidad neta proyectada
+            {
+                $addFields: {
+                    utilidadNetaEstimada: {
+                        $round: [
+                            {
+                                $subtract: [
+                                    '$totalNetoSinIVA',
+                                    '$costoTotalEstimado'
+                                ]
+                            },
+                            2
+                        ]
+                    },
+                    porcentajeUtilidadNeta: {
+                        $cond: [
+                            { $gt: ['$totalNetoSinIVA', 0] },
+                            {
+                                $round: [
+                                    {
+                                        $multiply: [
+                                            {
+                                                $divide: [
+                                                    { $subtract: ['$totalNetoSinIVA', '$costoTotalEstimado'] },
+                                                    '$totalNetoSinIVA'
+                                                ]
+                                            },
+                                            100
+                                        ]
+                                    },
+                                    2
+                                ]
+                            },
+                            0
+                        ]
+                    }
+                }
+            },
+            // Paso 9: Ordenar por total vendido (descendente)
+            {
+                $sort: { totalVendido: -1 }
+            },
+            // Paso 10: Limitar resultados si se especifica
+            ...(limit ? [{
+                $limit: parseInt(limit as string)
+            }] : [])
+        ]);
+
+        // Calcular totales generales
+        const totalesGenerales = estadisticas.reduce((acc, prod) => {
+            return {
+                totalUnidadesVendidas: acc.totalUnidadesVendidas + prod.unidadesVendidas,
+                totalMontoVendido: acc.totalMontoVendido + prod.totalVendido,
+                totalUtilidadEstimada: acc.totalUtilidadEstimada + (prod.utilidadNetaEstimada || 0),
+                totalDescuentos: acc.totalDescuentos + (prod.totalDescuentos || 0)
+            };
+        }, {
+            totalUnidadesVendidas: 0,
+            totalMontoVendido: 0,
+            totalUtilidadEstimada: 0,
+            totalDescuentos: 0
+        });
+
+        // Calcular participación de cada producto
+        const estadisticasConParticipacion = estadisticas.map((prod, index) => ({
+            ...prod,
+            ranking: index + 1,
+            participacionVentas: totalesGenerales.totalMontoVendido > 0
+                ? parseFloat(((prod.totalVendido / totalesGenerales.totalMontoVendido) * 100).toFixed(2))
+                : 0,
+            clasificacionABC: index < estadisticas.length * 0.2 ? 'A' 
+                : index < estadisticas.length * 0.5 ? 'B' 
+                : 'C'
+        }));
+
+        res.json({
+            productos: estadisticasConParticipacion,
+            totales: {
+                ...totalesGenerales,
+                totalProductos: estadisticas.length,
+                margenPromedioGeneral: totalesGenerales.totalMontoVendido > 0
+                    ? parseFloat(((totalesGenerales.totalUtilidadEstimada / totalesGenerales.totalMontoVendido) * 100).toFixed(2))
+                    : 0
+            },
+            filtros: {
+                fechaInicio: fechaInicio || 'Desde siempre',
+                fechaFin: fechaFin || 'Hasta ahora',
+                categoria: categoria || 'Todas',
+                limit: limit || 'Sin límite'
+            }
+        });
+    } catch (error: any) {
+        console.error('Error al obtener estadísticas de productos:', error);
+        res.status(500).json({ 
+            message: 'Error al obtener estadísticas de productos',
+            details: error.message 
+        });
+    }
+};
