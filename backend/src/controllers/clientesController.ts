@@ -236,3 +236,112 @@ export const reactivarCliente = async (req: ExpressRequest, res: ExpressResponse
         res.status(500).json({ message: 'Error en el servidor' });
     }
 };
+
+// @desc    Agregar nota a un cliente
+// @route   POST /api/clientes/:id/notas
+// @access  Private (admin/oper_ad)
+export const agregarNota = async (req: ExpressRequest, res: ExpressResponse) => {
+    try {
+        const { texto, tipo, creadoPor } = req.body;
+        const username = creadoPor || (req as any).user?.username || 'sistema';
+
+        if (!texto || !tipo) {
+            return res.status(400).json({ 
+                message: 'Texto y tipo de nota son requeridos' 
+            });
+        }
+
+        const cliente = await Cliente.findById(req.params.id);
+
+        if (!cliente) {
+            return res.status(404).json({ message: 'Cliente no encontrado' });
+        }
+
+        // Agregar la nota al array
+        if (!cliente.notas) {
+            cliente.notas = [];
+        }
+
+        cliente.notas.push({
+            texto,
+            tipo,
+            creadoPor: username,
+            fechaCreacion: new Date()
+        });
+
+        const clienteActualizado = await cliente.save();
+
+        res.status(201).json({
+            message: 'Nota agregada correctamente',
+            cliente: clienteActualizado,
+            nota: cliente.notas[cliente.notas.length - 1]
+        });
+    } catch (error: any) {
+        res.status(500).json({ message: 'Error al agregar nota', details: error.message });
+    }
+};
+
+// @desc    Obtener notas de un cliente
+// @route   GET /api/clientes/:id/notas
+// @access  Private
+export const obtenerNotas = async (req: ExpressRequest, res: ExpressResponse) => {
+    try {
+        const cliente = await Cliente.findById(req.params.id);
+
+        if (!cliente) {
+            return res.status(404).json({ message: 'Cliente no encontrado' });
+        }
+
+        // Ordenar notas por fecha descendente (más recientes primero)
+        const notas = cliente.notas || [];
+        const notasOrdenadas = [...notas].sort((a, b) => 
+            new Date(b.fechaCreacion).getTime() - new Date(a.fechaCreacion).getTime()
+        );
+
+        res.json({
+            clienteId: cliente._id,
+            nombreCliente: cliente.razonSocial || `${cliente.apellido || ''} ${cliente.nombre}`.trim(),
+            notas: notasOrdenadas
+        });
+    } catch (error: any) {
+        res.status(500).json({ message: 'Error al obtener notas', details: error.message });
+    }
+};
+
+// @desc    Eliminar nota de un cliente
+// @route   DELETE /api/clientes/:id/notas/:notaId
+// @access  Private (admin)
+export const eliminarNota = async (req: ExpressRequest, res: ExpressResponse) => {
+    try {
+        const { id, notaId } = req.params;
+
+        const cliente = await Cliente.findById(id);
+
+        if (!cliente) {
+            return res.status(404).json({ message: 'Cliente no encontrado' });
+        }
+
+        if (!cliente.notas || cliente.notas.length === 0) {
+            return res.status(404).json({ message: 'No hay notas para eliminar' });
+        }
+
+        // Filtrar la nota a eliminar
+        const notasOriginales = cliente.notas.length;
+        cliente.notas = cliente.notas.filter(
+            (nota: any) => nota._id?.toString() !== notaId
+        );
+
+        if (cliente.notas.length === notasOriginales) {
+            return res.status(404).json({ message: 'Nota no encontrada' });
+        }
+
+        const clienteActualizado = await cliente.save();
+
+        res.json({
+            message: 'Nota eliminada correctamente',
+            cliente: clienteActualizado
+        });
+    } catch (error: any) {
+        res.status(500).json({ message: 'Error al eliminar nota', details: error.message });
+    }
+};

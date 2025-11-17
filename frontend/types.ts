@@ -244,6 +244,15 @@ export interface Cliente {
   // Preferencias de pago
   aceptaCheques: boolean;
   diasVencimientoCheques?: number;
+  
+  // Notas e incidentes
+  notas?: Array<{
+    _id?: string;
+    texto: string;
+    tipo: 'incidente' | 'problema' | 'observacion' | 'seguimiento';
+    creadoPor: string;
+    fechaCreacion: string;
+  }>;
 }
 
 // Interface para item de venta

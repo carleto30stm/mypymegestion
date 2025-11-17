@@ -478,7 +478,7 @@ const CobranzasPage: React.FC = () => {
     return 'Morosa';
   };
 
-  const canEdit = user?.userType === 'admin' || user?.userType === 'oper_ad';
+  const canEdit = user?.userType === 'admin' || user?.userType === 'oper_ad' || user?.userType === 'oper';
 
   return (
     <Box sx={{ p: 3 }}>

@@ -9,7 +9,10 @@ import {
   updateCliente,
   actualizarSaldo,
   deleteCliente,
-  reactivarCliente
+  reactivarCliente,
+  agregarNota,
+  obtenerNotas,
+  eliminarNota
 } from '../controllers/clientesController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
@@ -35,5 +38,12 @@ router.get('/:id/historial', getHistorialCompras); // Historial de compras
 router.patch('/:id/saldo', actualizarSaldo); // admin/oper_ad pueden actualizar saldo
 
 router.patch('/:id/reactivar', reactivarCliente); // admin puede reactivar
+
+// Rutas para notas
+router.route('/:id/notas')
+  .get(obtenerNotas)    // Obtener todas las notas del cliente
+  .post(agregarNota);   // Agregar nueva nota (admin/oper_ad)
+
+router.delete('/:id/notas/:notaId', eliminarNota); // Eliminar nota (admin)
 
 export default router;

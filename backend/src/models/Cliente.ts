@@ -40,6 +40,14 @@ export interface ICliente extends Document {
   // Preferencias de pago
   aceptaCheques: boolean;
   diasVencimientoCheques?: number;
+  
+  // Notas e incidentes
+  notas?: Array<{
+    texto: string;
+    tipo: 'incidente' | 'problema' | 'observacion' | 'seguimiento';
+    creadoPor: string;
+    fechaCreacion: Date;
+  }>;
 }
 
 const clienteSchema = new mongoose.Schema<ICliente>({
@@ -210,7 +218,31 @@ const clienteSchema = new mongoose.Schema<ICliente>({
     min: [0, 'Los días de vencimiento deben ser mayor o igual a 0'],
     max: [365, 'Los días de vencimiento no pueden exceder 365'],
     default: 30
-  }
+  },
+  // Notas e incidentes
+  notas: [{
+    texto: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: [1000, 'El texto de la nota no puede exceder 1000 caracteres']
+    },
+    tipo: {
+      type: String,
+      required: true,
+      enum: ['incidente', 'problema', 'observacion', 'seguimiento'],
+      default: 'observacion'
+    },
+    creadoPor: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    fechaCreacion: {
+      type: Date,
+      default: Date.now
+    }
+  }]
 }, {
   timestamps: {
     createdAt: 'fechaCreacion',

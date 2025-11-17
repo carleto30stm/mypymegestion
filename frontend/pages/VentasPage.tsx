@@ -210,7 +210,7 @@ const VentasPage: React.FC = () => {
       iva: totales.iva,
       total: totales.total,
       observaciones: observaciones || undefined,
-      vendedor: user?.id || '',
+      vendedor: user?.username || 'sistema',
       // Enviar decisión de IVA específica para esta venta
       aplicaIVA: aplicaIVAVenta,
       requiereFacturaAFIP: totales.clienteSeleccionado?.requiereFacturaAFIP || false

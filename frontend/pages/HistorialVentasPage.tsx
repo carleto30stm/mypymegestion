@@ -176,8 +176,8 @@ const HistorialVentasPage: React.FC = () => {
   };
 
   const canAnular = user?.userType === 'admin';
-  const canConfirm = user?.userType === 'admin' || user?.userType === 'oper_ad';
-  const canEdit = user?.userType === 'admin' || user?.userType === 'oper_ad';
+  const canConfirm = user?.userType === 'admin' || user?.userType === 'oper_ad' || user?.userType === 'oper';
+  const canEdit = user?.userType === 'admin' || user?.userType === 'oper_ad' || user?.userType === 'oper';
 
   return (
     <Box sx={{ p: 3 }}>
