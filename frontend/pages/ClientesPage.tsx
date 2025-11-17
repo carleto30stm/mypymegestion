@@ -6,9 +6,12 @@ import {
   createCliente,
   updateCliente,
   deleteCliente,
-  reactivarCliente
+  reactivarCliente,
+  agregarNota,
+  eliminarNota
 } from '../redux/slices/clientesSlice';
 import { Cliente } from '../types';
+import NotasClienteModal from '../components/NotasClienteModal';
 import {
   Box,
   Typography,
@@ -43,7 +46,8 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   People as PeopleIcon,
-  Restore as RestoreIcon
+  Restore as RestoreIcon,
+  StickyNote2 as NotasIcon
 } from '@mui/icons-material';
 import { formatCurrency } from '../utils/formatters';
 
@@ -55,6 +59,8 @@ const ClientesPage: React.FC = () => {
   const [openForm, setOpenForm] = useState(false);
   const [clienteEdit, setClienteEdit] = useState<Cliente | null>(null);
   const [filtro, setFiltro] = useState<'todos' | 'activos' | 'morosos'>('activos');
+  const [openNotas, setOpenNotas] = useState(false);
+  const [clienteNotas, setClienteNotas] = useState<Cliente | null>(null);
 
   const [formData, setFormData] = useState<Partial<Cliente>>({
     tipoDocumento: 'DNI',
@@ -136,6 +142,30 @@ const ClientesPage: React.FC = () => {
   const handleReactivar = async (id: string) => {
     await dispatch(reactivarCliente(id));
     dispatch(fetchClientes());
+  };
+
+  const handleOpenNotas = (cliente: Cliente) => {
+    setClienteNotas(cliente);
+    setOpenNotas(true);
+  };
+
+  const handleCloseNotas = () => {
+    setOpenNotas(false);
+    setClienteNotas(null);
+  };
+
+  const handleAgregarNota = async (texto: string, tipo: 'incidente' | 'problema' | 'observacion' | 'seguimiento') => {
+    if (clienteNotas?._id) {
+      await dispatch(agregarNota({ clienteId: clienteNotas._id, texto, tipo, creadoPor: user?.username || 'sistema' }));
+      dispatch(fetchClientes());
+    }
+  };
+
+  const handleEliminarNota = async (notaId: string) => {
+    if (clienteNotas?._id) {
+      await dispatch(eliminarNota({ clienteId: clienteNotas._id, notaId }));
+      dispatch(fetchClientes());
+    }
   };
 
   const clientesFiltrados = clientes.filter(c => {
@@ -252,6 +282,11 @@ const ClientesPage: React.FC = () => {
                 {canEdit && (
                   <TableCell align="center">
                     <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
+                      <Tooltip title="Ver Notas">
+                        <IconButton size="small" color="primary" onClick={() => handleOpenNotas(cliente)}>
+                          <NotasIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
                       {(cliente.estado === 'activo' || cliente.estado === 'moroso') && (
                         <>
                           <Tooltip title="Editar">
@@ -524,6 +559,15 @@ const ClientesPage: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <NotasClienteModal
+        open={openNotas}
+        onClose={handleCloseNotas}
+        cliente={clienteNotas}
+        onAgregarNota={handleAgregarNota}
+        onEliminarNota={handleEliminarNota}
+        userType={user?.userType}
+      />
     </Box>
   );
 };

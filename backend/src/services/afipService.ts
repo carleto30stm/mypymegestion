@@ -1,5 +1,7 @@
 import Afip from '@afipsdk/afip.js';
 import moment from 'moment';
+import fs from 'fs';
+import path from 'path';
 import type { IFactura } from '../models/Factura.js';
 import { TIPO_COMPROBANTE_CODIGO } from '../models/Factura.js';
 
@@ -44,10 +46,29 @@ export class AFIPService {
 
   constructor(config: AFIPConfig) {
     this.config = config;
+    // El SDK espera el contenido PEM del certificado y la clave.
+    // Si en la configuración se pasaron rutas, las leemos desde disco.
+    let certContent: string | undefined = config.cert as string | undefined;
+    let keyContent: string | undefined = config.key as string | undefined;
+
+    try {
+      const certPath = certContent ? path.resolve(String(certContent)) : undefined;
+      const keyPath = keyContent ? path.resolve(String(keyContent)) : undefined;
+
+      if (certPath && fs.existsSync(certPath)) {
+        certContent = fs.readFileSync(certPath, 'utf8');
+      }
+      if (keyPath && fs.existsSync(keyPath)) {
+        keyContent = fs.readFileSync(keyPath, 'utf8');
+      }
+    } catch (err) {
+      console.warn('Warning: no se pudo leer cert/key desde disco, usando los valores tal cual. Error:', err);
+    }
+
     this.afip = new Afip({
       CUIT: config.CUIT,
-      cert: config.cert,
-      key: config.key,
+      cert: certContent,
+      key: keyContent,
       production: config.production,
       ta_folder: config.ta_folder || './afip_tokens'
     });

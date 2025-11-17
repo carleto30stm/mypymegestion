@@ -84,6 +84,30 @@ export const reactivarCliente = createAsyncThunk('clientes/reactivar', async (id
   }
 });
 
+export const agregarNota = createAsyncThunk(
+  'clientes/agregarNota',
+  async ({ clienteId, texto, tipo, creadoPor }: { clienteId: string; texto: string; tipo: 'incidente' | 'problema' | 'observacion' | 'seguimiento'; creadoPor: string }, { rejectWithValue }) => {
+    try {
+      const response = await api.post(`/api/clientes/${clienteId}/notas`, { texto, tipo, creadoPor });
+      return response.data.cliente;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.message || 'Error al agregar nota');
+    }
+  }
+);
+
+export const eliminarNota = createAsyncThunk(
+  'clientes/eliminarNota',
+  async ({ clienteId, notaId }: { clienteId: string; notaId: string }, { rejectWithValue }) => {
+    try {
+      const response = await api.delete(`/api/clientes/${clienteId}/notas/${notaId}`);
+      return response.data.cliente;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.message || 'Error al eliminar nota');
+    }
+  }
+);
+
 const clientesSlice = createSlice({
   name: 'clientes',
   initialState,
@@ -133,6 +157,20 @@ const clientesSlice = createSlice({
       })
       // Reactivar cliente
       .addCase(reactivarCliente.fulfilled, (state, action: PayloadAction<Cliente>) => {
+        const index = state.items.findIndex(c => c._id === action.payload._id);
+        if (index !== -1) {
+          state.items[index] = action.payload;
+        }
+      })
+      // Agregar nota
+      .addCase(agregarNota.fulfilled, (state, action: PayloadAction<Cliente>) => {
+        const index = state.items.findIndex(c => c._id === action.payload._id);
+        if (index !== -1) {
+          state.items[index] = action.payload;
+        }
+      })
+      // Eliminar nota
+      .addCase(eliminarNota.fulfilled, (state, action: PayloadAction<Cliente>) => {
         const index = state.items.findIndex(c => c._id === action.payload._id);
         if (index !== -1) {
           state.items[index] = action.payload;
