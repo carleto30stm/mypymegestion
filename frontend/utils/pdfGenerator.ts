@@ -33,8 +33,6 @@ export const generarPDFRecibo = (recibo: ReciboPago): void => {
 
   // Datos de la empresa (izquierda)
   doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Kurt:', 14, yPos);
   doc.setFont('helvetica', 'normal');
   yPos += 5;
   doc.text(EMPRESA.nombre, 14, yPos);
@@ -219,9 +217,6 @@ export const generarPDFRemito = (remito: Remito): void => {
   yPos += 15;
 
   // Datos de la empresa (izquierda)
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Kurt:', 14, yPos);
   doc.setFont('helvetica', 'normal');
   yPos += 5;
   doc.text(EMPRESA.nombre, 14, yPos);

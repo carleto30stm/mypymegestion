@@ -44,6 +44,7 @@ import {
   crearAjuste
 } from '../redux/slices/cuentaCorrienteSlice';
 import { crearRecibo } from '../redux/slices/recibosSlice';
+import { fetchVentas } from '../redux/slices/ventasSlice';
 import { Cliente, FormaPago } from '../types';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import FormaPagoModal from './FormaPagoModal';
@@ -55,10 +56,12 @@ interface CuentaCorrienteDetalleProps {
 const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente }) => {
   const dispatch = useDispatch<AppDispatch>();
   const { movimientos, resumen, antiguedad, loading, error } = useSelector((state: RootState) => state.cuentaCorriente);
+  const { items: ventas } = useSelector((state: RootState) => state.ventas);
   const { user } = useSelector((state: RootState) => state.auth);
 
   const [openAjusteModal, setOpenAjusteModal] = useState(false);
   const [openPagoModal, setOpenPagoModal] = useState(false);
+  const [openPreviewVentas, setOpenPreviewVentas] = useState(false);
   const [observacionesPago, setObservacionesPago] = useState('');
   
   const [ajusteForm, setAjusteForm] = useState({
@@ -73,6 +76,7 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
       dispatch(fetchMovimientos({ clienteId: cliente._id, incluirAnulados: false }));
       dispatch(fetchResumen(cliente._id));
       dispatch(fetchAntiguedad(cliente._id));
+      dispatch(fetchVentas()); // Cargar ventas para poder identificar cuáles están pendientes
     }
   }, [cliente, dispatch]);
 
@@ -109,13 +113,29 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
     const deudaActual = resumen.saldoActual;
     const espagoCompleto = totalPago >= deudaActual;
 
+    // IMPORTANTE: Identificar ventas pendientes del cliente para vincularlas al recibo
+    // Esto asegura que el estado de cobranza se actualice correctamente
+    const ventasPendientesCliente = ventas.filter(v => {
+      // Extraer clienteId (puede venir como objeto poblado o string)
+      const ventaClienteId = typeof v.clienteId === 'object' && v.clienteId !== null
+        ? (v.clienteId as any)._id || (v.clienteId as any).id
+        : v.clienteId;
+      
+      return ventaClienteId === cliente._id && 
+             v.estado === 'confirmada' && 
+             v.saldoPendiente > 0;
+    }).sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime()); // Ordenar por fecha (más antiguas primero)
+
+    // Obtener IDs de las ventas pendientes
+    const ventasIds = ventasPendientesCliente.map(v => v._id!);
+
     try {
       await dispatch(crearRecibo({
         clienteId: cliente._id,
-        ventasIds: [], // Sin ventas específicas, es un pago de regularización
+        ventasIds, // ✅ Ahora incluye las ventas pendientes para que se actualicen correctamente
         formasPago,
-        momentoCobro: 'diferido', // Usar 'diferido' ya que 'posterior' está para regularizaciones backend
-        observaciones: observacionesPago || `Regularización de deuda - Pago ${espagoCompleto ? 'total' : 'parcial'}`,
+        momentoCobro: 'diferido',
+        observaciones: observacionesPago || `Regularización de deuda - Pago ${espagoCompleto ? 'total' : 'parcial'} - ${ventasIds.length} venta(s) cobrada(s)`,
         creadoPor: user.id
       })).unwrap();
 
@@ -123,6 +143,7 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
       dispatch(fetchMovimientos({ clienteId: cliente._id, incluirAnulados: false }));
       dispatch(fetchResumen(cliente._id));
       dispatch(fetchAntiguedad(cliente._id));
+      dispatch(fetchVentas()); // Refrescar ventas para actualizar estado de cobranza
 
       // Limpiar y cerrar modal
       setObservacionesPago('');
@@ -131,9 +152,9 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
       // Mostrar mensaje de éxito con detalles
       const saldoRestante = deudaActual - totalPago;
       if (espagoCompleto) {
-        alert(`✅ Pago registrado exitosamente!\n\n💰 Monto pagado: ${formatCurrency(totalPago)}\n✔️ Deuda saldada completamente\n📊 El ingreso se registró en caja`);
+        alert(`✅ Pago registrado exitosamente!\n\n💰 Monto pagado: ${formatCurrency(totalPago)}\n✔️ Deuda saldada completamente\n📋 ${ventasIds.length} venta(s) cobrada(s)\n📊 El ingreso se registró en caja`);
       } else {
-        alert(`✅ Pago parcial registrado exitosamente!\n\n💰 Monto pagado: ${formatCurrency(totalPago)}\n⚠️ Saldo pendiente: ${formatCurrency(saldoRestante)}\n📊 El ingreso se registró en caja`);
+        alert(`✅ Pago parcial registrado exitosamente!\n\n💰 Monto pagado: ${formatCurrency(totalPago)}\n⚠️ Saldo pendiente: ${formatCurrency(saldoRestante)}\n📋 ${ventasIds.length} venta(s) actualizada(s)\n📊 El ingreso se registró en caja`);
       }
     } catch (error: any) {
       alert('❌ Error al registrar el pago: ' + (error.message || 'Error desconocido'));
@@ -270,7 +291,10 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
                       color="success"
                       size="large"
                       startIcon={<Payment />}
-                      onClick={() => setOpenPagoModal(true)}
+                      onClick={() => {
+                        setOpenPreviewVentas(true);
+                        setOpenPagoModal(true);
+                      }}
                       sx={{ minWidth: 200 }}
                     >
                       Registrar Pago Real
@@ -281,9 +305,11 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
                     <Typography variant="body1" fontWeight="bold">
                       Deuda Pendiente: {formatCurrency(resumen.saldoActual)}
                     </Typography>
-                    <Typography variant="caption">
-                      Use este botón para registrar pagos en efectivo, cheque, transferencia o tarjeta. 
-                      El pago reducirá la deuda y se registrará el ingreso en caja automáticamente.
+                    <Typography variant="caption" display="block">
+                      Use este botón para registrar pagos en efectivo, cheque, transferencia o tarjeta.
+                    </Typography>
+                    <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
+                      ℹ️ El pago se aplicará automáticamente a las ventas pendientes (priorizando las más antiguas).
                     </Typography>
                   </Box>
                 </Alert>
@@ -551,6 +577,7 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
           open={openPagoModal}
           onClose={() => {
             setOpenPagoModal(false);
+            setOpenPreviewVentas(false);
             setObservacionesPago('');
           }}
           montoTotal={resumen.saldoActual}
@@ -558,6 +585,80 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
           onConfirm={handleRegistrarPago}
           permitirPagoParcial={true}
         />
+      )}
+
+      {/* Diálogo informativo: Mostrar ventas que se cobrarán */}
+      {openPreviewVentas && cliente?._id && (
+        <Dialog 
+          open={openPreviewVentas} 
+          onClose={() => setOpenPreviewVentas(false)}
+          maxWidth="sm" 
+          fullWidth
+        >
+          <DialogTitle>
+            📋 Ventas Pendientes que se Cobrarán
+          </DialogTitle>
+          <DialogContent>
+            <Alert severity="info" sx={{ mb: 2 }}>
+              El pago se aplicará automáticamente a estas ventas (priorizando las más antiguas):
+            </Alert>
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>N° Venta</TableCell>
+                    <TableCell>Fecha</TableCell>
+                    <TableCell align="right">Saldo Pendiente</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {ventas
+                    .filter(v => {
+                      const ventaClienteId = typeof v.clienteId === 'object' && v.clienteId !== null
+                        ? (v.clienteId as any)._id || (v.clienteId as any).id
+                        : v.clienteId;
+                      return ventaClienteId === cliente._id && 
+                             v.estado === 'confirmada' && 
+                             v.saldoPendiente > 0;
+                    })
+                    .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime())
+                    .map((venta) => (
+                      <TableRow key={venta._id}>
+                        <TableCell>{venta.numeroVenta}</TableCell>
+                        <TableCell>{formatDate(venta.fecha)}</TableCell>
+                        <TableCell align="right">
+                          <Typography color="error.main" fontWeight="bold">
+                            {formatCurrency(venta.saldoPendiente)}
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  {ventas.filter(v => {
+                    const ventaClienteId = typeof v.clienteId === 'object' && v.clienteId !== null
+                      ? (v.clienteId as any)._id || (v.clienteId as any).id
+                      : v.clienteId;
+                    return ventaClienteId === cliente._id && 
+                           v.estado === 'confirmada' && 
+                           v.saldoPendiente > 0;
+                  }).length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={3} align="center">
+                        <Typography variant="caption" color="text.secondary">
+                          No hay ventas pendientes (solo movimientos de cuenta corriente)
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOpenPreviewVentas(false)}>
+              Cerrar
+            </Button>
+          </DialogActions>
+        </Dialog>
       )}
     </Box>
   );
