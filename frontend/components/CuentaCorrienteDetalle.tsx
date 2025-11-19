@@ -24,8 +24,11 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  LinearProgress
+  LinearProgress,
+  Switch,
+  FormControlLabel
 } from '@mui/material';
+// Add Switch and FormControlLabel to the main import
 import {
   AccountBalance,
   TrendingUp,
@@ -45,6 +48,8 @@ import {
   crearAjuste
 } from '../redux/slices/cuentaCorrienteSlice';
 import { crearRecibo } from '../redux/slices/recibosSlice';
+import { fetchInteresesPorCliente } from '../redux/slices/interesesSlice';
+// (Switch/FormControlLabel included above)
 import { fetchVentas } from '../redux/slices/ventasSlice';
 import { Cliente, FormaPago } from '../types';
 import { formatCurrency, formatDate } from '../utils/formatters';
@@ -58,6 +63,7 @@ interface CuentaCorrienteDetalleProps {
 const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente }) => {
   const dispatch = useDispatch<AppDispatch>();
   const { movimientos, resumen, antiguedad, loading, error } = useSelector((state: RootState) => state.cuentaCorriente);
+  const interesesSlice = useSelector((state: RootState) => state.intereses);
   const { items: ventas } = useSelector((state: RootState) => state.ventas);
   const { user } = useSelector((state: RootState) => state.auth);
 
@@ -65,6 +71,7 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
   const [openPagoModal, setOpenPagoModal] = useState(false);
   const [openPreviewVentas, setOpenPreviewVentas] = useState(false);
   const [observacionesPago, setObservacionesPago] = useState('');
+  const [incluirIntereses, setIncluirIntereses] = useState<boolean>(false);
   
   const [ajusteForm, setAjusteForm] = useState({
     tipo: 'ajuste_cargo' as 'ajuste_cargo' | 'ajuste_descuento',
@@ -79,8 +86,11 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
       dispatch(fetchResumen(cliente._id));
       dispatch(fetchAntiguedad(cliente._id));
       dispatch(fetchVentas()); // Cargar ventas para poder identificar cuáles están pendientes
+      if (incluirIntereses) {
+        dispatch(fetchInteresesPorCliente({ clienteId: cliente._id }));
+      }
     }
-  }, [cliente, dispatch]);
+  }, [cliente, dispatch, incluirIntereses]);
 
   const handleCrearAjuste = async () => {
     if (!cliente?._id || !ajusteForm.concepto || !ajusteForm.monto) {
@@ -207,6 +217,57 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
 
   return (
     <Box>
+      {/* Intereses Punitorios: resumen */}
+      {incluirIntereses && interesesSlice.intereses && interesesSlice.intereses.length > 0 && (
+        <Paper elevation={2} sx={{ p: 2, mb: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            Intereses Punitorios (Incluidos)
+          </Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={4}>
+              <Typography variant="body2" color="text.secondary">Total Devengado</Typography>
+              <Typography variant="h6" color="warning.main">{formatCurrency(interesesSlice.intereses.reduce((sum, i) => sum + i.interesDevengado, 0))}</Typography>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <Typography variant="body2" color="text.secondary">Total Cobrado</Typography>
+              <Typography variant="h6" color="success.main">{formatCurrency(interesesSlice.intereses.reduce((sum, i) => sum + i.interesCobrado, 0))}</Typography>
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <Typography variant="body2" color="text.secondary">Total Pendiente</Typography>
+              <Typography variant="h6" color="error.main">{formatCurrency(interesesSlice.intereses.reduce((sum, i) => sum + i.interesPendiente, 0))}</Typography>
+            </Grid>
+          </Grid>
+          {/* Tabla de intereses */}
+          <Box sx={{ mt: 2 }}>
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Documento</TableCell>
+                    <TableCell>Venc.</TableCell>
+                    <TableCell align="right">Capital</TableCell>
+                    <TableCell align="right">Pendiente</TableCell>
+                    <TableCell align="center">Días</TableCell>
+                    <TableCell align="center">Estado</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {interesesSlice.intereses.map((i) => (
+                    <TableRow key={(i as any)._id}>
+                      <TableCell>{(i as any).documentoRelacionado?.tipo?.toUpperCase()} #{(i as any).documentoRelacionado?.numeroDocumento}</TableCell>
+                      <TableCell>{formatDate((i as any).fechaVencimiento)}</TableCell>
+                      <TableCell align="right">{formatCurrency((i as any).capitalOriginal)}</TableCell>
+                      <TableCell align="right">{formatCurrency((i as any).interesPendiente)}</TableCell>
+                      <TableCell align="center">{(i as any).diasTranscurridos}</TableCell>
+                      <TableCell align="center">{(i as any).estado}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        </Paper>
+      )}
       {/* Resumen del cliente */}
       {resumen && (
         <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
@@ -295,12 +356,16 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
                         startIcon={<PictureAsPdf />}
                         onClick={async () => {
                           if (cliente?._id) {
-                            await cuentaCorrienteAPI.descargarPDFEstadoCuenta(cliente._id, { incluirIntereses: true });
+                            await cuentaCorrienteAPI.descargarPDFEstadoCuenta(cliente._id, { incluirIntereses });
                           }
                         }}
                       >
                         Descargar PDF
                       </Button>
+                      <FormControlLabel
+                        control={<Switch checked={incluirIntereses} onChange={(e) => setIncluirIntereses(e.target.checked)} />}
+                        label="Incluir Intereses"
+                      />
                       <Button
                         variant="contained"
                         color="success"
@@ -338,15 +403,15 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
                 <Alert 
                   severity="success"
                   action={
-                    <Button
+                      <Button
                       variant="outlined"
                       color="success"
                       startIcon={<PictureAsPdf />}
-                      onClick={async () => {
-                        if (cliente?._id) {
-                          await cuentaCorrienteAPI.descargarPDFEstadoCuenta(cliente._id, { incluirIntereses: true });
-                        }
-                      }}
+                        onClick={async () => {
+                          if (cliente?._id) {
+                            await cuentaCorrienteAPI.descargarPDFEstadoCuenta(cliente._id, { incluirIntereses });
+                          }
+                        }}
                     >
                       Descargar PDF
                     </Button>

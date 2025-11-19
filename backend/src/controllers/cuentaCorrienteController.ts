@@ -61,6 +61,7 @@ export const getMovimientos = async (req: ExpressRequest, res: ExpressResponse) 
 export const getResumen = async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const { clienteId } = req.params;
+const { desde, hasta } = req.query;
 
     // Validar cliente
     const cliente = await Cliente.findById(clienteId);
@@ -68,21 +69,30 @@ export const getResumen = async (req: ExpressRequest, res: ExpressResponse) => {
       return res.status(404).json({ message: 'Cliente no encontrado' });
     }
 
-    // Último movimiento para obtener saldo actual
-    const ultimoMovimiento = await MovimientoCuentaCorriente.findOne({
-      clienteId: new mongoose.Types.ObjectId(clienteId),
-      anulado: false
-    }).sort({ fecha: -1, createdAt: -1 });
+    // Construir filtros opcionales (desde, hasta) para calcular el resumen en contexto
+    const filtros: any = { clienteId: new mongoose.Types.ObjectId(clienteId), anulado: false };
+    if (desde || hasta) {
+      filtros.fecha = {};
+      if (desde) filtros.fecha.$gte = new Date(desde as string);
+      if (hasta) filtros.fecha.$lte = new Date(hasta as string);
+    }
+
+    // Último movimiento para obtener saldo actual dentro del rango (si aplica)
+    const ultimoMovimiento = await MovimientoCuentaCorriente.findOne(filtros).sort({ fecha: -1, createdAt: -1 });
 
     const saldoActual = ultimoMovimiento?.saldo || 0;
 
-    // Calcular totales
+    // Calcular totales (en rango si se pasaron filtros)
+    const matchTotales: any = { clienteId: new mongoose.Types.ObjectId(clienteId), anulado: false };
+    if (desde || hasta) {
+      matchTotales.fecha = {};
+      if (desde) matchTotales.fecha.$gte = new Date(desde as string);
+      if (hasta) matchTotales.fecha.$lte = new Date(hasta as string);
+    }
+
     const totales = await MovimientoCuentaCorriente.aggregate([
       {
-        $match: {
-          clienteId: new mongoose.Types.ObjectId(clienteId),
-          anulado: false
-        }
+        $match: matchTotales
       },
       {
         $group: {
@@ -95,13 +105,17 @@ export const getResumen = async (req: ExpressRequest, res: ExpressResponse) => {
 
     const { totalDebe = 0, totalHaber = 0 } = totales[0] || {};
 
-    // Contar movimientos por tipo
+    // Contar movimientos por tipo (en rango si aplica)
+    const matchPorTipo: any = { clienteId: new mongoose.Types.ObjectId(clienteId), anulado: false };
+    if (desde || hasta) {
+      matchPorTipo.fecha = {};
+      if (desde) matchPorTipo.fecha.$gte = new Date(desde as string);
+      if (hasta) matchPorTipo.fecha.$lte = new Date(hasta as string);
+    }
+
     const movimientosPorTipo = await MovimientoCuentaCorriente.aggregate([
       {
-        $match: {
-          clienteId: new mongoose.Types.ObjectId(clienteId),
-          anulado: false
-        }
+        $match: matchPorTipo
       },
       {
         $group: {
@@ -112,13 +126,14 @@ export const getResumen = async (req: ExpressRequest, res: ExpressResponse) => {
       }
     ]);
 
-    // Saldo disponible = límite - saldo actual
+    // Saldo disponible = límite - saldo actual (dentro de rango si corresponde)
     // Si saldo es negativo (cliente tiene a favor), suma al límite
     // Si saldo es positivo (cliente debe), resta del límite
     const saldoDisponible = cliente.limiteCredito - saldoActual;
 
     // Determinar estado de cuenta
     let estadoCuenta: 'al_dia' | 'proximo_limite' | 'limite_excedido' | 'moroso' = 'al_dia';
+    // Calcular porcentaje de uso basado en saldo dentro del rango (si se aplicó)
     const porcentajeUso = cliente.limiteCredito > 0 ? (saldoActual / cliente.limiteCredito) * 100 : 0;
 
     if (cliente.estado === 'moroso') {
@@ -145,8 +160,14 @@ export const getResumen = async (req: ExpressRequest, res: ExpressResponse) => {
         porcentajeUso: Math.round(porcentajeUso),
         movimientosPorTipo,
         fechaUltimoMovimiento: ultimoMovimiento?.fecha || null
+      ,
+      filtros: {
+        desde: desde || null,
+        hasta: hasta || null
+      }
       }
     });
+    return;
   } catch (error: any) {
     res.status(500).json({ 
       message: 'Error al obtener resumen', 
@@ -455,7 +476,7 @@ async function recalcularSaldos(clienteId: mongoose.Types.ObjectId, session: any
 export const generarPDFEstadoCuenta = async (req: ExpressRequest, res: ExpressResponse) => {
   try {
     const { clienteId } = req.params;
-    const { desde, hasta, incluirIntereses = 'true' } = req.query;
+    const { desde, hasta, incluirIntereses = 'false' } = req.query;
 
     // Obtener cliente
     const cliente = await Cliente.findById(clienteId);
@@ -500,14 +521,23 @@ export const generarPDFEstadoCuenta = async (req: ExpressRequest, res: ExpressRe
       porcentajeUso
     };
 
+    // Interpretar el parámetro incluirIntereses robustamente (acepta 'true', true, '1', 'on')
+    const incluirInteresesParam = typeof incluirIntereses === 'string' ? incluirIntereses : (incluirIntereses as any)?.toString?.() || '';
+    const incluirInteresesFlag = ['true', '1', 'on', 'True', 'TRUE'].includes(incluirInteresesParam);
+
     // Obtener intereses si se solicitan
     let intereses: any[] = [];
-    if (incluirIntereses === 'true') {
+    if (incluirInteresesFlag) {
       intereses = await InteresPunitorio.find({
         clienteId: new mongoose.Types.ObjectId(clienteId),
         anulado: false
       }).sort({ fechaInicio: -1 }).lean();
     }
+
+    // Debug logs to track which path is chosen (useful for tests/dev)
+    console.debug('[PDF EstadoCuenta] incluirIntereses param:', incluirIntereses, 'flag:', incluirInteresesFlag);
+    console.debug('[PDF EstadoCuenta] intereses.length:', intereses.length);
+    console.debug('[PDF EstadoCuenta] generarEstadoCuentaCompleto used?', incluirInteresesFlag && intereses.length > 0);
 
     // Datos de la empresa (configurar según necesidad)
     const datosEmpresa = {
@@ -537,7 +567,7 @@ export const generarPDFEstadoCuenta = async (req: ExpressRequest, res: ExpressRe
     
     pdfGenerator.pipe(res);
     
-    if (incluirIntereses === 'true' && intereses.length > 0) {
+    if (incluirInteresesFlag && intereses.length > 0) {
       pdfGenerator.generarEstadoCuentaCompleto(datosEmpresa, datosCliente, resumen, movimientos as any, intereses as any);
     } else {
       pdfGenerator.generarResumenMovimientos(datosEmpresa, datosCliente, resumen, movimientos as any);
