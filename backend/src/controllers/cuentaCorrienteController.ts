@@ -632,11 +632,11 @@ export const generarPDFMovimientos = async (req: ExpressRequest, res: ExpressRes
     };
 
     const datosEmpresa = {
-      nombre: process.env.EMPRESA_NOMBRE || 'MI EMPRESA',
-      direccion: process.env.EMPRESA_DIRECCION || 'Dirección de la empresa',
+      nombre: process.env.EMPRESA_RAZON_SOCIAL || 'MI EMPRESA',
+      direccion: process.env.EMPRESA_DOMICILIO || 'Dirección de la empresa',
       telefono: process.env.EMPRESA_TELEFONO || '(123) 456-7890',
       email: process.env.EMPRESA_EMAIL || 'contacto@empresa.com',
-      cuit: process.env.EMPRESA_CUIT || '12-34567890-1'
+      cuit: process.env.EMPRESA_CUIT_PDF || '12-34567890-1'
     };
 
     const datosCliente = {
