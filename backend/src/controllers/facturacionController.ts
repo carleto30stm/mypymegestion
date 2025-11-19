@@ -6,10 +6,9 @@ import Cliente from '../models/Cliente.js';
 import AFIPService from '../services/afipService.js';
 
 // Configuración de AFIP desde variables de entorno
+// NOTA: cert y key no son necesarios aquí, cargarCertificadosAFIP() los maneja automáticamente
 const afipConfig = {
   CUIT: process.env.AFIP_CUIT || '',
-  cert: process.env.AFIP_CERT_PATH || './certs/cert.crt',
-  key: process.env.AFIP_KEY_PATH || './certs/private.key',
   production: process.env.AFIP_PRODUCTION === 'true',
   ta_folder: process.env.AFIP_TA_FOLDER || './afip_tokens'
 };

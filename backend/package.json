@@ -10,6 +10,7 @@
     "build": "tsc",
     "afip:generar-cert": "node scripts/generar-certificado-afip.js",
     "afip:usar-cuit-prueba": "node scripts/usar-cuit-prueba.js",
+    "afip:preparar-railway": "node scripts/preparar-railway.js",
     "afip:autorizar-servicio": "node scripts/autorizaeWSDev.js",
     "afip:diagnostico": "node scripts/diagnostico-afip-detallado.js",
     "afip:listar-puntos": "node scripts/listar-puntos-venta.js",

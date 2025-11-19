@@ -42,11 +42,15 @@ try {
   console.log('   Dashboard → Project → Variables → Raw Editor\n');
   console.log('-'.repeat(70) + '\n');
   
+  // Escapar saltos de línea correctamente
+  const certEscaped = cert.trim().replace(/\n/g, '\\n');
+  const keyEscaped = key.trim().replace(/\n/g, '\\n');
+  
   console.log('# Certificado AFIP (Homologación)');
-  console.log(`AFIP_CERT="${cert.replace(/\n/g, '\\n')}"`);
+  console.log(`AFIP_CERT="${certEscaped}"`);
   console.log();
   console.log('# Clave privada AFIP (Homologación)');
-  console.log(`AFIP_KEY="${key.replace(/\n/g, '\\n')}"`);
+  console.log(`AFIP_KEY="${keyEscaped}"`);
   console.log();
   
   console.log('-'.repeat(70) + '\n');
