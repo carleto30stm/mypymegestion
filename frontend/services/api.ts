@@ -226,6 +226,22 @@ export const proveedoresAPI = {
     const response = await api.patch(`/api/proveedores/${id}/saldo`, datos);
     return response.data;
   }
+  ,
+  // Notas de proveedor
+  agregarNota: async (id: string, datos: { texto: string; tipo: string; creadoPor?: string }) => {
+    const response = await api.post(`/api/proveedores/${id}/notas`, datos);
+    return response.data;
+  },
+
+  obtenerNotas: async (id: string) => {
+    const response = await api.get(`/api/proveedores/${id}/notas`);
+    return response.data;
+  },
+
+  eliminarNota: async (id: string, notaId: string) => {
+    const response = await api.delete(`/api/proveedores/${id}/notas/${notaId}`);
+    return response.data;
+  }
 };
 
 // ========== API DE MATERIAS PRIMAS ==========
@@ -482,4 +498,168 @@ export const ordenesProduccionAPI = {
     return response.data;
   }
 };
+
+// ========== INTERESES PUNITORIOS ==========
+export const interesesAPI = {
+  // Configuración de tasas
+  getConfiguracionVigente: async () => {
+    const response = await api.get('/api/intereses/configuracion/vigente');
+    return response.data;
+  },
+
+  getConfiguraciones: async () => {
+    const response = await api.get('/api/intereses/configuracion');
+    return response.data;
+  },
+
+  crearConfiguracion: async (datos: {
+    tasaMensualVigente: number;
+    fechaVigenciaDesde?: string;
+    aplicaDesde?: number;
+    fuenteReferencia: string;
+    observaciones?: string;
+  }) => {
+    const response = await api.post('/api/intereses/configuracion', datos);
+    return response.data;
+  },
+
+  // Gestión de intereses
+  getIntereses: async (filtros?: {
+    estado?: string;
+    clienteId?: string;
+    fechaDesde?: string;
+    fechaHasta?: string;
+  }) => {
+    const response = await api.get('/api/intereses', { params: filtros });
+    return response.data;
+  },
+
+  getInteresesPorCliente: async (clienteId: string, estado?: string) => {
+    const response = await api.get(`/api/intereses/cliente/${clienteId}`, {
+      params: { estado }
+    });
+    return response.data;
+  },
+
+  getInteresById: async (id: string) => {
+    const response = await api.get(`/api/intereses/${id}`);
+    return response.data;
+  },
+
+  actualizarCalculo: async (id: string) => {
+    const response = await api.patch(`/api/intereses/${id}/calcular`);
+    return response.data;
+  },
+
+  cobrarIntereses: async (id: string, datos: {
+    montoCobrar?: number;
+    observaciones?: string;
+    formasPago?: Array<{
+      medioPago: string;
+      monto: number;
+      banco?: string;
+      datosCheque?: any;
+      datosTransferencia?: any;
+      datosTarjeta?: any;
+      observaciones?: string;
+    }>
+  }) => {
+    const response = await api.post(`/api/intereses/${id}/cobrar`, datos);
+    return response.data;
+  },
+
+  condonarIntereses: async (id: string, datos: {
+    montoCondonar: number;
+    motivo: string;
+  }) => {
+    const response = await api.post(`/api/intereses/${id}/condonar`, datos);
+    return response.data;
+  },
+
+  getEstadisticas: async (filtros?: {
+    fechaDesde?: string;
+    fechaHasta?: string;
+  }) => {
+    const response = await api.get('/api/intereses/estadisticas', { params: filtros });
+    return response.data;
+  },
+
+  // Descargar PDF de intereses
+  descargarPDFInteresesCliente: async (clienteId: string, estado?: string) => {
+    const response = await api.get(`/api/intereses/cliente/${clienteId}/pdf`, {
+      params: { estado },
+      responseType: 'blob'
+    });
+    
+    // Crear enlace de descarga
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `intereses-punitorios-${clienteId}-${Date.now()}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    
+    return response.data;
+  }
+};
+
+// ========== CUENTA CORRIENTE API ==========
+export const cuentaCorrienteAPI = {
+  // Descargar PDF de estado de cuenta completo
+  descargarPDFEstadoCuenta: async (clienteId: string, filtros?: {
+    desde?: string;
+    hasta?: string;
+    incluirIntereses?: boolean;
+  }) => {
+    const params: any = {};
+    if (filtros?.desde) params.desde = filtros.desde;
+    if (filtros?.hasta) params.hasta = filtros.hasta;
+    if (filtros?.incluirIntereses !== undefined) params.incluirIntereses = filtros.incluirIntereses ? 'true' : 'false';
+    
+    const response = await api.get(`/api/cuenta-corriente/${clienteId}/pdf/estado-cuenta`, {
+      params,
+      responseType: 'blob'
+    });
+    
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `estado-cuenta-${clienteId}-${Date.now()}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    
+    return response.data;
+  },
+
+  // Descargar PDF solo de movimientos
+  descargarPDFMovimientos: async (clienteId: string, filtros?: {
+    desde?: string;
+    hasta?: string;
+  }) => {
+    const params: any = {};
+    if (filtros?.desde) params.desde = filtros.desde;
+    if (filtros?.hasta) params.hasta = filtros.hasta;
+    
+    const response = await api.get(`/api/cuenta-corriente/${clienteId}/pdf/movimientos`, {
+      params,
+      responseType: 'blob'
+    });
+    
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `movimientos-${clienteId}-${Date.now()}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    
+    return response.data;
+  }
+};
+
 

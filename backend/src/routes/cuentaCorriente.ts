@@ -4,7 +4,9 @@ import {
   getResumen,
   getAntiguedadDeuda,
   crearAjuste,
-  anularMovimiento
+  anularMovimiento,
+  generarPDFEstadoCuenta,
+  generarPDFMovimientos
 } from '../controllers/cuentaCorrienteController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
@@ -18,8 +20,13 @@ router.get('/:clienteId/movimientos', getMovimientos);
 router.get('/:clienteId/resumen', getResumen);
 router.get('/:clienteId/antiguedad', getAntiguedadDeuda);
 
+// Rutas de generación de PDF
+router.get('/:clienteId/pdf/estado-cuenta', generarPDFEstadoCuenta);
+router.get('/:clienteId/pdf/movimientos', generarPDFMovimientos);
+
 // Rutas de modificación (validación de rol en el controlador)
 router.post('/ajuste', crearAjuste);
 router.patch('/movimientos/:movimientoId/anular', anularMovimiento);
 
 export default router;
+

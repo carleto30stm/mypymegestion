@@ -30,8 +30,10 @@ interface FormaPagoModalProps {
   onClose: () => void;
   montoTotal: number;
   cliente?: Cliente;
-  onConfirm: (formasPago: FormaPago[]) => void;
+  // onConfirm keeps backward compatibility: second param (observacionesGenerales) is optional
+  onConfirm: (formasPago: FormaPago[], observacionesGenerales?: string) => void;
   permitirPagoParcial?: boolean; // Nuevo prop para permitir pagos menores al total
+  observacionesIniciales?: string;
 }
 
 const FormaPagoModal: React.FC<FormaPagoModalProps> = ({
@@ -40,7 +42,8 @@ const FormaPagoModal: React.FC<FormaPagoModalProps> = ({
   montoTotal,
   cliente,
   onConfirm,
-  permitirPagoParcial = false
+  permitirPagoParcial = false,
+  observacionesIniciales
 }) => {
   const [formasPago, setFormasPago] = useState<FormaPago[]>([
     {
@@ -51,6 +54,7 @@ const FormaPagoModal: React.FC<FormaPagoModalProps> = ({
 
   const [errores, setErrores] = useState<string[]>([]);
   const [montoTransferenciaFormatted, setMontoTransferenciaFormatted] = useState('');
+  const [observacionesGenerales, setObservacionesGenerales] = useState<string>('');
 
   // Función para formatear el número mientras se escribe (con decimales)
   const formatNumberInput = (value: string): string => {
@@ -113,8 +117,16 @@ const FormaPagoModal: React.FC<FormaPagoModalProps> = ({
         }
       ]);
       setErrores([]);
+      setObservacionesGenerales('');
     }
   }, [open, montoTotal]);
+
+  useEffect(() => {
+    // Si se pasa observacionesIniciales, setearlas al abrir
+    if (open && (observacionesIniciales ?? '') !== '') {
+      setObservacionesGenerales(observacionesIniciales || '');
+    }
+  }, [open, observacionesIniciales]);
 
   // Calcular totales
   const totalPagado = formasPago.reduce((sum, fp) => sum + (fp.monto || 0), 0);
@@ -305,7 +317,7 @@ const FormaPagoModal: React.FC<FormaPagoModalProps> = ({
     }
 
     // Todo OK, confirmar
-    onConfirm(formasPago);
+    onConfirm(formasPago, observacionesGenerales || undefined);
     onClose();
   };
 
@@ -671,8 +683,8 @@ const FormaPagoModal: React.FC<FormaPagoModalProps> = ({
                 </>
               )}
 
-              {/* Observaciones generales */}
-              {fp.medioPago !== 'CHEQUE' && fp.medioPago !== 'TRANSFERENCIA' && (
+                    {/* Observaciones generales */}
+                    {fp.medioPago !== 'CHEQUE' && fp.medioPago !== 'TRANSFERENCIA' && (
                 <Grid item xs={12}>
                   <TextField
                     fullWidth
@@ -703,6 +715,18 @@ const FormaPagoModal: React.FC<FormaPagoModalProps> = ({
         >
           Agregar Otra Forma de Pago
         </Button>
+
+        {/* Campo de observaciones generales (opcional) */}
+        <TextField
+          fullWidth
+          size="small"
+          multiline
+          rows={2}
+          label="Observaciones Generales (opcional)"
+          value={observacionesGenerales}
+          onChange={(e) => setObservacionesGenerales(e.target.value)}
+          sx={{ mt: 2 }}
+        />
       </DialogContent>
 
       <DialogActions>

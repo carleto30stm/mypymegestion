@@ -474,6 +474,7 @@ export interface Proveedor {
   nombreContacto?: string;
   email?: string;
   telefono?: string;
+  telefonoAlt?: string;
   direccion?: string;
   ciudad?: string;
   provincia?: string;
@@ -492,6 +493,14 @@ export interface Proveedor {
   fechaCreacion?: string;
   fechaActualizacion?: string;
   ultimaCompra?: string;
+  // Notas e incidentes
+  notas?: Array<{
+    _id?: string;
+    texto: string;
+    tipo: 'incidente' | 'problema' | 'observacion' | 'seguimiento';
+    creadoPor: string;
+    fechaCreacion: string;
+  }>;
   // Virtuals
   tieneSaldoPendiente?: boolean;
   puedeComprarCredito?: boolean;
@@ -957,4 +966,105 @@ export interface AntiguedadDeuda {
     };
   };
   alerta: string | null;
+}
+
+// ========== INTERESES PUNITORIOS ==========
+
+// Estados de interés punitorio
+export const ESTADOS_INTERES = ['devengando', 'cobrado_parcial', 'cobrado_total', 'condonado_parcial', 'condonado_total'] as const;
+
+// Tipos de acción sobre intereses
+export const TIPOS_ACCION_INTERES = ['calculo', 'cobro', 'condonacion'] as const;
+
+// Interface para configuración de tasa de interés
+export interface ConfiguracionIntereses {
+  _id?: string;
+  tasaMensualVigente: number;
+  fechaVigenciaDesde: string;
+  fechaVigenciaHasta?: string;
+  aplicaDesde: number; // Días de mora antes de aplicar interés (ej: 31)
+  fuenteReferencia: string; // Ej: "Banco Nación - Res. 2024/01"
+  observaciones?: string;
+  creadoPor: string;
+  createdAt?: string;
+  updatedAt?: string;
+  tasaDiariaCalculada?: number; // Virtual: tasaMensual / 30
+}
+
+// Interface para documento relacionado al interés
+export interface DocumentoRelacionado {
+  tipo: 'venta' | 'recibo' | 'nota_debito' | 'otro';
+  documentoId: string;
+  numeroDocumento: string;
+  fecha?: string;
+}
+
+// Interface para acción sobre interés (audit trail)
+export interface AccionInteres {
+  fecha: string;
+  tipo: typeof TIPOS_ACCION_INTERES[number];
+  monto: number;
+  usuario: string;
+  observaciones?: string;
+  notaDebitoId?: string; // ID del MovimientoCuentaCorriente generado
+}
+
+// Interface principal de interés punitorio
+export interface InteresPunitorio {
+  _id?: string;
+  clienteId: string | {
+    _id: string;
+    nombre?: string;
+    apellido?: string;
+    razonSocial?: string;
+    numeroDocumento?: string;
+  };
+  documentoRelacionado: DocumentoRelacionado;
+  
+  // Montos originales
+  capitalOriginal: number;
+  
+  // Fechas relevantes
+  fechaVencimiento: string;
+  fechaInicioPunitorio: string; // Vencimiento + aplicaDesde días
+  fechaFinCalculo: string; // Última fecha hasta la que se calculó
+  
+  // Tasas aplicadas
+  tasaInteresMensual: number;
+  tasaDiariaAplicada: number;
+  
+  // Tiempo transcurrido
+  diasTranscurridos: number;
+  
+  // Montos de interés
+  interesDevengado: number; // Total calculado
+  interesCobrado: number; // Ya cobrado (vía Nota Débito)
+  interesCondonado: number; // Perdonado
+  interesPendiente: number; // Devengado - Cobrado - Condonado
+  
+  // Estado
+  estado: typeof ESTADOS_INTERES[number];
+  
+  // Auditoría de acciones
+  acciones: AccionInteres[];
+  
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// Interface para estadísticas de intereses
+export interface EstadisticasIntereses {
+  totalRegistros: number;
+  totalDevengado: number;
+  totalCobrado: number;
+  totalCondonado: number;
+  totalPendiente: number;
+  porEstado: {
+    devengando: number;
+    cobradoParcial: number;
+    cobradoTotal: number;
+    condonadoParcial: number;
+    condonadoTotal: number;
+  };
+  diasPromedio: number;
 }

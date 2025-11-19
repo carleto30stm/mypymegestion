@@ -21,7 +21,9 @@ import ordenesProduccionRoutes from './routes/ordenesProduccion.js';
 import remitosRoutes from './routes/remitos.js';
 import recibosRoutes from './routes/recibos.js';
 import cuentaCorrienteRoutes from './routes/cuentaCorriente.js';
+import interesesRoutes from './routes/intereses.js';
 import migrationChequesRoutes from './routes/migration-cheques.js';
+import { iniciarCalculoInteresesDiario } from './jobs/calcularInteresesPunitorios.js';
 
 dotenv.config();
 
@@ -96,6 +98,7 @@ const start = async () => {
     app.use('/api/remitos', remitosRoutes);
     app.use('/api/recibos', recibosRoutes);
     app.use('/api/cuenta-corriente', cuentaCorrienteRoutes);
+    app.use('/api/intereses', interesesRoutes);
     app.use('/api/migration', migrationChequesRoutes); // Endpoint temporal para migración de cheques
 
     const env = process.env.NODE_ENV || 'development';
@@ -103,6 +106,9 @@ const start = async () => {
       console.log(`🚀 Servidor corriendo en puerto ${PORT} (env: ${env})`);
       console.log(`[DB] Conectado a MongoDB: ${conn?.connection.host}/${conn?.connection.name}`);
       console.log(`[CORS] Origen permitido: ${process.env.CORS_ORIGIN || "http://localhost:5173"}`);
+      
+      // Iniciar cron job para cálculo diario de intereses
+      iniciarCalculoInteresesDiario();
     });
   } catch (err) {
     console.error('[Server] No se pudo iniciar la aplicación debido a un error:', err);

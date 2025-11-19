@@ -34,7 +34,8 @@ import {
   Error,
   CheckCircle,
   Warning,
-  Payment
+  Payment,
+  PictureAsPdf
 } from '@mui/icons-material';
 import { AppDispatch, RootState } from '../redux/store';
 import {
@@ -48,6 +49,7 @@ import { fetchVentas } from '../redux/slices/ventasSlice';
 import { Cliente, FormaPago } from '../types';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import FormaPagoModal from './FormaPagoModal';
+import { cuentaCorrienteAPI } from '../services/api';
 
 interface CuentaCorrienteDetalleProps {
   cliente: Cliente | null;
@@ -103,7 +105,7 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
     setOpenAjusteModal(false);
   };
 
-  const handleRegistrarPago = async (formasPago: FormaPago[]) => {
+  const handleRegistrarPago = async (formasPago: FormaPago[], observacionesGenerales?: string) => {
     if (!cliente?._id || !user?.id || !resumen) {
       return;
     }
@@ -135,7 +137,7 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
         ventasIds, // ✅ Ahora incluye las ventas pendientes para que se actualicen correctamente
         formasPago,
         momentoCobro: 'diferido',
-        observaciones: observacionesPago || `Regularización de deuda - Pago ${espagoCompleto ? 'total' : 'parcial'} - ${ventasIds.length} venta(s) cobrada(s)`,
+        observaciones: observacionesGenerales || observacionesPago || `Regularización de deuda - Pago ${espagoCompleto ? 'total' : 'parcial'} - ${ventasIds.length} venta(s) cobrada(s)`,
         creadoPor: user.id
       })).unwrap();
 
@@ -286,19 +288,33 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
                     justifyContent: 'space-between' 
                   }}
                   action={
-                    <Button
-                      variant="contained"
-                      color="success"
-                      size="large"
-                      startIcon={<Payment />}
-                      onClick={() => {
-                        setOpenPreviewVentas(true);
-                        setOpenPagoModal(true);
-                      }}
-                      sx={{ minWidth: 200 }}
-                    >
-                      Registrar Pago Real
-                    </Button>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Button
+                        variant="outlined"
+                        color="primary"
+                        startIcon={<PictureAsPdf />}
+                        onClick={async () => {
+                          if (cliente?._id) {
+                            await cuentaCorrienteAPI.descargarPDFEstadoCuenta(cliente._id, { incluirIntereses: true });
+                          }
+                        }}
+                      >
+                        Descargar PDF
+                      </Button>
+                      <Button
+                        variant="contained"
+                        color="success"
+                        size="large"
+                        startIcon={<Payment />}
+                        onClick={() => {
+                          setOpenPreviewVentas(true);
+                          setOpenPagoModal(true);
+                        }}
+                        sx={{ minWidth: 200 }}
+                      >
+                        Registrar Pago Real
+                      </Button>
+                    </Box>
                   }
                 >
                   <Box>
@@ -319,7 +335,23 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
             {/* Mensaje cuando tiene saldo a favor */}
             {resumen.saldoActual < 0 && (
               <Grid item xs={12}>
-                <Alert severity="success">
+                <Alert 
+                  severity="success"
+                  action={
+                    <Button
+                      variant="outlined"
+                      color="success"
+                      startIcon={<PictureAsPdf />}
+                      onClick={async () => {
+                        if (cliente?._id) {
+                          await cuentaCorrienteAPI.descargarPDFEstadoCuenta(cliente._id, { incluirIntereses: true });
+                        }
+                      }}
+                    >
+                      Descargar PDF
+                    </Button>
+                  }
+                >
                   <Typography variant="body1" fontWeight="bold">
                     Cliente tiene saldo a favor: {formatCurrency(Math.abs(resumen.saldoActual))}
                   </Typography>
@@ -407,13 +439,26 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
           <Typography variant="h6">
             Movimientos de Cuenta Corriente
           </Typography>
-          <Button
-            variant="contained"
-            startIcon={<Add />}
-            onClick={() => setOpenAjusteModal(true)}
-          >
-            Crear Ajuste
-          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              variant="outlined"
+              startIcon={<PictureAsPdf />}
+              onClick={async () => {
+                if (cliente?._id) {
+                  await cuentaCorrienteAPI.descargarPDFMovimientos(cliente._id, {});
+                }
+              }}
+            >
+              Descargar Movimientos PDF
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<Add />}
+              onClick={() => setOpenAjusteModal(true)}
+            >
+              Crear Ajuste
+            </Button>
+          </Box>
         </Box>
 
         <TableContainer>
@@ -584,6 +629,7 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
           cliente={cliente || undefined}
           onConfirm={handleRegistrarPago}
           permitirPagoParcial={true}
+          observacionesIniciales={observacionesPago}
         />
       )}
 

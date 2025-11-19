@@ -58,6 +58,7 @@ import {
 import { generarRemitoDesdeVenta } from '../redux/slices/remitosSlice';
 import FormaPagoModal from '../components/FormaPagoModal';
 import CuentaCorrienteDetalle from '../components/CuentaCorrienteDetalle';
+import InteresesPunitoriosPage from './InteresesPunitoriosPage';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import { generarPDFRecibo, generarPDFRemito } from '../utils/pdfGenerator';
 import { Venta, Cliente, ReciboPago, FormaPago, ESTADOS_RECIBO, Remito } from '../types';
@@ -574,6 +575,7 @@ const CobranzasPage: React.FC = () => {
             iconPosition="start"
           />
           <Tab label="Cuenta Corriente" icon={<AccountBalanceIcon />} iconPosition="start" />
+          <Tab label="Intereses Punitorios" icon={<MoneyIcon />} iconPosition="start" />
         </Tabs>
 
         {/* TAB 1: Ventas Pendientes */}
@@ -1069,6 +1071,11 @@ const CobranzasPage: React.FC = () => {
           </Box>
 
           <CuentaCorrienteDetalle cliente={clienteCuentaCorriente} />
+        </TabPanel>
+
+        {/* TAB 5: Intereses Punitorios */}
+        <TabPanel value={tabValue} index={4}>
+          <InteresesPunitoriosPage />
         </TabPanel>
       </Paper>
 
