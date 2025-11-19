@@ -535,6 +535,13 @@ export class PDFGenerator {
   ): void {
     this.drawHeader(datosEmpresa);
     this.drawTitle('ESTADO DE CUENTA');
+    // Subtitulo indicando inclusión de intereses
+    this.doc
+      .fontSize(9)
+      .font('Helvetica')
+      .fillColor('#666666')
+      .text('Incluye Intereses: Sí', this.margin, this.yPosition, { align: 'center' });
+    this.yPosition += 18;
     this.drawClienteInfo(cliente, new Date());
     this.drawResumenCuenta(resumen);
     this.drawMovimientos(movimientos);
@@ -558,6 +565,13 @@ export class PDFGenerator {
   ): void {
     this.drawHeader(datosEmpresa);
     this.drawTitle('RESUMEN DE MOVIMIENTOS');
+    // Subtitulo indicando exclusión de intereses
+    this.doc
+      .fontSize(9)
+      .font('Helvetica')
+      .fillColor('#666666')
+      .text('Incluye Intereses: No', this.margin, this.yPosition, { align: 'center' });
+    this.yPosition += 18;
     this.drawClienteInfo(cliente, new Date());
     this.drawResumenCuenta(resumen);
     this.drawMovimientos(movimientos);

@@ -1,15 +1,14 @@
 import Afip from '@afipsdk/afip.js';
 import moment from 'moment';
-import fs from 'fs';
-import path from 'path';
 import type { IFactura } from '../models/Factura.js';
 import { TIPO_COMPROBANTE_CODIGO } from '../models/Factura.js';
+import { cargarCertificadosAFIP } from '../utils/certificadosHelper.js';
 
 // Configuración de AFIP
 export interface AFIPConfig {
   CUIT: string;
-  cert: string;        // Ruta al certificado
-  key: string;         // Ruta a la clave privada
+  cert?: string;       // Ruta al certificado O contenido PEM (opcional si usa variables de entorno)
+  key?: string;        // Ruta a la clave privada O contenido PEM (opcional si usa variables de entorno)
   production: boolean; // true para producción, false para homologación
   ta_folder?: string;  // Carpeta para guardar tickets de autorización
 }
@@ -46,29 +45,14 @@ export class AFIPService {
 
   constructor(config: AFIPConfig) {
     this.config = config;
-    // El SDK espera el contenido PEM del certificado y la clave.
-    // Si en la configuración se pasaron rutas, las leemos desde disco.
-    let certContent: string | undefined = config.cert as string | undefined;
-    let keyContent: string | undefined = config.key as string | undefined;
-
-    try {
-      const certPath = certContent ? path.resolve(String(certContent)) : undefined;
-      const keyPath = keyContent ? path.resolve(String(keyContent)) : undefined;
-
-      if (certPath && fs.existsSync(certPath)) {
-        certContent = fs.readFileSync(certPath, 'utf8');
-      }
-      if (keyPath && fs.existsSync(keyPath)) {
-        keyContent = fs.readFileSync(keyPath, 'utf8');
-      }
-    } catch (err) {
-      console.warn('Warning: no se pudo leer cert/key desde disco, usando los valores tal cual. Error:', err);
-    }
+    
+    // Cargar certificados usando el helper (soporta archivos y variables de entorno)
+    const certificados = cargarCertificadosAFIP();
 
     this.afip = new Afip({
       CUIT: config.CUIT,
-      cert: certContent,
-      key: keyContent,
+      cert: certificados.cert,
+      key: certificados.key,
       production: config.production,
       ta_folder: config.ta_folder || './afip_tokens'
     });
