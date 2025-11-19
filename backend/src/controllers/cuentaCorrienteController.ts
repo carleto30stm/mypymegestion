@@ -1,7 +1,9 @@
 import type { Request as ExpressRequest, Response as ExpressResponse } from 'express';
 import MovimientoCuentaCorriente from '../models/MovimientoCuentaCorriente.js';
 import Cliente from '../models/Cliente.js';
+import InteresPunitorio from '../models/InteresPunitorio.js';
 import mongoose from 'mongoose';
+import { PDFGenerator } from '../utils/pdfGenerator.js';
 
 // @desc    Obtener movimientos de cuenta corriente de un cliente
 // @route   GET /api/cuenta-corriente/:clienteId/movimientos
@@ -446,3 +448,191 @@ async function recalcularSaldos(clienteId: mongoose.Types.ObjectId, session: any
     await cliente.save({ session });
   }
 }
+
+// @desc    Generar PDF de estado de cuenta completo
+// @route   GET /api/cuenta-corriente/:clienteId/pdf/estado-cuenta
+// @access  Private
+export const generarPDFEstadoCuenta = async (req: ExpressRequest, res: ExpressResponse) => {
+  try {
+    const { clienteId } = req.params;
+    const { desde, hasta, incluirIntereses = 'true' } = req.query;
+
+    // Obtener cliente
+    const cliente = await Cliente.findById(clienteId);
+    if (!cliente) {
+      return res.status(404).json({ message: 'Cliente no encontrado' });
+    }
+
+    // Construir filtros para movimientos
+    const filtros: any = { 
+      clienteId: new mongoose.Types.ObjectId(clienteId),
+      anulado: false
+    };
+
+    if (desde || hasta) {
+      filtros.fecha = {};
+      if (desde) filtros.fecha.$gte = new Date(desde as string);
+      if (hasta) filtros.fecha.$lte = new Date(hasta as string);
+    }
+
+    // Obtener movimientos
+    const movimientos = await MovimientoCuentaCorriente.find(filtros)
+      .sort({ fecha: 1, createdAt: 1 })
+      .lean();
+
+    // Calcular resumen
+    const ultimoMovimiento = movimientos[movimientos.length - 1];
+    const saldoActual = ultimoMovimiento?.saldo || 0;
+    const limiteCredito = cliente.limiteCredito || 0;
+    const creditoDisponible = limiteCredito - saldoActual;
+    const porcentajeUso = limiteCredito > 0 ? (saldoActual / limiteCredito) * 100 : 0;
+
+    let estado = 'al_dia';
+    if (saldoActual > limiteCredito) estado = 'moroso';
+    else if (saldoActual > limiteCredito * 0.9) estado = 'limite_excedido';
+    else if (saldoActual > limiteCredito * 0.7) estado = 'proximo_limite';
+
+    const resumen = {
+      saldoActual,
+      limiteCredito,
+      creditoDisponible,
+      estado,
+      porcentajeUso
+    };
+
+    // Obtener intereses si se solicitan
+    let intereses: any[] = [];
+    if (incluirIntereses === 'true') {
+      intereses = await InteresPunitorio.find({
+        clienteId: new mongoose.Types.ObjectId(clienteId),
+        anulado: false
+      }).sort({ fechaInicio: -1 }).lean();
+    }
+
+    // Datos de la empresa (configurar según necesidad)
+    const datosEmpresa = {
+      nombre: process.env.EMPRESA_RAZON_SOCIAL || 'MI EMPRESA',
+      direccion: process.env.EMPRESA_DOMICILIO || 'Dirección de la empresa',
+      telefono: process.env.EMPRESA_TELEFONO || '(123) 456-7890',
+      email: process.env.EMPRESA_EMAIL || 'contacto@empresa.com',
+      cuit: process.env.EMPRESA_CUIT_PDF || '12-34567890-1'
+    };
+
+    // Datos del cliente
+    const datosCliente = {
+      razonSocial: cliente.razonSocial,
+      apellido: cliente.apellido,
+      nombre: cliente.nombre,
+      numeroDocumento: cliente.numeroDocumento,
+      direccion: cliente.direccion,
+      telefono: cliente.telefono,
+      email: cliente.email
+    };
+
+    // Generar PDF
+    const pdfGenerator = new PDFGenerator();
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=estado-cuenta-${cliente.numeroDocumento}-${Date.now()}.pdf`);
+    
+    pdfGenerator.pipe(res);
+    
+    if (incluirIntereses === 'true' && intereses.length > 0) {
+      pdfGenerator.generarEstadoCuentaCompleto(datosEmpresa, datosCliente, resumen, movimientos as any, intereses as any);
+    } else {
+      pdfGenerator.generarResumenMovimientos(datosEmpresa, datosCliente, resumen, movimientos as any);
+    }
+    
+    pdfGenerator.end();
+
+  } catch (error: any) {
+    console.error('Error generando PDF:', error);
+    res.status(500).json({ 
+      message: 'Error al generar PDF', 
+      details: error.message 
+    });
+  }
+};
+
+// @desc    Generar PDF solo de movimientos
+// @route   GET /api/cuenta-corriente/:clienteId/pdf/movimientos
+// @access  Private
+export const generarPDFMovimientos = async (req: ExpressRequest, res: ExpressResponse) => {
+  try {
+    const { clienteId } = req.params;
+    const { desde, hasta } = req.query;
+
+    const cliente = await Cliente.findById(clienteId);
+    if (!cliente) {
+      return res.status(404).json({ message: 'Cliente no encontrado' });
+    }
+
+    const filtros: any = { 
+      clienteId: new mongoose.Types.ObjectId(clienteId),
+      anulado: false
+    };
+
+    if (desde || hasta) {
+      filtros.fecha = {};
+      if (desde) filtros.fecha.$gte = new Date(desde as string);
+      if (hasta) filtros.fecha.$lte = new Date(hasta as string);
+    }
+
+    const movimientos = await MovimientoCuentaCorriente.find(filtros)
+      .sort({ fecha: 1, createdAt: 1 })
+      .lean();
+
+    const ultimoMovimiento = movimientos[movimientos.length - 1];
+    const saldoActual = ultimoMovimiento?.saldo || 0;
+    const limiteCredito = cliente.limiteCredito || 0;
+    const creditoDisponible = limiteCredito - saldoActual;
+    const porcentajeUso = limiteCredito > 0 ? (saldoActual / limiteCredito) * 100 : 0;
+
+    let estado = 'al_dia';
+    if (saldoActual > limiteCredito) estado = 'moroso';
+    else if (saldoActual > limiteCredito * 0.9) estado = 'limite_excedido';
+    else if (saldoActual > limiteCredito * 0.7) estado = 'proximo_limite';
+
+    const resumen = {
+      saldoActual,
+      limiteCredito,
+      creditoDisponible,
+      estado,
+      porcentajeUso
+    };
+
+    const datosEmpresa = {
+      nombre: process.env.EMPRESA_NOMBRE || 'MI EMPRESA',
+      direccion: process.env.EMPRESA_DIRECCION || 'Dirección de la empresa',
+      telefono: process.env.EMPRESA_TELEFONO || '(123) 456-7890',
+      email: process.env.EMPRESA_EMAIL || 'contacto@empresa.com',
+      cuit: process.env.EMPRESA_CUIT || '12-34567890-1'
+    };
+
+    const datosCliente = {
+      razonSocial: cliente.razonSocial,
+      apellido: cliente.apellido,
+      nombre: cliente.nombre,
+      numeroDocumento: cliente.numeroDocumento,
+      direccion: cliente.direccion,
+      telefono: cliente.telefono,
+      email: cliente.email
+    };
+
+    const pdfGenerator = new PDFGenerator();
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=movimientos-${cliente.numeroDocumento}-${Date.now()}.pdf`);
+    
+    pdfGenerator.pipe(res);
+    pdfGenerator.generarResumenMovimientos(datosEmpresa, datosCliente, resumen, movimientos as any);
+    pdfGenerator.end();
+
+  } catch (error: any) {
+    console.error('Error generando PDF:', error);
+    res.status(500).json({ 
+      message: 'Error al generar PDF', 
+      details: error.message 
+    });
+  }
+};

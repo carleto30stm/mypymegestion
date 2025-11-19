@@ -25,17 +25,23 @@ import {
   Alert,
   Tooltip
 } from '@mui/material';
-import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon, Search as SearchIcon } from '@mui/icons-material';
+import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon, Search as SearchIcon, Comment as CommentIcon } from '@mui/icons-material';
+import NotasProveedorModal from '../components/NotasProveedorModal';
 import { proveedoresAPI } from '../services/api';
 import { Proveedor } from '../types';
+import { useSelector } from 'react-redux';
+import { RootState } from '../redux/store';
 
 const ProveedoresPage: React.FC = () => {
+  const { user } = useSelector((state: RootState) => state.auth);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [openDialog, setOpenDialog] = useState(false);
   const [editando, setEditando] = useState(false);
+  const [openNotas, setOpenNotas] = useState(false);
+  const [selectedProveedor, setSelectedProveedor] = useState<Proveedor | null>(null);
   const [busqueda, setBusqueda] = useState('');
   
   const [formData, setFormData] = useState<Partial<Proveedor>>({
@@ -45,6 +51,7 @@ const ProveedoresPage: React.FC = () => {
     nombreContacto: '',
     email: '',
     telefono: '',
+    telefonoAlt: '',
     direccion: '',
     ciudad: '',
     provincia: '',
@@ -152,6 +159,51 @@ const ProveedoresPage: React.FC = () => {
     }
   };
 
+  const storedUser = localStorage.getItem('user');
+  const parsedUser = storedUser ? JSON.parse(storedUser) : null;
+  const userType = parsedUser?.userType as 'admin' | 'oper' | 'oper_ad' | undefined;
+
+  const handleOpenNotas = (proveedor: Proveedor) => {
+    setSelectedProveedor(proveedor);
+    setOpenNotas(true);
+  };
+
+  const handleCloseNotas = () => {
+    setOpenNotas(false);
+    setSelectedProveedor(null);
+  };
+
+  const handleAgregarNota = async (texto: string, tipo: 'incidente' | 'problema' | 'observacion' | 'seguimiento') => {
+    if (!selectedProveedor || !selectedProveedor._id) return;
+    try {
+      setLoading(true);
+      await proveedoresAPI.agregarNota(selectedProveedor._id, { texto, tipo, creadoPor: user?.username || 'Sistema' });
+      // Refrescar lista y proveedor seleccionado
+      await cargarProveedores();
+      const actualizado = await proveedoresAPI.obtenerPorId(selectedProveedor._id);
+      setSelectedProveedor(actualizado);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Error al agregar nota');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEliminarNota = async (notaId: string) => {
+    if (!selectedProveedor || !selectedProveedor._id) return;
+    try {
+      setLoading(true);
+      await proveedoresAPI.eliminarNota(selectedProveedor._id, notaId);
+      await cargarProveedores();
+      const actualizado = await proveedoresAPI.obtenerPorId(selectedProveedor._id);
+      setSelectedProveedor(actualizado);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Error al eliminar nota');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const proveedoresFiltrados = proveedores.filter(p =>
     p.razonSocial.toLowerCase().includes(busqueda.toLowerCase()) ||
     p.numeroDocumento.includes(busqueda) ||
@@ -204,6 +256,7 @@ const ProveedoresPage: React.FC = () => {
               <TableCell>Contacto</TableCell>
               <TableCell>Teléfono</TableCell>
               <TableCell>Saldo Cuenta</TableCell>
+              <TableCell>Observaciones</TableCell>
               <TableCell>Estado</TableCell>
               <TableCell align="right">Acciones</TableCell>
             </TableRow>
@@ -214,10 +267,22 @@ const ProveedoresPage: React.FC = () => {
                 <TableCell>{proveedor.razonSocial}</TableCell>
                 <TableCell>{proveedor.numeroDocumento}</TableCell>
                 <TableCell>{proveedor.nombreContacto || '-'}</TableCell>
-                <TableCell>{proveedor.telefono || '-'}</TableCell>
+                <TableCell>
+                  <Typography variant="caption" display="block">
+                  {proveedor.telefono || '-'}
+                  </Typography>
+                  <Typography variant="caption" display="block">
+                    {proveedor.telefonoAlt || '-'}
+                  </Typography>
+                  </TableCell>
                 <TableCell>
                   <Typography color={proveedor.saldoCuenta > 0 ? 'error' : 'success'}>
                     ${proveedor.saldoCuenta.toFixed(2)}
+                  </Typography>
+                </TableCell>
+                <TableCell>
+                  <Typography variant="body2" color="text.secondary">
+                    {proveedor.observaciones || '-'}
                   </Typography>
                 </TableCell>
                 <TableCell>
@@ -231,6 +296,11 @@ const ProveedoresPage: React.FC = () => {
                   <Tooltip title="Editar">
                     <IconButton onClick={() => handleOpenDialog(proveedor)} size="small">
                       <EditIcon />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Notas">
+                    <IconButton onClick={() => handleOpenNotas(proveedor)} size="small">
+                      <CommentIcon />
                     </IconButton>
                   </Tooltip>
                   <Tooltip title="Desactivar">
@@ -314,6 +384,15 @@ const ProveedoresPage: React.FC = () => {
               />
             </Grid>
             <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Teléfono Alternativo"
+                name="telefonoAlt"
+                value={formData.telefonoAlt || ''}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
               <FormControl fullWidth>
                 <InputLabel>Condición IVA</InputLabel>
                 <Select
@@ -368,6 +447,14 @@ const ProveedoresPage: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+      <NotasProveedorModal
+        open={openNotas}
+        onClose={handleCloseNotas}
+        proveedor={selectedProveedor}
+        onAgregarNota={handleAgregarNota}
+        onEliminarNota={handleEliminarNota}
+        userType={userType}
+      />
     </Box>
   );
 };

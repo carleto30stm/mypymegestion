@@ -7,6 +7,7 @@ export interface IProveedor extends Document {
   nombreContacto?: string;
   email?: string;
   telefono?: string;
+  telefonoAlt?: string;
   direccion?: string;
   ciudad?: string;
   provincia?: string;
@@ -25,6 +26,13 @@ export interface IProveedor extends Document {
   fechaCreacion: Date;
   fechaActualizacion: Date;
   ultimaCompra?: Date;
+  // Notas e incidentes
+  notas?: Array<{
+    texto: string;
+    tipo: 'incidente' | 'problema' | 'observacion' | 'seguimiento';
+    creadoPor: string;
+    fechaCreacion: Date;
+  }>;
 }
 
 const proveedorSchema = new mongoose.Schema<IProveedor>({
@@ -67,6 +75,11 @@ const proveedorSchema = new mongoose.Schema<IProveedor>({
     type: String,
     trim: true,
     maxlength: [20, 'El teléfono no puede exceder 20 caracteres']
+  },
+  telefonoAlt: {
+    type: String,
+    trim: true,
+    maxlength: [20, 'El teléfono alternativo no puede exceder 20 caracteres']
   },
   direccion: {
     type: String,
@@ -154,6 +167,31 @@ const proveedorSchema = new mongoose.Schema<IProveedor>({
   ultimaCompra: {
     type: Date
   }
+  ,
+  // Notas e incidentes
+  notas: [{
+    texto: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: [1000, 'El texto de la nota no puede exceder 1000 caracteres']
+    },
+    tipo: {
+      type: String,
+      required: true,
+      enum: ['incidente', 'problema', 'observacion', 'seguimiento'],
+      default: 'observacion'
+    },
+    creadoPor: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    fechaCreacion: {
+      type: Date,
+      default: Date.now
+    }
+  }]
 }, {
   timestamps: {
     createdAt: 'fechaCreacion',

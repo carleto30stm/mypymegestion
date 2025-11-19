@@ -347,6 +347,7 @@ const MateriasPrimasPage: React.FC = () => {
             <TableRow>
               <TableCell>Código</TableCell>
               <TableCell>Nombre</TableCell>
+              <TableCell>Descripción</TableCell>
               <TableCell>Categoría</TableCell>
               <TableCell>Stock</TableCell>
               <TableCell>Stock Mín</TableCell>
@@ -363,6 +364,11 @@ const MateriasPrimasPage: React.FC = () => {
                 <TableRow key={mp._id}>
                   <TableCell>{mp.codigo}</TableCell>
                   <TableCell>{mp.nombre}</TableCell>
+                  <TableCell>
+                    <Typography variant='caption'>
+                    {mp.descripcion}
+                    </Typography>
+                    </TableCell>
                   <TableCell>{mp.categoria}</TableCell>
                   <TableCell>
                     <Typography color={stockStatus.color}>
