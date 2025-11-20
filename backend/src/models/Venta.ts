@@ -2,18 +2,22 @@ import mongoose, { Document, Schema } from 'mongoose';
 import { 
   CAJAS, 
   MEDIO_PAGO, 
-  ESTADOS_VENTA, 
+  ESTADOS_VENTA,
+  ESTADOS_VENTA_GRANULAR, // Nuevo enum para estados granulares (Fase 2)
   ESTADOS_ENTREGA, 
   ESTADOS_COBRANZA, 
-  ESTADOS_CHEQUE 
+  ESTADOS_CHEQUE,
+  MOMENTO_COBRO
 } from '../Types/Types.js';
 
 type MedioPago = typeof MEDIO_PAGO[number];
 type Cajas = typeof CAJAS[number];
 type EstadoVenta = typeof ESTADOS_VENTA[number];
+type EstadoVentaGranular = typeof ESTADOS_VENTA_GRANULAR[number]; // Fase 2
 type EstadoEntrega = typeof ESTADOS_ENTREGA[number];
 type EstadoCobranza = typeof ESTADOS_COBRANZA[number];
 type EstadoCheque = typeof ESTADOS_CHEQUE[number];
+type MomentoCobro = typeof MOMENTO_COBRO[number];
 
 // Interface para item de venta
 export interface IItemVenta {
@@ -40,9 +44,11 @@ export interface IVenta extends Document {
   iva: number;
   total: number;
   medioPago: MedioPago;
+  momentoCobro: MomentoCobro; // Cuándo se cobra: anticipado, contra_entrega, diferido
   detallesPago?: string; // Para pagos mixtos o información adicional
   banco?: Cajas;
-  estado: EstadoVenta;
+  estado: EstadoVenta; // Estado legacy (mantener compatibilidad)
+  estadoGranular?: EstadoVentaGranular; // Estado detallado (Fase 2 - opcional para migración gradual)
   observaciones?: string;
   vendedor: string; // Usuario que realizó la venta
   gastoRelacionadoId?: mongoose.Types.ObjectId; // Relación con tabla Gasto
@@ -84,6 +90,10 @@ export interface IVenta extends Document {
   saldoPendiente: number;
   recibosRelacionados?: mongoose.Types.ObjectId[];
   ultimaCobranza?: Date;
+  
+  // Campos para facturación
+  facturaId?: mongoose.Types.ObjectId;
+  facturada: boolean;
 }
 
 const ItemVentaSchema = new Schema({
@@ -192,6 +202,12 @@ const VentaSchema = new Schema({
     enum: MEDIO_PAGO,
     default: 'EFECTIVO'
   },
+  momentoCobro: {
+    type: String,
+    required: [true, 'El momento de cobro es requerido'],
+    enum: MOMENTO_COBRO,
+    default: 'diferido' // Por defecto, ventas a crédito
+  },
   detallesPago: {
     type: String,
     trim: true,
@@ -206,6 +222,12 @@ const VentaSchema = new Schema({
     required: [true, 'El estado es requerido'],
     enum: ESTADOS_VENTA,
     default: 'pendiente'
+  },
+  estadoGranular: {
+    type: String,
+    enum: ESTADOS_VENTA_GRANULAR,
+    default: undefined, // Opcional para migración gradual
+    index: true
   },
   observaciones: {
     type: String,
@@ -329,7 +351,16 @@ const VentaSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: 'ReciboPago'
   }],
-  ultimaCobranza: Date
+  ultimaCobranza: Date,
+  // Campos para facturación
+  facturaId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Factura'
+  },
+  facturada: {
+    type: Boolean,
+    default: false
+  }
 }, {
   timestamps: {
     createdAt: 'fechaCreacion',
@@ -394,6 +425,7 @@ VentaSchema.index({ clienteId: 1, fecha: -1 }); // Ventas de un cliente ordenada
 VentaSchema.index({ estado: 1, fecha: -1 }); // Ventas por estado y fecha
 VentaSchema.index({ estadoCobranza: 1, fecha: -1 }); // Ventas pendientes de cobro
 VentaSchema.index({ estadoEntrega: 1, fecha: -1 }); // Ventas por estado de entrega
+VentaSchema.index({ facturada: 1, requiereFacturaAFIP: 1, estado: 1 }); // Ventas sin facturar
 
 const Venta = mongoose.model<IVenta>('Venta', VentaSchema);
 

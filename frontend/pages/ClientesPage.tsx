@@ -214,7 +214,7 @@ const ClientesPage: React.FC = () => {
               <TableCell><strong>Contacto</strong></TableCell>
               <TableCell><strong>Provincia</strong></TableCell>
               <TableCell><strong>Observaciones</strong></TableCell>
-              <TableCell align="center"><strong>Fiscal</strong></TableCell>
+              <TableCell align="center"><strong>Condiciones Pago</strong></TableCell>
               <TableCell align="right"><strong>Saldo Cuenta</strong></TableCell>
               <TableCell align="right"><strong>Límite Crédito</strong></TableCell>
               <TableCell><strong>Estado</strong></TableCell>
@@ -246,22 +246,17 @@ const ClientesPage: React.FC = () => {
                 </TableCell>
                 <TableCell align="center">
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, justifyContent: 'center' }}>
-                    {cliente.requiereFacturaAFIP && (
-                      <Tooltip title="Requiere factura electrónica AFIP">
-                        <Chip label="AFIP" color="info" size="small" sx={{ fontSize: '0.7rem' }} />
-                      </Tooltip>
-                    )}
-                    {!cliente.aplicaIVA && (
-                      <Tooltip title="Cliente exento de IVA">
-                        <Chip label="Sin IVA" color="warning" size="small" sx={{ fontSize: '0.7rem' }} />
-                      </Tooltip>
-                    )}
                     {!cliente.aceptaCheques && (
                       <Tooltip title="No acepta cheques como medio de pago">
-                        <Chip label="No ✓" color="default" size="small" sx={{ fontSize: '0.7rem' }} />
+                        <Chip label="No Cheques" color="default" size="small" sx={{ fontSize: '0.7rem' }} />
                       </Tooltip>
                     )}
-                    {cliente.requiereFacturaAFIP === false && cliente.aplicaIVA && cliente.aceptaCheques && (
+                    {cliente.diasVencimientoCheques && cliente.diasVencimientoCheques !== 30 && cliente.aceptaCheques && (
+                      <Tooltip title={`Cheques a ${cliente.diasVencimientoCheques} días`}>
+                        <Chip label={`${cliente.diasVencimientoCheques}d`} color="info" size="small" sx={{ fontSize: '0.7rem' }} />
+                      </Tooltip>
+                    )}
+                    {!cliente.aceptaCheques && !cliente.diasVencimientoCheques && (
                       <Typography variant="caption" color="textSecondary">-</Typography>
                     )}
                   </Box>
@@ -344,6 +339,13 @@ const ClientesPage: React.FC = () => {
                 label="Número Documento *"
                 value={formData.numeroDocumento}
                 onChange={(e) => setFormData({ ...formData, numeroDocumento: e.target.value })}
+                helperText={
+                  formData.tipoDocumento === 'CUIT' || formData.tipoDocumento === 'CUIL'
+                    ? 'Exactamente 11 dígitos (ej: 20-12345678-9)'
+                    : formData.tipoDocumento === 'DNI'
+                    ? '7 u 8 dígitos'
+                    : 'Cualquier formato'
+                }
               />
             </Grid>
             <Grid item xs={12} md={6}>
@@ -377,6 +379,13 @@ const ClientesPage: React.FC = () => {
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                required={formData.requiereFacturaAFIP}
+                error={formData.requiereFacturaAFIP && !formData.email}
+                helperText={
+                  formData.requiereFacturaAFIP && !formData.email
+                    ? 'Email obligatorio para facturación electrónica AFIP'
+                    : 'Formato: usuario@dominio.com'
+                }
               />
             </Grid>
             <Grid item xs={12} md={6}>
@@ -409,14 +418,52 @@ const ClientesPage: React.FC = () => {
                 label="Ciudad"
                 value={formData.ciudad}
                 onChange={(e) => setFormData({ ...formData, ciudad: e.target.value })}
+                required={formData.requiereFacturaAFIP}
+                error={formData.requiereFacturaAFIP && !formData.ciudad}
+                helperText={
+                  formData.requiereFacturaAFIP && !formData.ciudad
+                    ? 'Ciudad obligatoria para facturación AFIP'
+                    : ''
+                }
               />
             </Grid>
-            <Grid item xs={6}>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Código Postal"
+                value={formData.codigoPostal || ''}
+                onChange={(e) => setFormData({ ...formData, codigoPostal: e.target.value })}
+                required={
+                  formData.requiereFacturaAFIP && 
+                  formData.condicionIVA !== 'Responsable Inscripto'
+                }
+                error={
+                  formData.requiereFacturaAFIP && 
+                  formData.condicionIVA !== 'Responsable Inscripto' && 
+                  !formData.codigoPostal
+                }
+                helperText={
+                  formData.requiereFacturaAFIP && formData.condicionIVA !== 'Responsable Inscripto' && !formData.codigoPostal
+                    ? 'Código postal obligatorio para CF/Monotributista con facturación AFIP'
+                    : formData.condicionIVA === 'Responsable Inscripto'
+                    ? 'Opcional para Responsable Inscripto'
+                    : ''
+                }
+              />
+            </Grid>
+            <Grid item xs={12}>
               <TextField
                 fullWidth
                 label="Dirección"
                 value={formData.direccion}
                 onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
+                required={formData.requiereFacturaAFIP}
+                error={formData.requiereFacturaAFIP && !formData.direccion}
+                helperText={
+                  formData.requiereFacturaAFIP && !formData.direccion
+                    ? 'Dirección obligatoria para facturación AFIP'
+                    : ''
+                }
               />
             </Grid>
             <Grid item xs={12}>

@@ -5,6 +5,7 @@ import Venta from '../models/Venta.js';
 import Gasto from '../models/Gasto.js';
 import Cliente from '../models/Cliente.js';
 import MovimientoCuentaCorriente from '../models/MovimientoCuentaCorriente.js';
+import Factura from '../models/Factura.js'; // Para facturación automática (Fase 2)
 
 // @desc    Obtener todos los recibos con filtros
 // @route   GET /api/recibos
@@ -337,6 +338,49 @@ export const crearRecibo = async (req: ExpressRequest, res: ExpressResponse) => 
         venta.recibosRelacionados.push(reciboGuardado._id as mongoose.Types.ObjectId);
         venta.ultimaCobranza = new Date();
         await venta.save({ session });
+      }
+    }
+
+    // 🆕 FASE 2: Facturación automática al cobrar
+    // Si el cliente tiene facturacionAutomatica=true Y requiereFacturaAFIP=true
+    // Intentar generar facturas automáticamente para ventas sin facturar
+    if (cliente.facturacionAutomatica && cliente.requiereFacturaAFIP && !esRegularizacion) {
+      const ventasSinFacturar = ventas.filter(v => !v.facturada && !v.facturaId);
+      
+      if (ventasSinFacturar.length > 0) {
+        console.log(`[Facturación Automática] Cliente ${nombreCliente} tiene ${ventasSinFacturar.length} ventas sin facturar`);
+        
+        for (const venta of ventasSinFacturar) {
+          try {
+            // Crear factura en borrador automáticamente
+            const facturaAutomatica = new Factura({
+              ventaId: venta._id,
+              clienteId: venta.clienteId,
+              fecha: new Date(),
+              items: venta.items,
+              subtotal: venta.subtotal,
+              iva: venta.iva,
+              total: venta.total,
+              estado: 'borrador', // Crear en borrador, requiere autorización manual AFIP
+              usuarioCreador: creadoPor,
+              observaciones: `Factura generada automáticamente al cobrar recibo ${reciboGuardado.numeroRecibo || 'PENDIENTE'}`
+            });
+
+            const facturaGuardada = await facturaAutomatica.save({ session });
+            
+            // Asociar factura a la venta
+            venta.facturaId = facturaGuardada._id as mongoose.Types.ObjectId;
+            venta.facturada = true; // Marcar como facturada (aunque esté en borrador)
+            await venta.save({ session });
+
+            console.log(`[Facturación Automática] ✅ Factura ${facturaGuardada._id} creada para venta ${venta.numeroVenta}`);
+          } catch (facturaError: any) {
+            // NO fallar todo el recibo si falla la facturación automática
+            // Solo registrar el error y continuar
+            console.error(`[Facturación Automática] ❌ Error al crear factura para venta ${venta.numeroVenta}:`, facturaError.message);
+            // La factura quedará pendiente de creación manual
+          }
+        }
       }
     }
 

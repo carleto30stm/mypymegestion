@@ -23,6 +23,13 @@ router.get('/config/puntos-venta', facturacionController.obtenerPuntosVenta);
 router.post('/desde-venta', facturacionController.crearFacturaDesdeVenta);
 
 /**
+ * @route   POST /api/facturacion/desde-ventas
+ * @desc    Crear factura desde múltiples ventas (agrupación)
+ * @access  Private (admin, oper_ad)
+ */
+router.post('/desde-ventas', facturacionController.crearFacturaDesdeVentas);
+
+/**
  * @route   POST /api/facturacion/manual
  * @desc    Crear factura manual (sin venta previa)
  * @access  Private (admin, oper_ad)

@@ -9,7 +9,8 @@ import {
   registrarPago,
   getEstadisticasVentas,
   getEstadisticasProductos,
-  confirmarVenta
+  confirmarVenta,
+  getVentasSinFacturar
 } from '../controllers/ventasController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
@@ -25,6 +26,8 @@ router.get('/rango', protect, getVentasByRango); // Filtrar por rango de fechas
 router.get('/estadisticas', protect, getEstadisticasVentas); // Estadísticas de ventas
 
 router.get('/estadisticas-productos', protect, getEstadisticasProductos); // Métricas detalladas por producto
+
+router.get('/sin-facturar', protect, getVentasSinFacturar); // Ventas confirmadas que requieren factura y no están facturadas
 
 router.route('/:id')
   .get(protect, getVentaById)

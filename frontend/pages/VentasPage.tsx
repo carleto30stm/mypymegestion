@@ -66,11 +66,10 @@ const VentasPage: React.FC = () => {
   const [clienteId, setClienteId] = useState<string>('');
   const [observaciones, setObservaciones] = useState<string>('');
   const [error, setError] = useState<string>('');
-  const [ventaExitosa, setVentaExitosa] = useState<string | null>(null);
-  const [showFacturarDialog, setShowFacturarDialog] = useState(false);
-  const [facturandoVenta, setFacturandoVenta] = useState(false);
   // Estado para controlar si esta venta específica aplica IVA
   const [aplicaIVAVenta, setAplicaIVAVenta] = useState<boolean>(true);
+  // Estado para momento de cobro
+  const [momentoCobro, setMomentoCobro] = useState<'anticipado' | 'contra_entrega' | 'diferido'>('diferido');
 
   useEffect(() => {
     dispatch(fetchProductos());
@@ -84,6 +83,7 @@ const VentasPage: React.FC = () => {
       setClienteId(ventaParaEditar.clienteId || '');
       setObservaciones(ventaParaEditar.observaciones || '');
       setAplicaIVAVenta(ventaParaEditar.aplicaIVA !== undefined ? ventaParaEditar.aplicaIVA : true);
+      setMomentoCobro(ventaParaEditar.momentoCobro || 'diferido');
     }
   }, [ventaParaEditar]);
 
@@ -213,6 +213,7 @@ const VentasPage: React.FC = () => {
       vendedor: user?.username || 'sistema',
       // Enviar decisión de IVA específica para esta venta
       aplicaIVA: aplicaIVAVenta,
+      momentoCobro: momentoCobro, // Nuevo campo crítico
       requiereFacturaAFIP: totales.clienteSeleccionado?.requiereFacturaAFIP || false
     };
 
@@ -227,44 +228,23 @@ const VentasPage: React.FC = () => {
         return;
       } else {
         // Crear nueva venta
-        const result = await dispatch(createVenta(nuevaVenta)).unwrap();
+        await dispatch(createVenta(nuevaVenta)).unwrap();
         
-        // Guardar el ID de la venta para poder facturar
-        setVentaExitosa(result._id);
-        setShowFacturarDialog(true);
+        // Mostrar mensaje de éxito
+        alert('Venta registrada exitosamente. Puede facturarla desde la página de Facturas.');
         
         // Limpiar formulario
         setCarrito([]);
         setClienteId('');
         setObservaciones('');
         setAplicaIVAVenta(true); // Resetear a true por defecto
+        setMomentoCobro('diferido'); // Resetear a diferido por defecto
         setError('');
         dispatch(fetchProductos()); // Actualizar stock
       }
     } catch (err: any) {
       setError(err.message || 'Error al registrar la venta');
     }
-  };
-
-  const handleFacturar = async () => {
-    if (!ventaExitosa) return;
-
-    setFacturandoVenta(true);
-    try {
-      await dispatch(crearFacturaDesdeVenta(ventaExitosa)).unwrap();
-      alert('Factura creada exitosamente. Puede verla en la sección de Facturación.');
-      setShowFacturarDialog(false);
-      setVentaExitosa(null);
-    } catch (err: any) {
-      setError(err.message || 'Error al crear la factura');
-    } finally {
-      setFacturandoVenta(false);
-    }
-  };
-
-  const handleOmitirFactura = () => {
-    setShowFacturarDialog(false);
-    setVentaExitosa(null);
   };
 
   const totales = calcularTotales();
@@ -486,6 +466,53 @@ const VentasPage: React.FC = () => {
               />
             </Box>
 
+            {/* Selector de Momento de Cobro */}
+            <Box sx={{ mb: 2 }}>
+              <FormControl fullWidth>
+                <InputLabel>Momento de Cobro *</InputLabel>
+                <Select 
+                  value={momentoCobro} 
+                  onChange={(e) => setMomentoCobro(e.target.value as any)}
+                  label="Momento de Cobro *"
+                >
+                  <MenuItem value="anticipado">
+                    <Box>
+                      <Typography variant="body2">📥 Anticipado</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Cobrar ANTES de confirmar venta
+                      </Typography>
+                    </Box>
+                  </MenuItem>
+                  <MenuItem value="contra_entrega">
+                    <Box>
+                      <Typography variant="body2">🚚 Contra Entrega</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Cobrar AL MOMENTO de entregar
+                      </Typography>
+                    </Box>
+                  </MenuItem>
+                  <MenuItem value="diferido">
+                    <Box>
+                      <Typography variant="body2">💳 Diferido (A crédito)</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Cobrar DESPUÉS de confirmar
+                      </Typography>
+                    </Box>
+                  </MenuItem>
+                </Select>
+              </FormControl>
+              {momentoCobro === 'anticipado' && (
+                <Alert severity="info" sx={{ mt: 1 }}>
+                  Deberá registrar el cobro ANTES de confirmar la venta
+                </Alert>
+              )}
+              {momentoCobro === 'diferido' && (
+                <Alert severity="warning" sx={{ mt: 1 }}>
+                  Se generará deuda en cuenta corriente al confirmar
+                </Alert>
+              )}
+            </Box>
+
             <TextField
               fullWidth
               label="Observaciones"
@@ -525,40 +552,6 @@ const VentasPage: React.FC = () => {
           </Paper>
         </Grid>
       </Grid>
-
-      {/* Dialog de Facturación */}
-      <Dialog open={showFacturarDialog} onClose={handleOmitirFactura} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <ReceiptIcon color="primary" />
-            <Typography variant="h6">Venta Registrada Exitosamente</Typography>
-          </Box>
-        </DialogTitle>
-        <DialogContent>
-          <Alert severity="success" sx={{ mb: 2 }}>
-            La venta ha sido registrada correctamente.
-          </Alert>
-          <Typography variant="body1" gutterBottom>
-            ¿Desea generar una factura electrónica para esta venta?
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            Puede crear la factura ahora o hacerlo más tarde desde el historial de ventas.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleOmitirFactura} disabled={facturandoVenta}>
-            Omitir
-          </Button>
-          <Button
-            variant="contained"
-            onClick={handleFacturar}
-            disabled={facturandoVenta}
-            startIcon={facturandoVenta ? <CircularProgress size={20} /> : <ReceiptIcon />}
-          >
-            {facturandoVenta ? 'Creando factura...' : 'Facturar'}
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 };

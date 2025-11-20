@@ -30,9 +30,9 @@ import {
   Receipt as ReceiptIcon,
   Visibility as ViewIcon,
   Cancel as CancelIcon,
-  Description as DescriptionIcon,
   CheckCircle as CheckCircleIcon,
-  Edit as EditIcon
+  Edit as EditIcon,
+  Info as InfoIcon
 } from '@mui/icons-material';
 import { formatCurrency, formatDate } from '../utils/formatters';
 
@@ -48,7 +48,6 @@ const HistorialVentasPage: React.FC = () => {
   const [openAnular, setOpenAnular] = useState(false);
   const [ventaAnular, setVentaAnular] = useState<Venta | null>(null);
   const [motivoAnulacion, setMotivoAnulacion] = useState('');
-  const [facturandoVenta, setFacturandoVenta] = useState<string | null>(null);
   const [confirmandoVenta, setConfirmandoVenta] = useState<string | null>(null);
   const [openEditar, setOpenEditar] = useState(false);
   const [ventaEditar, setVentaEditar] = useState<Venta | null>(null);
@@ -123,16 +122,8 @@ const HistorialVentasPage: React.FC = () => {
   };
 
   const handleFacturar = async (ventaId: string) => {
-    setFacturandoVenta(ventaId);
-    try {
-      await dispatch(crearFacturaDesdeVenta(ventaId)).unwrap();
-      alert('Factura creada exitosamente');
-      dispatch(fetchFacturas({}));
-    } catch (err: any) {
-      alert(err.message || 'Error al crear la factura');
-    } finally {
-      setFacturandoVenta(null);
-    }
+    // DEPRECATED: La facturación ahora se hace desde FacturasPage
+    alert('La facturación ahora se realiza desde la página de Facturas');
   };
 
   const getFacturaByVentaId = (ventaId: string) => {
@@ -175,6 +166,62 @@ const HistorialVentasPage: React.FC = () => {
     }
   };
 
+  // Validación para determinar si una venta puede confirmarse según momentoCobro
+  const puedeConfirmar = (venta: Venta): { puede: boolean; razon?: string } => {
+    if (!venta.momentoCobro) {
+      // Si no tiene momentoCobro (ventas antiguas), permitir confirmar (comportamiento legacy)
+      return { puede: true };
+    }
+
+    if (venta.momentoCobro === 'anticipado') {
+      // Ventas anticipadas requieren cobro ANTES de confirmar
+      if (venta.estadoCobranza !== 'cobrado') {
+        return { 
+          puede: false, 
+          razon: 'Venta anticipada requiere cobro previo. Debe registrar el cobro ANTES de confirmar.' 
+        };
+      }
+    }
+
+    if (venta.momentoCobro === 'contra_entrega') {
+      // Contra entrega requiere cobro Y entrega simultáneos
+      if (venta.estadoCobranza !== 'cobrado') {
+        return { 
+          puede: false, 
+          razon: 'Venta contra entrega requiere cobro registrado. Debe registrar el cobro junto con la entrega.' 
+        };
+      }
+      if (venta.estadoEntrega !== 'entregado') {
+        return { 
+          puede: false, 
+          razon: 'Venta contra entrega requiere entrega completada. Debe marcar la entrega junto con el cobro.' 
+        };
+      }
+    }
+
+    // Ventas diferidas (a crédito) pueden confirmarse sin cobro previo
+    return { puede: true };
+  };
+
+  // Helper para obtener propiedades de visualización del estado granular
+  const getEstadoGranularProps = (venta: Venta) => {
+    const estadoGranular = venta.estadoGranular || venta.estado; // Fallback a estado legacy
+    
+    const configs = {
+      borrador: { color: 'default' as const, emoji: '📝', label: 'Borrador' },
+      pendiente: { color: 'warning' as const, emoji: '⏳', label: 'Pendiente' },
+      confirmada: { color: 'success' as const, emoji: '✅', label: 'Confirmada' },
+      facturada: { color: 'info' as const, emoji: '📄', label: 'Facturada' },
+      entregada: { color: 'primary' as const, emoji: '🚚', label: 'Entregada' },
+      cobrada: { color: 'secondary' as const, emoji: '💰', label: 'Cobrada' },
+      completada: { color: 'success' as const, emoji: '🎉', label: 'Completada' },
+      anulada: { color: 'error' as const, emoji: '❌', label: 'Anulada' },
+      parcial: { color: 'warning' as const, emoji: '⚠️', label: 'Parcial' }
+    };
+
+    return configs[estadoGranular as keyof typeof configs] || configs.pendiente;
+  };
+
   const canAnular = user?.userType === 'admin';
   const canConfirm = user?.userType === 'admin' || user?.userType === 'oper_ad' || user?.userType === 'oper';
   const canEdit = user?.userType === 'admin' || user?.userType === 'oper_ad' || user?.userType === 'oper';
@@ -197,7 +244,6 @@ const HistorialVentasPage: React.FC = () => {
               <TableCell align="right"><strong>Total</strong></TableCell>
               <TableCell><strong>Medio Pago</strong></TableCell>
               <TableCell><strong>Estado</strong></TableCell>
-              <TableCell align="center"><strong>Factura</strong></TableCell>
               <TableCell align="center"><strong>Acciones</strong></TableCell>
             </TableRow>
           </TableHead>
@@ -221,51 +267,75 @@ const HistorialVentasPage: React.FC = () => {
                   )}
                 </TableCell>
                 <TableCell>
-                  <Chip
-                    label={venta.estado.toUpperCase()}
-                    color={venta.estado === 'confirmada' ? 'success' : venta.estado === 'anulada' ? 'error' : 'warning'}
-                    size="small"
-                  />
-                </TableCell>
-                <TableCell align="center">
                   {(() => {
-                    const factura = getFacturaByVentaId(venta._id!);
-                    if (factura) {
-                      return (
+                    const estadoProps = getEstadoGranularProps(venta);
+                    return (
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                         <Chip
-                          label={factura.estado.toUpperCase()}
-                          color={
-                            factura.estado === 'autorizada'
-                              ? 'success'
-                              : factura.estado === 'borrador'
-                              ? 'default'
-                              : 'error'
-                          }
+                          label={`${estadoProps.emoji} ${estadoProps.label}`}
+                          color={estadoProps.color}
                           size="small"
                         />
-                      );
-                    }
-                    return <Typography variant="body2" color="text.secondary">-</Typography>;
+                        {/* Mostrar sub-estados si aplica */}
+                        {venta.estadoGranular && venta.estadoGranular !== 'anulada' && venta.estadoGranular !== 'completada' && (
+                          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                            {venta.estadoCobranza !== 'sin_cobrar' && (
+                              <Chip 
+                                label={venta.estadoCobranza === 'cobrado' ? '💰' : '💵'} 
+                                size="small" 
+                                variant="outlined"
+                                sx={{ fontSize: '0.65rem', height: '18px' }}
+                              />
+                            )}
+                            {venta.estadoEntrega !== 'sin_remito' && (
+                              <Chip 
+                                label={venta.estadoEntrega === 'entregado' ? '📦' : '🚛'} 
+                                size="small" 
+                                variant="outlined"
+                                sx={{ fontSize: '0.65rem', height: '18px' }}
+                              />
+                            )}
+                            {venta.facturada && (
+                              <Chip 
+                                label="📄" 
+                                size="small" 
+                                variant="outlined"
+                                sx={{ fontSize: '0.65rem', height: '18px' }}
+                              />
+                            )}
+                          </Box>
+                        )}
+                      </Box>
+                    );
                   })()}
                 </TableCell>
                 <TableCell align="center">
                   <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
-                    {canConfirm && venta.estado === 'pendiente' && (
-                      <Tooltip title="Confirmar Venta">
-                        <IconButton
-                          size="small"
-                          color="success"
-                          onClick={() => handleOpenConfirmar(venta)}
-                          disabled={confirmandoVenta === venta._id}
-                        >
-                          {confirmandoVenta === venta._id ? (
-                            <CircularProgress size={20} />
-                          ) : (
-                            <CheckCircleIcon fontSize="small" />
-                          )}
-                        </IconButton>
-                      </Tooltip>
-                    )}
+                    {canConfirm && venta.estado === 'pendiente' && (() => {
+                      const validacion = puedeConfirmar(venta);
+                      const tooltipMessage = validacion.puede 
+                        ? "Confirmar Venta" 
+                        : validacion.razon || "No se puede confirmar";
+                      
+                      return (
+                        <Tooltip title={tooltipMessage}>
+                          <span>
+                            <IconButton
+                              size="small"
+                              color="success"
+                              onClick={() => handleOpenConfirmar(venta)}
+                              disabled={confirmandoVenta === venta._id || !validacion.puede}
+                            >
+                              {confirmandoVenta === venta._id ? (
+                                <CircularProgress size={20} />
+                              ) : (
+                                <CheckCircleIcon fontSize="small" />
+                              )}
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      );
+                    })()}
 
                     {canEdit && venta.estado === 'pendiente' && (
                       <Tooltip title="Editar Venta">
@@ -284,23 +354,6 @@ const HistorialVentasPage: React.FC = () => {
                         <ViewIcon fontSize="small" />
                       </IconButton>
                     </Tooltip>
-                    
-                    {venta.estado === 'confirmada' && !getFacturaByVentaId(venta._id!) && (
-                      <Tooltip title="Crear Factura">
-                        <IconButton
-                          size="small"
-                          color="primary"
-                          onClick={() => handleFacturar(venta._id!)}
-                          disabled={facturandoVenta === venta._id}
-                        >
-                          {facturandoVenta === venta._id ? (
-                            <CircularProgress size={20} />
-                          ) : (
-                            <DescriptionIcon fontSize="small" />
-                          )}
-                        </IconButton>
-                      </Tooltip>
-                    )}
 
                     {canAnular && venta.estado === 'confirmada' && (
                       <Tooltip title="Anular">
@@ -465,38 +518,78 @@ const HistorialVentasPage: React.FC = () => {
             Esta acción confirmará la venta, actualizará el stock de productos y afectará el saldo del cliente.
           </Typography>
 
-          {ventaConfirmar && (
-            <Box sx={{
-              bgcolor: 'background.default',
-              p: 2,
-              borderRadius: 1,
-              border: '1px solid',
-              borderColor: 'divider',
-              mt: 2
-            }}>
-              <Typography variant="body2" gutterBottom>
-                <strong>Cliente:</strong> {ventaConfirmar.nombreCliente}
-              </Typography>
-              <Typography variant="body2" gutterBottom>
-                <strong>Fecha:</strong> {formatDate(ventaConfirmar.fecha)}
-              </Typography>
-              <Typography variant="body2" gutterBottom>
-                <strong>Items:</strong> {ventaConfirmar.items.length}
-              </Typography>
-              <Typography variant="body2" gutterBottom>
-                <strong>Medio de Pago:</strong> {ventaConfirmar.medioPago}
-              </Typography>
-              <Typography
-                variant="h6"
-                sx={{
-                  color: 'success.main',
-                  mt: 1
-                }}
-              >
-                <strong>Total:</strong> {formatCurrency(ventaConfirmar.total)}
-              </Typography>
-            </Box>
-          )}
+          {ventaConfirmar && (() => {
+            const validacion = puedeConfirmar(ventaConfirmar);
+            return (
+              <>
+                {/* Alerta de validación si NO puede confirmar */}
+                {!validacion.puede && (
+                  <Box sx={{ mt: 2, mb: 2 }}>
+                    <Typography 
+                      variant="body2" 
+                      sx={{ 
+                        bgcolor: 'error.light', 
+                        color: 'error.contrastText',
+                        p: 2, 
+                        borderRadius: 1,
+                        border: '1px solid',
+                        borderColor: 'error.main'
+                      }}
+                    >
+                      ⚠️ <strong>No se puede confirmar:</strong> {validacion.razon}
+                    </Typography>
+                  </Box>
+                )}
+
+                {/* Detalle de la venta */}
+                <Box sx={{
+                  bgcolor: 'background.default',
+                  p: 2,
+                  borderRadius: 1,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  mt: 2
+                }}>
+                  <Typography variant="body2" gutterBottom>
+                    <strong>Cliente:</strong> {ventaConfirmar.nombreCliente}
+                  </Typography>
+                  <Typography variant="body2" gutterBottom>
+                    <strong>Fecha:</strong> {formatDate(ventaConfirmar.fecha)}
+                  </Typography>
+                  <Typography variant="body2" gutterBottom>
+                    <strong>Items:</strong> {ventaConfirmar.items.length}
+                  </Typography>
+                  <Typography variant="body2" gutterBottom>
+                    <strong>Medio de Pago:</strong> {ventaConfirmar.medioPago}
+                  </Typography>
+                  {ventaConfirmar.momentoCobro && (
+                    <Typography variant="body2" gutterBottom>
+                      <strong>Momento de Cobro:</strong> {
+                        ventaConfirmar.momentoCobro === 'anticipado' ? '📥 Anticipado' :
+                        ventaConfirmar.momentoCobro === 'contra_entrega' ? '🚚 Contra Entrega' :
+                        '💳 Diferido (A crédito)'
+                      }
+                    </Typography>
+                  )}
+                  <Typography variant="body2" gutterBottom>
+                    <strong>Estado Cobro:</strong> {ventaConfirmar.estadoCobranza || 'pendiente'}
+                  </Typography>
+                  <Typography variant="body2" gutterBottom>
+                    <strong>Estado Entrega:</strong> {ventaConfirmar.estadoEntrega || 'pendiente'}
+                  </Typography>
+                  <Typography
+                    variant="h6"
+                    sx={{
+                      color: 'success.main',
+                      mt: 1
+                    }}
+                  >
+                    <strong>Total:</strong> {formatCurrency(ventaConfirmar.total)}
+                  </Typography>
+                </Box>
+              </>
+            );
+          })()}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button
@@ -511,7 +604,11 @@ const HistorialVentasPage: React.FC = () => {
             variant="contained"
             color="success"
             startIcon={<CheckCircleIcon />}
-            disabled={confirmandoVenta === ventaConfirmar?._id}
+            disabled={
+              confirmandoVenta === ventaConfirmar?._id || 
+              !ventaConfirmar ||
+              !puedeConfirmar(ventaConfirmar).puede
+            }
             autoFocus
           >
             {confirmandoVenta === ventaConfirmar?._id ? (

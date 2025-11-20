@@ -44,33 +44,46 @@ function mostrarInfo() {
   console.log('   • Los guardará en la carpeta backend/certs/\n');
   console.log('⚠️  IMPORTANTE:');
   console.log('   • Solo funciona para ambiente de HOMOLOGACIÓN (testing)');
-  console.log('   • Necesitas tu CUIT y contraseña de Clave Fiscal AFIP');
+  console.log('   • Necesitas CUIT y Clave Fiscal nivel 3 de AFIP');
   console.log('   • Para producción deberás usar el método manual con OpenSSL\n');
+  console.log('📋 Conceptos:');
+  console.log('   • REPRESENTADO: CUIT de la empresa/sociedad (aparece en certificado)');
+  console.log('   • REPRESENTANTE (Usuario): Tu CUIT personal (para login AFIP)');
+  console.log('   • Si sos monotributista/autónomo, ambos CUITs son el mismo\n');
 }
 
 async function obtenerDatos() {
   const cuitEnv = process.env.AFIP_CUIT || '';
+  const empresaCuit = process.env.EMPRESA_CUIT || '';
   
   console.log('📝 Ingresa los siguientes datos:\n');
+  console.log('ℹ️  Notas importantes:');
+  console.log('   • CUIT Representado: CUIT de la empresa/sociedad para el certificado');
+  console.log('   • CUIT Usuario: Tu CUIT personal para loguearte en AFIP');
+  console.log('   • Si son la misma persona, usa el mismo CUIT en ambos\n');
   
-  // CUIT
-  let cuit = await pregunta(`   CUIT [${cuitEnv}]: `);
+  // CUIT del representado (empresa/sociedad)
+  let cuit = await pregunta(`   CUIT Representado (empresa) [${empresaCuit || cuitEnv}]: `);
   if (!cuit.trim()) {
-    cuit = cuitEnv;
+    cuit = empresaCuit || cuitEnv;
   }
   
   if (!cuit || cuit.length !== 11) {
     throw new Error('CUIT inválido. Debe tener 11 dígitos sin guiones.');
   }
   
-  // Username (normalmente el mismo CUIT)
-  let username = await pregunta(`   Usuario AFIP [${cuit}]: `);
+  // Username (CUIT del representante - quien se loguea)
+  let username = await pregunta(`   CUIT Usuario (tu CUIT personal) [${cuit}]: `);
   if (!username.trim()) {
     username = cuit;
   }
   
+  if (!username || username.length !== 11) {
+    throw new Error('CUIT de usuario inválido. Debe tener 11 dígitos sin guiones.');
+  }
+  
   // Contraseña
-  console.log('   Contraseña AFIP: ');
+  console.log('   Contraseña AFIP (Clave Fiscal del usuario): ');
   const password = await pregunta('   (oculta) > ');
   
   if (!password.trim()) {
@@ -248,7 +261,8 @@ async function main() {
     const datos = await obtenerDatos();
     
     console.log('\n⚠️  Estás a punto de generar certificados con estos datos:');
-    console.log(`   CUIT: ${datos.cuit}`);
+    console.log(`   CUIT Representado (empresa): ${datos.cuit}`);
+    console.log(`   CUIT Usuario (login AFIP): ${datos.username}`);
     console.log(`   Alias: ${datos.alias}`);
     
     const confirmar = await pregunta('\n   ¿Continuar? (s/n): ');

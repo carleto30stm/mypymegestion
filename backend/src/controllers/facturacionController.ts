@@ -5,16 +5,15 @@ import Venta from '../models/Venta.js';
 import Cliente from '../models/Cliente.js';
 import AFIPService from '../services/afipService.js';
 
-// Configuración de AFIP desde variables de entorno
-// NOTA: cert y key no son necesarios aquí, cargarCertificadosAFIP() los maneja automáticamente
-const afipConfig = {
+// Helper para obtener configuración de AFIP (lee variables al momento de la llamada)
+const getAfipConfig = () => ({
   CUIT: process.env.AFIP_CUIT || '',
   production: process.env.AFIP_PRODUCTION === 'true',
   ta_folder: process.env.AFIP_TA_FOLDER || './afip_tokens'
-};
+});
 
-// Datos de la empresa (deben venir de configuración)
-const EMPRESA = {
+// Helper para obtener datos de la empresa (lee variables al momento de la llamada)
+const getEmpresaData = () => ({
   cuit: process.env.EMPRESA_CUIT || '',
   razonSocial: process.env.EMPRESA_RAZON_SOCIAL || '',
   domicilio: process.env.EMPRESA_DOMICILIO || '',
@@ -22,7 +21,7 @@ const EMPRESA = {
   ingresosBrutos: process.env.EMPRESA_IIBB || '',
   inicioActividades: new Date(process.env.EMPRESA_INICIO_ACTIVIDADES || '2020-01-01'),
   puntoVenta: parseInt(process.env.AFIP_PUNTO_VENTA || '1')
-};
+});
 
 /**
  * Crear factura desde una venta
@@ -31,6 +30,17 @@ export const crearFacturaDesdeVenta = async (req: Request, res: Response) => {
   try {
     const { ventaId } = req.body;
     const username = (req as any).user?.username || 'sistema';
+
+    // Obtener configuración de empresa
+    const EMPRESA = getEmpresaData();
+
+    // Validar que los datos de la empresa estén configurados
+    if (!EMPRESA.cuit || !EMPRESA.razonSocial || !EMPRESA.domicilio) {
+      return res.status(500).json({ 
+        error: 'Configuración de empresa incompleta',
+        detalle: 'Faltan variables de entorno: EMPRESA_CUIT, EMPRESA_RAZON_SOCIAL o EMPRESA_DOMICILIO'
+      });
+    }
 
     // Buscar la venta
     const venta = await Venta.findById(ventaId).populate('clienteId');
@@ -145,6 +155,191 @@ export const crearFacturaDesdeVenta = async (req: Request, res: Response) => {
 };
 
 /**
+ * Crear factura desde múltiples ventas (agrupación)
+ */
+export const crearFacturaDesdeVentas = async (req: Request, res: Response) => {
+  try {
+    const { ventasIds } = req.body;
+    const username = (req as any).user?.username || 'sistema';
+
+    // Validar que ventas sea un array
+    if (!Array.isArray(ventasIds) || ventasIds.length === 0) {
+      return res.status(400).json({ error: 'Debe proporcionar al menos una venta' });
+    }
+
+    // Obtener configuración de empresa
+    const EMPRESA = getEmpresaData();
+
+    // Validar configuración
+    if (!EMPRESA.cuit || !EMPRESA.razonSocial || !EMPRESA.domicilio) {
+      return res.status(500).json({ 
+        error: 'Configuración de empresa incompleta',
+        detalle: 'Faltan variables de entorno: EMPRESA_CUIT, EMPRESA_RAZON_SOCIAL o EMPRESA_DOMICILIO'
+      });
+    }
+
+    // Buscar todas las ventas
+    const ventas = await Venta.find({ _id: { $in: ventasIds } }).populate('clienteId');
+    
+    if (ventas.length === 0) {
+      return res.status(404).json({ error: 'No se encontraron ventas' });
+    }
+
+    if (ventas.length !== ventasIds.length) {
+      return res.status(400).json({ error: 'Algunas ventas no existen' });
+    }
+
+    // Validar que todas las ventas sean del mismo cliente
+    const primeraVenta = ventas[0]!; // Type assertion: sabemos que existe por validación anterior
+    const primerClienteId = primeraVenta.clienteId._id.toString();
+    const todosDelMismoCliente = ventas.every(v => v.clienteId._id.toString() === primerClienteId);
+    
+    if (!todosDelMismoCliente) {
+      return res.status(400).json({ error: 'Todas las ventas deben ser del mismo cliente' });
+    }
+
+    // Validar que ninguna venta esté ya facturada
+    const algunaFacturada = ventas.some(v => v.facturada);
+    if (algunaFacturada) {
+      return res.status(400).json({ error: 'Algunas ventas ya están facturadas' });
+    }
+
+    // Validar que todas requieran factura AFIP o tengan IVA aplicado
+    const todasRequierenFactura = ventas.every(v => v.requiereFacturaAFIP || v.aplicaIVA);
+    if (!todasRequierenFactura) {
+      return res.status(400).json({ error: 'Todas las ventas deben requerir factura AFIP o tener IVA aplicado' });
+    }
+
+    // Obtener cliente
+    const cliente = await Cliente.findById(primerClienteId);
+    if (!cliente) {
+      return res.status(404).json({ error: 'Cliente no encontrado' });
+    }
+
+    // Determinar tipo de factura
+    const tipoComprobante = AFIPService.determinarTipoFactura(
+      EMPRESA.condicionIVA,
+      cliente.condicionIVA
+    );
+
+    const discriminaIVA = tipoComprobante === 'FACTURA_A';
+    const alicuotaIVA = discriminaIVA ? 21 : 0;
+
+    // Agrupar items de todas las ventas
+    const itemsMap = new Map();
+    
+    ventas.forEach(venta => {
+      venta.items.forEach(item => {
+        const key = `${item.codigoProducto}-${item.precioUnitario}`;
+        
+        if (itemsMap.has(key)) {
+          const existing = itemsMap.get(key);
+          existing.cantidad += item.cantidad;
+          existing.importeBruto += item.subtotal;
+          existing.importeDescuento += item.descuento;
+          existing.importeNeto += item.total;
+        } else {
+          itemsMap.set(key, {
+            codigo: item.codigoProducto,
+            descripcion: item.nombreProducto,
+            cantidad: item.cantidad,
+            unidadMedida: '7',
+            precioUnitario: item.precioUnitario,
+            importeBruto: item.subtotal,
+            importeDescuento: item.descuento,
+            importeNeto: item.total,
+            alicuotaIVA: alicuotaIVA,
+            importeIVA: 0, // Se calculará después
+            importeTotal: 0
+          });
+        }
+      });
+    });
+
+    // Calcular IVA para cada item agrupado
+    const items = Array.from(itemsMap.values()).map(item => {
+      const importeIVA = discriminaIVA 
+        ? AFIPService.calcularIVA(item.importeNeto, alicuotaIVA)
+        : 0;
+      
+      return {
+        ...item,
+        importeIVA,
+        importeTotal: item.importeNeto + importeIVA
+      };
+    });
+    // Crear factura
+    const factura = new Factura({
+      ventaId: primeraVenta._id, // Por compatibilidad
+      ventasRelacionadas: ventasIds,
+      clienteId: cliente._id,
+      tipoComprobante,
+      estado: 'borrador',
+      
+      // Datos emisor
+      emisorCUIT: EMPRESA.cuit,
+      emisorRazonSocial: EMPRESA.razonSocial,
+      emisorDomicilio: EMPRESA.domicilio,
+      emisorCondicionIVA: EMPRESA.condicionIVA,
+      emisorIngresosBrutos: EMPRESA.ingresosBrutos,
+      emisorInicioActividades: EMPRESA.inicioActividades,
+      
+      // Datos receptor
+      receptorTipoDocumento: AFIPService.obtenerCodigoTipoDocumento(cliente.tipoDocumento),
+      receptorNumeroDocumento: cliente.numeroDocumento,
+      receptorRazonSocial: cliente.razonSocial || `${cliente.nombre} ${cliente.apellido || ''}`.trim(),
+      receptorDomicilio: cliente.direccion,
+      receptorCondicionIVA: cliente.condicionIVA,
+      
+      // Fechas
+      fecha: new Date(),
+      
+      // Items agrupados
+      items,
+      
+      // Totales (se calculan automáticamente)
+      subtotal: 0,
+      descuentoTotal: 0,
+      importeNetoGravado: 0,
+      importeNoGravado: 0,
+      importeExento: 0,
+      importeIVA: 0,
+      importeOtrosTributos: 0,
+      importeTotal: 0,
+      detalleIVA: [],
+      
+      // Datos AFIP
+      datosAFIP: {
+        puntoVenta: EMPRESA.puntoVenta
+      },
+      
+      // Observaciones
+      observaciones: `Factura generada desde ${ventas.length} venta(s): ${ventas.map(v => v.numeroVenta).join(', ')}`,
+      
+      // Otros
+      concepto: 1,
+      monedaId: 'PES',
+      cotizacionMoneda: 1,
+      usuarioCreador: username
+    });
+
+    await factura.save();
+
+    res.status(201).json({
+      message: `Factura creada exitosamente desde ${ventas.length} venta(s)`,
+      factura,
+      ventasAgrupadas: ventas.length
+    });
+  } catch (error: any) {
+    console.error('Error al crear factura desde ventas:', error);
+    res.status(500).json({ 
+      error: 'Error al crear factura', 
+      detalle: error.message 
+    });
+  }
+};
+
+/**
  * Crear factura manual (sin venta previa)
  */
 export const crearFacturaManual = async (req: Request, res: Response) => {
@@ -159,6 +354,17 @@ export const crearFacturaManual = async (req: Request, res: Response) => {
       fechaServicioHasta,
       observaciones 
     } = req.body;
+
+    // Obtener configuración de empresa
+    const EMPRESA = getEmpresaData();
+
+    // Validar que los datos de la empresa estén configurados
+    if (!EMPRESA.cuit || !EMPRESA.razonSocial || !EMPRESA.domicilio) {
+      return res.status(500).json({ 
+        error: 'Configuración de empresa incompleta',
+        detalle: 'Faltan variables de entorno: EMPRESA_CUIT, EMPRESA_RAZON_SOCIAL o EMPRESA_DOMICILIO'
+      });
+    }
 
     // Validar datos requeridos
     if (!clienteId || !items || items.length === 0) {
@@ -274,7 +480,7 @@ export const autorizarFactura = async (req: Request, res: Response) => {
     }
 
     // Crear servicio AFIP
-    const afipService = new AFIPService(afipConfig);
+    const afipService = new AFIPService(getAfipConfig());
 
     // Solicitar CAE
     const resultado = await afipService.solicitarCAE(factura);
@@ -303,11 +509,29 @@ export const autorizarFactura = async (req: Request, res: Response) => {
       factura.estado = 'autorizada';
       await factura.save();
 
+      // Marcar ventas relacionadas como facturadas
+      const ventasIds = factura.ventasRelacionadas && factura.ventasRelacionadas.length > 0 
+        ? factura.ventasRelacionadas 
+        : factura.ventaId ? [factura.ventaId] : [];
+      
+      if (ventasIds.length > 0) {
+        await Venta.updateMany(
+          { _id: { $in: ventasIds } },
+          { 
+            $set: { 
+              facturada: true,
+              facturaId: factura._id
+            }
+          }
+        );
+      }
+
       res.json({
         message: 'Factura autorizada exitosamente por AFIP',
         factura,
         cae: resultado.cae,
-        numeroComprobante: resultado.numeroComprobante
+        numeroComprobante: resultado.numeroComprobante,
+        ventasActualizadas: ventasIds.length
       });
     } else {
       // Rechazada por AFIP
@@ -464,7 +688,7 @@ export const verificarCAE = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'La factura no tiene CAE' });
     }
 
-    const afipService = new AFIPService(afipConfig);
+    const afipService = new AFIPService(getAfipConfig());
     
     const valido = await afipService.verificarCAE(
       factura.datosAFIP.cae,
@@ -493,7 +717,7 @@ export const verificarCAE = async (req: Request, res: Response) => {
  */
 export const obtenerPuntosVenta = async (req: Request, res: Response) => {
   try {
-    const afipService = new AFIPService(afipConfig);
+    const afipService = new AFIPService(getAfipConfig());
     const puntosVenta = await afipService.obtenerPuntosVenta();
 
     res.json({ puntosVenta });

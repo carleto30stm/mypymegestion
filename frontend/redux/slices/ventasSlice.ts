@@ -1,9 +1,10 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import api from '../../services/api';
+import api, { ventasAPI } from '../../services/api';
 import { Venta, EstadisticasVentas } from '../../types';
 
 interface VentasState {
   items: Venta[];
+  sinFacturar: Venta[]; // Ventas confirmadas que requieren facturación
   estadisticas: EstadisticasVentas | null;
   status: 'idle' | 'loading' | 'succeeded' | 'failed';
   error: string | null;
@@ -11,6 +12,7 @@ interface VentasState {
 
 const initialState: VentasState = {
   items: [],
+  sinFacturar: [],
   estadisticas: null,
   status: 'idle',
   error: null,
@@ -113,6 +115,18 @@ export const fetchEstadisticasVentas = createAsyncThunk(
   }
 );
 
+export const fetchVentasSinFacturar = createAsyncThunk(
+  'ventas/fetchSinFacturar',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await ventasAPI.getSinFacturar();
+      return response;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.message || 'Error al cargar ventas sin facturar');
+    }
+  }
+);
+
 const ventasSlice = createSlice({
   name: 'ventas',
   initialState,
@@ -170,6 +184,18 @@ const ventasSlice = createSlice({
       // Fetch estadísticas
       .addCase(fetchEstadisticasVentas.fulfilled, (state, action: PayloadAction<EstadisticasVentas>) => {
         state.estadisticas = action.payload;
+      })
+      // Fetch ventas sin facturar
+      .addCase(fetchVentasSinFacturar.pending, (state) => {
+        state.status = 'loading';
+      })
+      .addCase(fetchVentasSinFacturar.fulfilled, (state, action: PayloadAction<Venta[]>) => {
+        state.status = 'succeeded';
+        state.sinFacturar = action.payload;
+      })
+      .addCase(fetchVentasSinFacturar.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = action.payload as string;
       });
   },
 });

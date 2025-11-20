@@ -102,13 +102,47 @@ async function verificarConectividad() {
         console.log('   ✅ Autenticación exitosa\n');
       } catch (authError) {
         console.log('   ❌ Error en autenticación:\n');
-        console.log(`      ${authError.message}\n`);
+        console.log(`      Mensaje: ${authError.message}\n`);
+        
+        // Mostrar detalles completos del error
+        if (authError.response) {
+          console.log('   📋 Detalles del error HTTP:\n');
+          console.log(`      Status: ${authError.response.status}`);
+          console.log(`      Status Text: ${authError.response.statusText}`);
+          
+          if (authError.response.data) {
+            console.log(`      Data: ${JSON.stringify(authError.response.data, null, 2)}`);
+          }
+          console.log();
+        }
+        
+        if (authError.stack) {
+          console.log('   📋 Stack trace (primeras 5 líneas):\n');
+          authError.stack.split('\n').slice(0, 5).forEach(line => {
+            console.log(`      ${line}`);
+          });
+          console.log();
+        }
         
         // Analizar el error
-        if (authError.message.includes('1553') || authError.message.toLowerCase().includes('punto de venta')) {
-          console.log('   💡 El punto de venta no existe en AFIP\n');
-        } else if (authError.message.includes('1552') || authError.message.toLowerCase().includes('cuit')) {
-          console.log('   💡 El CUIT no está autorizado para WSFE\n');
+        const errorMsg = authError.message.toLowerCase();
+        
+        if (errorMsg.includes('1553') || errorMsg.includes('punto de venta') || errorMsg.includes('point of sale')) {
+          console.log('   💡 DIAGNÓSTICO: Punto de venta no existe en AFIP\n');
+          console.log('   ✅ SOLUCIÓN: Ejecuta "npm run afip:listar-puntos" para ver puntos disponibles\n');
+        } else if (errorMsg.includes('1552') || errorMsg.includes('cuit') || errorMsg.includes('no autorizado')) {
+          console.log('   💡 DIAGNÓSTICO: CUIT no autorizado para WSFE\n');
+          console.log('   ✅ SOLUCIÓN: Ejecuta "npm run afip:autorizar-servicio"\n');
+        } else if (errorMsg.includes('400') || errorMsg.includes('bad request')) {
+          console.log('   💡 DIAGNÓSTICO: Error 400 - Petición inválida\n');
+          console.log('   📋 POSIBLES CAUSAS:\n');
+          console.log('      • Certificado no autorizado para este servicio');
+          console.log('      • CUIT no habilitado para facturación electrónica');
+          console.log('      • Formato incorrecto en la petición SOAP\n');
+          console.log('   ✅ SOLUCIONES:\n');
+          console.log('      1. Autorizar servicio WSFE: npm run afip:autorizar-servicio');
+          console.log('      2. Usar CUIT de prueba: npm run afip:usar-cuit-prueba');
+          console.log('      3. Verificar certificado válido: openssl x509 -in certs/cert.crt -noout -dates\n');
         }
       }
       

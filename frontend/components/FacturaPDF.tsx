@@ -14,6 +14,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import PrintIcon from '@mui/icons-material/Print';
 import DownloadIcon from '@mui/icons-material/Download';
 import { Factura } from '../redux/slices/facturasSlice';
+import { formatDate, formatCurrency } from '../utils/formatters';
 
 interface FacturaPDFProps {
   open: boolean;
@@ -113,16 +114,12 @@ const FacturaPDF: React.FC<FacturaPDFProps> = ({ open, onClose, factura }) => {
 
   // Formatear fecha
   const formatFecha = (fecha: string): string => {
-    const date = new Date(fecha);
-    return date.toLocaleDateString('es-AR');
+    return formatDate(fecha);
   };
 
   // Formatear moneda
   const formatMoney = (amount: number): string => {
-    return amount.toLocaleString('es-AR', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+    return formatCurrency(amount);
   };
 
   // Imprimir factura
