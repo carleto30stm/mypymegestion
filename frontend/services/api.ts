@@ -109,6 +109,12 @@ export const facturasAPI = {
     return response.data;
   },
 
+  // Crear factura desde múltiples ventas (agrupación)
+  crearDesdeVentas: async (ventasIds: string[]) => {
+    const response = await api.post('/api/facturacion/desde-ventas', { ventasIds });
+    return response.data;
+  },
+
   // Crear factura manualmente
   crearManual: async (datos: {
     clienteId: string;
@@ -153,6 +159,15 @@ export const facturasAPI = {
   // Obtener puntos de venta disponibles
   obtenerPuntosVenta: async () => {
     const response = await api.get('/api/facturacion/config/puntos-venta');
+    return response.data;
+  }
+};
+
+// ========== API DE VENTAS ==========
+export const ventasAPI = {
+  // Obtener ventas sin facturar (confirmadas, requieren factura AFIP, no facturadas)
+  getSinFacturar: async () => {
+    const response = await api.get('/api/ventas/sin-facturar');
     return response.data;
   }
 };

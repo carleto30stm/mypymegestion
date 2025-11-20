@@ -4,13 +4,40 @@ export const BANCOS = ['PROVINCIA', 'SANTANDER', 'EFECTIVO', 'FCI', 'RESERVA'] a
 // Unidades de medida para productos
 export const UNIDADES_MEDIDA = ['UNIDAD', 'KG', 'METRO', 'LITRO', 'CAJA', 'PAQUETE'] as const;
 
+// MEDIOS DE PAGO - Sistema Legacy (mantener por compatibilidad con Gastos)
 export const MEDIOS_PAGO_GASTOS = ['CHEQUE TERCERO', 'CHEQUE PROPIO', 'EFECTIVO', 'TRANSFERENCIA', 'TARJETA DÉBITO', 'TARJETA CRÉDITO', 'RESERVA', 'OTRO', ''] as const;
 
-// Medios de pago para sistema de cobranza (más específico)
+// Medios de pago para sistema de cobranza (legacy - ReciboPago)
 export const MEDIOS_PAGO = ['EFECTIVO', 'TRANSFERENCIA', 'CHEQUE', 'TARJETA_DEBITO', 'TARJETA_CREDITO', 'CUENTA_CORRIENTE'] as const;
 
-// Estados de Ventas
+// MEDIOS DE PAGO UNIFICADOS (NUEVO - Fase 2)
+// Enum centralizado que reemplaza gradualmente a los anteriores
+// Usar este enum para TODOS los nuevos desarrollos
+export const MEDIOS_PAGO_UNIFICADO = [
+  'EFECTIVO',
+  'TRANSFERENCIA',
+  'CHEQUE_TERCERO',
+  'CHEQUE_PROPIO',
+  'TARJETA_DEBITO',
+  'TARJETA_CREDITO',
+  'CUENTA_CORRIENTE',
+  'OTRO'
+] as const;
+
+// Estados de Ventas (LEGACY - mantener compatibilidad)
 export const ESTADOS_VENTA = ['pendiente', 'confirmada', 'anulada', 'parcial'] as const;
+
+// Estados de Ventas Granulares (NUEVO - Fase 2)
+export const ESTADOS_VENTA_GRANULAR = [
+  'borrador',        // Venta creada, aún editable
+  'pendiente',       // Venta registrada, pendiente confirmar
+  'confirmada',      // Stock descontado, deuda generada si aplica
+  'facturada',       // Factura AFIP emitida
+  'entregada',       // Mercadería despachada
+  'cobrada',         // Pago recibido
+  'completada',      // Ciclo cerrado
+  'anulada'          // Cancelada
+] as const;
 
 // Estados de entrega para ventas y remitos
 export const ESTADOS_ENTREGA = ['sin_remito', 'remito_generado', 'en_transito', 'entregado', 'devuelto'] as const;
@@ -229,6 +256,7 @@ export interface Cliente {
   // Campos para facturación fiscal
   requiereFacturaAFIP: boolean;
   aplicaIVA: boolean;
+  facturacionAutomatica?: boolean; // Generar factura automáticamente al cobrar (Fase 2)
   
   // Campos para entregas
   direccionEntrega?: string;
@@ -283,9 +311,11 @@ export interface Venta {
   iva: number;
   total: number;
   medioPago: typeof MEDIOS_PAGO_GASTOS[number];
+  momentoCobro: typeof MOMENTO_COBRO[number]; // Cuándo se cobra: anticipado, contra_entrega, diferido
   detallesPago?: string;
   banco?: typeof BANCOS[number];
-  estado: typeof ESTADOS_VENTA[number];
+  estado: typeof ESTADOS_VENTA[number]; // Estado legacy
+  estadoGranular?: typeof ESTADOS_VENTA_GRANULAR[number]; // Estado detallado (Fase 2)
   observaciones?: string;
   vendedor: string;
   gastoRelacionadoId?: string;
@@ -326,6 +356,10 @@ export interface Venta {
   saldoPendiente: number;
   recibosRelacionados?: string[];
   ultimaCobranza?: string;
+  
+  // Campos para facturación
+  facturaId?: string;
+  facturada?: boolean;
 }
 
 // Interface para estadísticas de ventas

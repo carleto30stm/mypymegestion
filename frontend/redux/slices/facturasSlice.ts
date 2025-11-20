@@ -49,7 +49,8 @@ export interface DatosAFIP {
 
 export interface Factura {
   _id: string;
-  ventaId?: string;
+  ventaId?: string; // DEPRECATED - usar ventasRelacionadas
+  ventasRelacionadas?: string[]; // Array de IDs de ventas agrupadas
   clienteId: {
     _id: string;
     nombre: string;
@@ -131,7 +132,7 @@ export const fetchFacturas = createAsyncThunk(
   } = {}, { rejectWithValue }) => {
     try {
       const response = await facturasAPI.listar(filtros);
-      return response.data;
+      return response; // facturasAPI.listar ya retorna response.data
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.error || 'Error al cargar facturas');
     }
@@ -146,6 +147,18 @@ export const crearFacturaDesdeVenta = createAsyncThunk(
       return response.data.factura;
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.error || 'Error al crear factura');
+    }
+  }
+);
+
+export const crearFacturaDesdeVentas = createAsyncThunk(
+  'facturas/crearDesdeVentas',
+  async (ventasIds: string[], { rejectWithValue }) => {
+    try {
+      const response = await facturasAPI.crearDesdeVentas(ventasIds);
+      return response.factura; // Backend retorna { factura, ventasAgrupadas }
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.error || 'Error al crear factura desde ventas');
     }
   }
 );
@@ -236,14 +249,24 @@ const facturasSlice = createSlice({
     });
     builder.addCase(fetchFacturas.fulfilled, (state, action) => {
       state.loading = false;
-      state.items = action.payload.facturas;
-      state.total = action.payload.total;
-      state.page = action.payload.page;
-      state.pages = action.payload.pages;
+      // Validar que la respuesta tenga la estructura esperada
+      if (action.payload && Array.isArray(action.payload.facturas)) {
+        state.items = action.payload.facturas;
+        state.total = action.payload.total || 0;
+        state.page = action.payload.page || 1;
+        state.pages = action.payload.pages || 1;
+      } else {
+        // Si la estructura es diferente, intentar usar directamente
+        state.items = Array.isArray(action.payload) ? action.payload : [];
+        state.total = state.items.length;
+        state.page = 1;
+        state.pages = 1;
+      }
     });
     builder.addCase(fetchFacturas.rejected, (state, action) => {
       state.loading = false;
-      state.error = action.error.message || 'Error al cargar facturas';
+      state.error = (action.payload as string) || action.error.message || 'Error al cargar facturas';
+      state.items = [];
     });
 
     // Crear desde venta
@@ -257,6 +280,21 @@ const facturasSlice = createSlice({
       state.items.unshift(action.payload);
     });
     builder.addCase(crearFacturaDesdeVenta.rejected, (state, action) => {
+      state.loading = false;
+      state.error = action.payload as string;
+    });
+
+    // Crear desde múltiples ventas (agrupación)
+    builder.addCase(crearFacturaDesdeVentas.pending, (state) => {
+      state.loading = true;
+      state.error = null;
+    });
+    builder.addCase(crearFacturaDesdeVentas.fulfilled, (state, action) => {
+      state.loading = false;
+      state.currentFactura = action.payload;
+      state.items.unshift(action.payload);
+    });
+    builder.addCase(crearFacturaDesdeVentas.rejected, (state, action) => {
       state.loading = false;
       state.error = action.payload as string;
     });

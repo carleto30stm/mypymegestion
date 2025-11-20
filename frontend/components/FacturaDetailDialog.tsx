@@ -185,11 +185,11 @@ const FacturaDetailDialog: React.FC<FacturaDetailDialogProps> = ({
                 {factura.items.map((item, index) => (
                   <TableRow key={index}>
                     <TableCell>{item.descripcion}</TableCell>
-                    <TableCell align="right">{item.cantidad}</TableCell>
-                    <TableCell align="right">${item.precioUnitario.toFixed(2)}</TableCell>
-                    <TableCell align="right">{item.alicuotaIVA}%</TableCell>
+                    <TableCell align="right">{item.cantidad || 0}</TableCell>
+                    <TableCell align="right">${(item.precioUnitario || 0).toFixed(2)}</TableCell>
+                    <TableCell align="right">{item.alicuotaIVA || 0}%</TableCell>
                     <TableCell align="right">
-                      ${(item.cantidad * item.precioUnitario).toFixed(2)}
+                      ${((item.cantidad || 0) * (item.precioUnitario || 0)).toFixed(2)}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -213,7 +213,7 @@ const FacturaDetailDialog: React.FC<FacturaDetailDialogProps> = ({
             </Grid>
             <Grid item xs={6}>
               <Typography variant="body1" align="right">
-                ${factura.subtotal.toFixed(2)}
+                ${(factura.subtotal || 0).toFixed(2)}
               </Typography>
             </Grid>
 
@@ -226,7 +226,7 @@ const FacturaDetailDialog: React.FC<FacturaDetailDialogProps> = ({
                 </Grid>
                 <Grid item xs={6}>
                   <Typography variant="body1" align="right">
-                    ${detalle.importe.toFixed(2)}
+                    ${(detalle.importe || 0).toFixed(2)}
                   </Typography>
                 </Grid>
               </React.Fragment>
@@ -243,7 +243,7 @@ const FacturaDetailDialog: React.FC<FacturaDetailDialogProps> = ({
             </Grid>
             <Grid item xs={6}>
               <Typography variant="h6" align="right" color="primary">
-                ${factura.total.toFixed(2)}
+                ${(factura.total || 0).toFixed(2)}
               </Typography>
             </Grid>
           </Grid>

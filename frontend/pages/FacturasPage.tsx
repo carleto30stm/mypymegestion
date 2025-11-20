@@ -15,6 +15,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import { formatCurrency } from '../utils/formatters';
 import {
   DataGrid,
   GridColDef,
@@ -32,7 +33,9 @@ import { useDispatch, useSelector } from 'react-redux';
 import type { AppDispatch, RootState } from '../redux/store';
 import { fetchFacturas, clearError } from '../redux/slices/facturasSlice';
 import type { Factura, TipoComprobante, EstadoFactura } from '../redux/slices/facturasSlice';
-import { FacturaDetailDialog, AutorizarFacturaDialog } from '../components';
+import { fetchClientes } from '../redux/slices/clientesSlice';
+import { FacturaDetailDialog, AutorizarFacturaDialog, FacturaPDF } from '../components';
+import CrearFacturaDialog from '../components/CrearFacturaDialog';
 
 const tiposComprobante: { value: TipoComprobante; label: string }[] = [
   { value: 'FACTURA_A', label: 'Factura A' },
@@ -73,9 +76,13 @@ const FacturasPage: React.FC = () => {
   const [selectedFactura, setSelectedFactura] = useState<Factura | null>(null);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [showAutorizarDialog, setShowAutorizarDialog] = useState(false);
+  const [showCrearFacturaDialog, setShowCrearFacturaDialog] = useState(false);
+  const [showPDFDialog, setShowPDFDialog] = useState(false);
+  const [facturaPDF, setFacturaPDF] = useState<Factura | null>(null);
 
   // Cargar facturas al montar
   useEffect(() => {
+    dispatch(fetchClientes());
     handleSearch();
   }, []);
 
@@ -117,8 +124,8 @@ const FacturasPage: React.FC = () => {
   };
 
   const handlePrint = (factura: Factura) => {
-    // TODO: Implementar generación de PDF
-    console.log('Imprimir factura:', factura);
+    setFacturaPDF(factura);
+    setShowPDFDialog(true);
   };
 
   const getEstadoChip = (estado: EstadoFactura) => {
@@ -163,8 +170,13 @@ const FacturasPage: React.FC = () => {
       width: 200,
       renderCell: (params: GridRenderCellParams) => {
         const factura = params.row as Factura;
-        const cliente = clientes.find((c) => c._id === factura.clienteId._id);
-        return cliente?.nombre || 'N/A';
+        // clienteId ya viene populated desde el backend
+        if (typeof factura.clienteId === 'object' && factura.clienteId) {
+          return factura.clienteId.razonSocial || 
+                 `${factura.clienteId.nombre || ''} ${factura.clienteId.apellido || ''}`.trim() || 
+                 'N/A';
+        }
+        return 'N/A';
       },
     },
     {
@@ -187,10 +199,9 @@ const FacturasPage: React.FC = () => {
       field: 'total',
       headerName: 'Total',
       width: 120,
-      type: 'number',
-      renderCell: (params: GridRenderCellParams) => {
-        return `$${params.value.toFixed(2)}`;
-      },
+      align: 'right',
+      headerAlign: 'right',
+      valueFormatter: (value: number) => formatCurrency(value || 0),
     },
     {
       field: 'datosAFIP',
@@ -251,9 +262,19 @@ const FacturasPage: React.FC = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom>
-        Facturación Electrónica
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4">
+          Facturación Electrónica
+        </Typography>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => setShowCrearFacturaDialog(true)}
+          color="primary"
+        >
+          Nueva Factura
+        </Button>
+      </Box>
 
       {/* Filtros */}
       <Card sx={{ mb: 3 }}>
@@ -418,6 +439,28 @@ const FacturasPage: React.FC = () => {
             }}
           />
         </>
+      )}
+
+      {/* Dialog de creación de factura */}
+      <CrearFacturaDialog
+        open={showCrearFacturaDialog}
+        onClose={() => setShowCrearFacturaDialog(false)}
+        onSuccess={() => {
+          setShowCrearFacturaDialog(false);
+          handleSearch();
+        }}
+      />
+
+      {/* Dialog de PDF */}
+      {facturaPDF && (
+        <FacturaPDF
+          open={showPDFDialog}
+          onClose={() => {
+            setShowPDFDialog(false);
+            setFacturaPDF(null);
+          }}
+          factura={facturaPDF}
+        />
       )}
     </Box>
   );

@@ -1,10 +1,8 @@
 #!/usr/bin/env node
 
 /**
- * Script para autorizar el servicio WSFE en AFIP (ambiente Homologación)
- * Usa el SDK de AFIP para automatizar la autorización del servicio
- * 
- * IMPORTANTE: Este script requiere credenciales de AFIP (usuario y contraseña de Clave Fiscal)
+ * Script para crear un punto de venta en AFIP (Homologación)
+ * Usa la automatización del SDK de AFIP
  */
 
 import dotenv from 'dotenv';
@@ -23,23 +21,18 @@ function pregunta(query) {
 }
 
 console.log('\n' + '='.repeat(70));
-console.log('  AUTORIZACIÓN DE SERVICIO WSFE EN AFIP (Homologación)');
+console.log('  CREAR PUNTO DE VENTA EN AFIP (Homologación)');
 console.log('='.repeat(70) + '\n');
 
-console.log('📋 Este script autorizará el servicio WSFE para tu CUIT en el');
-console.log('   ambiente de HOMOLOGACIÓN de AFIP.\n');
+console.log('📋 Este script creará un punto de venta para facturación electrónica');
+console.log('   en el ambiente de HOMOLOGACIÓN de AFIP.\n');
 
 console.log('⚠️  REQUISITOS:');
 console.log('   • SDK_ACCESS_TOKEN configurado en .env');
 console.log('   • Usuario y contraseña de Clave Fiscal nivel 3 o superior');
-console.log('   • El CUIT debe tener acceso al servicio de Facturación\n');
+console.log('   • Servicio WSFE autorizado (ya lo tienes)\n');
 
-console.log('📋 CONCEPTOS:');
-console.log('   • REPRESENTADO: CUIT de la empresa/sociedad a autorizar');
-console.log('   • REPRESENTANTE (Usuario): Tu CUIT personal para login AFIP');
-console.log('   • Si sos monotributista/autónomo, ambos CUITs son el mismo\n');
-
-async function autorizarServicio() {
+async function crearPuntoVenta() {
   try {
     const SDK_ACCESS_TOKEN = process.env.SDK_ACCESS_TOKEN;
     
@@ -55,8 +48,8 @@ async function autorizarServicio() {
     // Solicitar datos al usuario
     console.log('📝 Ingresa los siguientes datos:\n');
     
-    const cuitInput = await pregunta(`CUIT Representado/empresa (${process.env.EMPRESA_CUIT || process.env.AFIP_CUIT || 'sin valor'}): `);
-    const cuit = cuitInput.trim() || process.env.EMPRESA_CUIT || process.env.AFIP_CUIT;
+    const cuitInput = await pregunta(`CUIT (${process.env.AFIP_CUIT || 'sin valor en .env'}): `);
+    const cuit = cuitInput.trim() || process.env.AFIP_CUIT;
     
     if (!cuit) {
       console.log('\n❌ ERROR: CUIT es obligatorio\n');
@@ -64,8 +57,8 @@ async function autorizarServicio() {
       return;
     }
     
-    const usernameInput = await pregunta(`Usuario Clave Fiscal/tu CUIT (${cuit}): `);
-    const usernameValue = usernameInput.trim() || cuit;
+    const username = await pregunta(`Usuario Clave Fiscal (${cuit}): `);
+    const usernameValue = username.trim() || cuit;
     
     const password = await pregunta('Contraseña Clave Fiscal: ');
     
@@ -75,19 +68,23 @@ async function autorizarServicio() {
       return;
     }
     
-    const aliasInput = await pregunta('Alias para el certificado (afipsdk): ');
-    const alias = aliasInput.trim() || 'afipsdk';
+    const aliasInput = await pregunta('Alias del certificado (kurt): ');
+    const alias = aliasInput.trim() || 'kurt';
     
-    const serviceInput = await pregunta('Servicio a autorizar (wsfe): ');
-    const service = serviceInput.trim() || 'wsfe';
+    const numeroInput = await pregunta('Número del punto de venta a crear (1): ');
+    const numero = numeroInput.trim() || '1';
+    
+    const descripcionInput = await pregunta('Descripción del punto de venta (Web Service - Homologación): ');
+    const descripcion = descripcionInput.trim() || 'Web Service - Homologación';
     
     console.log('\n' + '-'.repeat(70));
-    console.log('📋 Resumen de la autorización:');
+    console.log('📋 Resumen del punto de venta:');
     console.log('-'.repeat(70));
-    console.log(`   CUIT Representado: ${cuit}`);
-    console.log(`   Usuario (login): ${usernameValue}`);
-    console.log(`   Alias: ${alias}`);
-    console.log(`   Servicio: ${service}`);
+    console.log(`   CUIT: ${cuit}`);
+    console.log(`   Usuario: ${usernameValue}`);
+    console.log(`   Alias certificado: ${alias}`);
+    console.log(`   Número: ${numero}`);
+    console.log(`   Descripción: ${descripcion}`);
     console.log(`   Ambiente: HOMOLOGACIÓN`);
     console.log('-'.repeat(70) + '\n');
     
@@ -99,7 +96,7 @@ async function autorizarServicio() {
       return;
     }
     
-    console.log('\n⏳ Autorizando servicio en AFIP...\n');
+    console.log('\n⏳ Creando punto de venta en AFIP...\n');
     
     const afip = new Afip({ access_token: SDK_ACCESS_TOKEN });
     
@@ -108,27 +105,28 @@ async function autorizarServicio() {
       username: usernameValue,
       password: password.trim(),
       alias: alias,
-      service: service
+      number: parseInt(numero),
+      description: descripcion
     };
     
-    // Ejecutar la automatización
-    const response = await afip.CreateAutomation("auth-web-service-dev", data, true);
+    // Ejecutar la automatización para crear punto de venta
+    const response = await afip.CreateAutomation("create-sales-point-dev", data, true);
     
-    console.log('✅ AUTORIZACIÓN EXITOSA\n');
+    console.log('✅ PUNTO DE VENTA CREADO EXITOSAMENTE\n');
     console.log('📋 Respuesta de AFIP:\n');
     console.log(JSON.stringify(response, null, 2));
     console.log('\n' + '='.repeat(70));
     console.log('  PRÓXIMOS PASOS:');
     console.log('='.repeat(70) + '\n');
-    console.log('1. Verifica que el servicio esté autorizado:');
-    console.log('   npm run afip:verificar-estado\n');
-    console.log('2. Lista los puntos de venta disponibles:');
+    console.log('1. Verifica que el punto de venta esté disponible:');
     console.log('   npm run afip:listar-puntos\n');
-    console.log('3. Ejecuta el diagnóstico completo:');
-    console.log('   npm run afip:diagnostico\n');
+    console.log('2. Prueba la autenticación completa:');
+    console.log('   npm run afip:test-conexion\n');
+    console.log('3. Crea una factura de prueba:');
+    console.log('   npm run afip:test-completo 1\n');
     
   } catch (error) {
-    console.log('\n❌ ERROR AL AUTORIZAR SERVICIO\n');
+    console.log('\n❌ ERROR AL CREAR PUNTO DE VENTA\n');
     console.log('📋 Mensaje de error:\n');
     console.log(`   ${error.message}\n`);
     
@@ -140,17 +138,19 @@ async function autorizarServicio() {
     
     console.log('💡 POSIBLES CAUSAS:\n');
     console.log('   • Usuario o contraseña incorrectos');
-    console.log('   • El CUIT no tiene permisos para autorizar servicios');
-    console.log('   • El servicio ya está autorizado');
+    console.log('   • El punto de venta ya existe');
+    console.log('   • El CUIT no tiene permisos suficientes');
+    console.log('   • El servicio WSFE no está autorizado');
     console.log('   • Problemas de conectividad con AFIP\n');
     console.log('✅ SOLUCIONES:\n');
     console.log('   • Verifica las credenciales de Clave Fiscal');
     console.log('   • Asegúrate de tener Clave Fiscal nivel 3 o superior');
-    console.log('   • Intenta autorizar manualmente desde:');
-    console.log('     https://www.afip.gob.ar/ → Administrador de Relaciones\n');
+    console.log('   • Verifica que WSFE esté autorizado: npm run afip:verificar-estado');
+    console.log('   • Intenta crear el punto de venta manualmente desde:');
+    console.log('     https://www.afip.gob.ar/ → Administración de Puntos de Venta\n');
   } finally {
     rl.close();
   }
 }
 
-autorizarServicio();
+crearPuntoVenta();

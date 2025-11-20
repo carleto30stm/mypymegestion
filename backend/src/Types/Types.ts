@@ -13,6 +13,7 @@ export const subRubrosByRubro: Record<string, string[]> = {
   'MOVILIDAD': ['COMBUSTIBLE', 'PEAJES', 'ESTACIONAMIENTO','MECANICO','SERVICE']
 };
 
+// MEDIOS DE PAGO - Sistema Legacy (mantener por compatibilidad con Gastos)
 export const MEDIO_PAGO = [
       'CHEQUE TERCERO',
       'CHEQUE PROPIO', 
@@ -24,14 +25,45 @@ export const MEDIO_PAGO = [
       'CUENTA CORRIENTE'
     ] as const;
 
+// MEDIOS DE PAGO UNIFICADOS (NUEVO - Fase 2)
+// Enum centralizado que reemplaza gradualmente a los anteriores
+// Usar este enum para TODOS los nuevos desarrollos
+export const MEDIOS_PAGO_UNIFICADO = [
+  'EFECTIVO',
+  'TRANSFERENCIA',
+  'CHEQUE_TERCERO',
+  'CHEQUE_PROPIO',
+  'TARJETA_DEBITO',
+  'TARJETA_CREDITO',
+  'CUENTA_CORRIENTE',
+  'OTRO'
+] as const;
+
 // Bancos disponibles
 export const CAJAS = ['PROVINCIA', 'SANTANDER', 'EFECTIVO', 'FCI', 'RESERVA'] as const;
 
 export const UNIDADES_MEDIDA = ['UNIDAD', 'KG', 'LITRO', 'METRO', 'CAJA', 'PAQUETE'] as const;
 
-// Estados de Ventas
+// Estados de Ventas (LEGACY - mantener por compatibilidad)
 export const ESTADOS_VENTA = ['pendiente', 'confirmada', 'anulada', 'parcial'] as const;
+
+// Estados de Ventas Granulares (NUEVO - Fase 2)
+// Reflejan el ciclo completo de una venta con mayor detalle
+export const ESTADOS_VENTA_GRANULAR = [
+  'borrador',        // Venta creada, aún editable (no confirmada)
+  'pendiente',       // Venta registrada, pendiente de confirmar
+  'confirmada',      // Stock descontado, deuda generada si aplica
+  'facturada',       // Factura AFIP emitida y autorizada
+  'entregada',       // Mercadería despachada al cliente
+  'cobrada',         // Pago recibido en su totalidad
+  'completada',      // Todo el ciclo cerrado (confirmada + facturada + entregada + cobrada)
+  'anulada'          // Cancelada (con auditoría de motivo)
+] as const;
+
 export const ESTADOS_ENTREGA = ['sin_remito', 'remito_generado', 'en_transito', 'entregado', 'devuelto'] as const;
 export const ESTADOS_COBRANZA = ['sin_cobrar', 'parcialmente_cobrado', 'cobrado'] as const;
 export const ESTADOS_CHEQUE = ['recibido', 'depositado', 'cobrado', 'rechazado', 'endosado'] as const;
+
+// Momento de cobro (cuándo se cobra la venta)
+export const MOMENTO_COBRO = ['anticipado', 'contra_entrega', 'diferido'] as const;
 

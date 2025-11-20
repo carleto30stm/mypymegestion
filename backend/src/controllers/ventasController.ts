@@ -3,6 +3,7 @@ import Venta from '../models/Venta.js';
 import Producto from '../models/Producto.js';
 import Cliente from '../models/Cliente.js';
 import Gasto from '../models/Gasto.js';
+import Factura from '../models/Factura.js';
 import MovimientoCuentaCorriente from '../models/MovimientoCuentaCorriente.js';
 import mongoose from 'mongoose';
 
@@ -73,7 +74,7 @@ export const crearVenta = async (req: ExpressRequest, res: ExpressResponse) => {
     session.startTransaction();
 
     try {
-        const { clienteId, items, observaciones, vendedor, aplicaIVA } = req.body;
+        const { clienteId, items, observaciones, vendedor, aplicaIVA, medioPago, momentoCobro } = req.body;
 
         // Validaciones básicas
         if (!clienteId || !items || items.length === 0 || !vendedor) {
@@ -172,6 +173,8 @@ export const crearVenta = async (req: ExpressRequest, res: ExpressResponse) => {
             vendedor,
             estado: estadoVenta,
             aplicaIVA: aplicaIVA === true,
+            medioPago: medioPago || 'EFECTIVO', // Valor por defecto si no se especifica
+            momentoCobro: momentoCobro || 'diferido', // Valor por defecto: venta a crédito
             creadoPor: req.user?.username, // Registrar usuario que crea la venta
             // Campos de cobranza se actualizan desde ReciboPago
             estadoCobranza: 'sin_cobrar',
@@ -633,37 +636,45 @@ export const confirmarVenta = async (req: ExpressRequest, res: ExpressResponse) 
         venta.usuarioConfirmacion = usuarioConfirmacion;
         await venta.save({ session });
 
-        // Registrar movimiento en cuenta corriente
-        // Obtener saldo anterior del cliente
-        const ultimoMovimiento = await MovimientoCuentaCorriente.findOne({
-            clienteId: venta.clienteId,
-            anulado: false
-        }).sort({ fecha: -1, createdAt: -1 }).session(session);
+        // CORRECCIÓN CRÍTICA: Solo generar deuda en cuenta corriente para ventas a crédito
+        // Ventas de contado (EFECTIVO, CHEQUE, etc.) NO generan deuda
+        const esVentaACredito = venta.medioPago === 'CUENTA CORRIENTE' || venta.momentoCobro === 'diferido';
 
-        const saldoAnterior = ultimoMovimiento?.saldo || 0;
-        const nuevoSaldo = saldoAnterior + venta.total;
+        if (esVentaACredito) {
+            // Registrar movimiento en cuenta corriente
+            // Obtener saldo anterior del cliente
+            const ultimoMovimiento = await MovimientoCuentaCorriente.findOne({
+                clienteId: venta.clienteId,
+                anulado: false
+            }).sort({ fecha: -1, createdAt: -1 }).session(session);
 
-        await MovimientoCuentaCorriente.create([{
-            clienteId: venta.clienteId,
-            fecha: venta.fecha,
-            tipo: 'venta',
-            documentoTipo: 'VENTA',
-            documentoNumero: venta.numeroVenta,
-            documentoId: venta._id,
-            concepto: `Venta #${venta.numeroVenta} - ${venta.items.length} items`,
-            debe: venta.total,
-            haber: 0,
-            saldo: nuevoSaldo,
-            creadoPor: userId,
-            anulado: false
-        }], { session });
+            const saldoAnterior = ultimoMovimiento?.saldo || 0;
+            const nuevoSaldo = saldoAnterior + venta.total;
 
-        // Actualizar saldo del cliente
-        await Cliente.findByIdAndUpdate(
-            venta.clienteId,
-            { saldoCuenta: nuevoSaldo },
-            { session }
-        );
+            await MovimientoCuentaCorriente.create([{
+                clienteId: venta.clienteId,
+                fecha: venta.fecha,
+                tipo: 'venta',
+                documentoTipo: 'VENTA',
+                documentoNumero: venta.numeroVenta,
+                documentoId: venta._id,
+                concepto: `Venta #${venta.numeroVenta} - ${venta.items.length} items`,
+                debe: venta.total,
+                haber: 0,
+                saldo: nuevoSaldo,
+                creadoPor: userId,
+                anulado: false
+            }], { session });
+
+            // Actualizar saldo del cliente
+            await Cliente.findByIdAndUpdate(
+                venta.clienteId,
+                { saldoCuenta: nuevoSaldo },
+                { session }
+            );
+        }
+        // Si NO es venta a crédito, NO se genera deuda
+        // El cobro se registrará cuando se cree el ReciboPago
 
         await session.commitTransaction();
 
@@ -939,6 +950,79 @@ export const getEstadisticasProductos = async (req: ExpressRequest, res: Express
         console.error('Error al obtener estadísticas de productos:', error);
         res.status(500).json({ 
             message: 'Error al obtener estadísticas de productos',
+            details: error.message 
+        });
+    }
+};
+
+// @desc    Obtener ventas sin facturar (confirmadas, requieren factura AFIP, no facturadas)
+// @route   GET /api/ventas/sin-facturar
+// @access  Private
+export const getVentasSinFacturar = async (req: ExpressRequest, res: ExpressResponse) => {
+    try {
+        // Primero, obtener IDs de ventas que ya están en facturas borrador
+        const facturasBorrador = await Factura.find({ 
+            estado: 'borrador' 
+        }).select('ventasRelacionadas ventaId');
+        
+        const ventasEnBorrador = new Set<string>();
+        
+        // Agregar IDs de ventas relacionadas (nuevo formato)
+        facturasBorrador.forEach(factura => {
+            if (factura.ventasRelacionadas && factura.ventasRelacionadas.length > 0) {
+                factura.ventasRelacionadas.forEach(ventaId => {
+                    ventasEnBorrador.add(ventaId.toString());
+                });
+            }
+            // También agregar ventaId legacy si existe
+            if (factura.ventaId) {
+                ventasEnBorrador.add(factura.ventaId.toString());
+            }
+        });
+        
+        // Buscar ventas confirmadas y cobradas, con IVA, sin facturar
+        const ventas = await Venta.find({
+            $and: [
+                {
+                    $or: [
+                        { estado: 'confirmada' }, // Legacy: estado confirmada
+                        { 
+                          estadoGranular: { 
+                            $in: ['confirmada', 'cobrada', 'entregada', 'facturada', 'completada'] 
+                          } 
+                        } // Nuevo: cualquier estado granular válido
+                    ]
+                },
+                {
+                    $or: [
+                        { requiereFacturaAFIP: true },
+                        { aplicaIVA: true } // También incluir ventas con IVA
+                    ]
+                },
+                { 
+                    $or: [
+                        { estadoCobranza: 'cobrado' }, // Debe estar cobrada
+                        { montoCobrado: { $gt: 0 } } // O tener monto cobrado
+                    ]
+                },
+                { facturada: { $ne: true } },
+                {
+                    $or: [
+                        { facturaId: { $exists: false } },
+                        { facturaId: null }
+                    ]
+                },
+                // Excluir ventas que ya están en facturas borrador
+                { _id: { $nin: Array.from(ventasEnBorrador) } }
+            ]
+        })
+            .populate('clienteId', 'nombre apellido razonSocial numeroDocumento condicionIVA')
+            .sort({ fecha: -1 });
+
+        res.json(ventas);
+    } catch (error: any) {
+        res.status(500).json({ 
+            message: 'Error al obtener ventas sin facturar',
             details: error.message 
         });
     }

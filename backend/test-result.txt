@@ -1,0 +1,69 @@
+﻿
+======================================================================
+  Test de Conexi├│n AFIP - Facturaci├│n Electr├│nica
+  Ambiente: HOMOLOGACI├ôN
+======================================================================
+
+­ƒöº Verificando configuraci├│n...
+
+   Ô£à CUIT: 27118154520
+   Ô£à SDK Access Token: Ô£ô Configurado
+   Ô£à Certificado: ./certs/cert.crt
+   Ô£à Clave privada: ./certs/private.key
+   Ô£à Punto de venta: 1
+   Ô£à Ambiente: HOMOLOGACI├ôN
+
+­ƒöì Verificando certificados...
+
+   Certificado: C:\Users\carle\Desktop\myGestor\backend\certs\cert.crt
+   Ô£à Encontrado (1188 bytes)
+
+   Clave privada: C:\Users\carle\Desktop\myGestor\backend\certs\private.key
+   Ô£à Encontrado (1702 bytes)
+
+­ƒîÉ Probando conexi├│n con servidor AFIP...
+
+­ƒôè Estado del servidor:
+   App Server: OK
+   DB Server: OK
+   Auth Server: OK
+
+Ô£à Conexi├│n exitosa con servidor AFIP
+
+­ƒöÉ Probando autenticaci├│n...
+
+   Obteniendo Token de Acceso...
+
+ÔÜá´©Å  Autenticaci├│n fallida. Revisa tus certificados y CUIT.
+
+======================================================================
+  RESUMEN DE PRUEBAS
+======================================================================
+
+   Ô£à Configuraci├│n             OK
+   Ô£à Certificados              OK
+   Ô£à Conexi├│n servidor         OK
+   ÔØî Autenticaci├│n             FALL├ô
+   ÔØî Consulta comprobantes     FALL├ô
+   ÔØî Puntos de venta           FALL├ô
+
+ÔÜá´©Å  ALGUNAS PRUEBAS FALLARON
+
+­ƒÆí Revisa los errores anteriores y verifica:
+   1. Variables en el archivo .env
+   2. Certificados v├ílidos y registrados en AFIP
+   3. CUIT autorizado para facturaci├│n electr├│nica
+node : ÔØî Error en autenticaci├│n: Request failed with status 
+code 400
+At line:1 char:1
++ node scripts/test-afip-conexion.js 2>&1 | Out-File -FilePath 
+test-res ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (ÔØî Error en au...sta 
+   tus code 400:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+   4. Punto de venta creado en el portal de AFIP
+
+======================================================================
+

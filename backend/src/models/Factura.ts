@@ -64,8 +64,9 @@ export interface IDatosAFIP {
 
 // Interface para el documento principal
 export interface IFactura extends Document {
-  // Relaciones
-  ventaId?: mongoose.Types.ObjectId;
+  // Relaciones (ahora múltiples ventas)
+  ventaId?: mongoose.Types.ObjectId; // DEPRECATED: mantener por compatibilidad
+  ventasRelacionadas: mongoose.Types.ObjectId[]; // Array de IDs de ventas
   clienteId: mongoose.Types.ObjectId;
   
   // Tipo y estado
@@ -105,6 +106,7 @@ export interface IFactura extends Document {
   importeIVA: number;
   importeOtrosTributos: number;
   importeTotal: number;
+  total?: number;             // Virtual: alias para importeTotal
   
   // Detalle IVA por alícuota
   detalleIVA: Array<{
@@ -211,7 +213,12 @@ const FacturaSchema = new Schema({
   ventaId: {
     type: Schema.Types.ObjectId,
     ref: 'Venta'
+    // DEPRECATED: mantener por compatibilidad con facturas antiguas
   },
+  ventasRelacionadas: [{
+    type: Schema.Types.ObjectId,
+    ref: 'Venta'
+  }],
   clienteId: {
     type: Schema.Types.ObjectId,
     ref: 'Cliente',
@@ -438,7 +445,8 @@ FacturaSchema.index({ 'datosAFIP.cae': 1 });
 FacturaSchema.index({ clienteId: 1, fecha: -1 });
 FacturaSchema.index({ estado: 1 });
 FacturaSchema.index({ fecha: -1 });
-FacturaSchema.index({ ventaId: 1 });
+FacturaSchema.index({ ventaId: 1 }); // DEPRECATED
+FacturaSchema.index({ ventasRelacionadas: 1 }); // Búsqueda por ventas relacionadas
 
 // Middleware para calcular totales
 FacturaSchema.pre('save', function(next) {
@@ -478,6 +486,15 @@ FacturaSchema.pre('save', function(next) {
   
   next();
 });
+
+// Virtual para alias de total
+FacturaSchema.virtual('total').get(function() {
+  return this.importeTotal;
+});
+
+// Asegurar que los virtuals se incluyan en JSON
+FacturaSchema.set('toJSON', { virtuals: true });
+FacturaSchema.set('toObject', { virtuals: true });
 
 // Método para generar número de comprobante
 FacturaSchema.methods.generarNumeroComprobante = function(): string {
