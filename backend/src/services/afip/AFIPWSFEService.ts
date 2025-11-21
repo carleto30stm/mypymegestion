@@ -432,7 +432,7 @@ export class AFIPWSFEService {
         <ar:ImpTrib>${this.redondear(datos.importeTributos)}</ar:ImpTrib>
         <ar:MonId>${datos.monedaId}</ar:MonId>
         <ar:MonCotiz>${datos.monedaCotizacion}</ar:MonCotiz>
-        <ar:IvaCondicion>${datos.condicionIVA}</ar:IvaCondicion>
+        <ar:CondicionIVAReceptorId>${datos.condicionIVA}</ar:CondicionIVAReceptorId>
     `;
 
     // Fechas de servicio (si concepto 2 o 3)

@@ -29,8 +29,11 @@ const FacturaPDF: React.FC<FacturaPDFProps> = ({ open, onClose, factura }) => {
 
   // Generar QR code cuando se abre el diálogo
   useEffect(() => {
-    if (open && factura.datosAFIP.CAE) {
+    if (open && factura.datosAFIP?.cae) {
       generateQRCode();
+    } else if (open) {
+      // Si no hay CAE, marcar como no loading
+      setLoading(false);
     }
   }, [open, factura]);
 
@@ -48,16 +51,16 @@ const FacturaPDF: React.FC<FacturaPDFProps> = ({ open, onClose, factura }) => {
         ver: 1,
         fecha: factura.fecha.split('T')[0].replace(/-/g, ''),
         cuit: parseInt(factura.emisorCUIT.replace(/-/g, '')),
-        ptoVta: factura.puntoVenta,
+        ptoVta: factura.datosAFIP?.puntoVenta || 0,
         tipoCmp: getTipoComprobanteCode(factura.tipoComprobante),
-        nroCmp: factura.numeroSecuencial,
+        nroCmp: factura.datosAFIP?.numeroSecuencial || 0,
         importe: factura.importeTotal,
         moneda: factura.monedaId,
         ctz: factura.cotizacionMoneda,
         tipoDocRec: getDocumentType(factura.clienteId.numeroDocumento),
         nroDocRec: parseInt(factura.clienteId.numeroDocumento.replace(/\D/g, '')),
         tipoCodAut: 'E',
-        codAut: parseInt(factura.datosAFIP.CAE || '0'),
+        codAut: parseInt(factura.datosAFIP.cae || '0'),
       };
 
       // Convertir a base64
@@ -347,15 +350,15 @@ const FacturaPDF: React.FC<FacturaPDFProps> = ({ open, onClose, factura }) => {
                     </div>
                     <div className="row">
                       <p className="col-6 margin-b-0">
-                        <strong>Punto de Venta: {String(factura.puntoVenta).padStart(4, '0')}</strong>
+                        <strong>Punto de Venta: {String(factura.datosAFIP?.puntoVenta || 0).padStart(4, '0')}</strong>
                       </p>
                       <p className="col-6 margin-b-0">
-                        <strong>Comp. Nro: {String(factura.numeroSecuencial).padStart(8, '0')}</strong>
+                        <strong>Comp. Nro: {String(factura.datosAFIP?.numeroSecuencial || 0)}</strong>
                       </p>
                     </div>
                     <p><strong>Fecha de Emisión:</strong> {formatFecha(factura.fecha)}</p>
                     <p><strong>CUIT:</strong> {factura.emisorCUIT}</p>
-                    <p><strong>Ingresos Brutos:</strong> Exento</p>
+                    <p><strong>Ingresos Brutos:</strong> {factura.emisorIngresosBrutos}</p>
                     <p><strong>Fecha de Inicio de Actividades:</strong> 01/01/2020</p>
                   </div>
                 </td>
@@ -396,7 +399,7 @@ const FacturaPDF: React.FC<FacturaPDFProps> = ({ open, onClose, factura }) => {
                         <strong>Condición Frente al IVA: </strong>{factura.receptorCondicionIVA}
                       </p>
                       <p className="col-6 margin-b-0">
-                        <strong>Domicilio: </strong>-
+                        <strong>Domicilio: </strong>{factura.receptorDomicilio || '-'}
                       </p>
                     </div>
                     <p>
@@ -485,7 +488,7 @@ const FacturaPDF: React.FC<FacturaPDFProps> = ({ open, onClose, factura }) => {
               </tr>
 
               {/* QR y CAE */}
-              {factura.datosAFIP.CAE && (
+              {factura.datosAFIP.cae && (
                 <tr className="bill-row row-qrcode">
                   <td>
                     <div>
@@ -504,11 +507,11 @@ const FacturaPDF: React.FC<FacturaPDFProps> = ({ open, onClose, factura }) => {
                   <td>
                     <div>
                       <div className="row text-right margin-b-10">
-                        <strong>CAE Nº:&nbsp;</strong> {factura.datosAFIP.CAE}
+                        <strong>CAE Nº:&nbsp;</strong> {factura.datosAFIP.cae}
                       </div>
                       <div className="row text-right">
                         <strong>Fecha de Vto. de CAE:&nbsp;</strong> 
-                        {factura.datosAFIP.CAEVencimiento && formatFecha(factura.datosAFIP.CAEVencimiento)}
+                        {factura.datosAFIP.fechaVencimientoCAE && formatFecha(factura.datosAFIP.fechaVencimientoCAE)}
                       </div>
                     </div>
                   </td>
@@ -516,7 +519,7 @@ const FacturaPDF: React.FC<FacturaPDFProps> = ({ open, onClose, factura }) => {
               )}
 
               {/* Footer */}
-              <tr className="bill-row row-details">
+              {/* <tr className="bill-row row-details">
                 <td colSpan={2}>
                   <div>
                     <div className="row text-center margin-b-10">
@@ -524,7 +527,7 @@ const FacturaPDF: React.FC<FacturaPDFProps> = ({ open, onClose, factura }) => {
                     </div>
                   </div>
                 </td>
-              </tr>
+              </tr> */}
               </tbody>
             </table>
           </div>

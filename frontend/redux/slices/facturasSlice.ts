@@ -2,22 +2,22 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { facturasAPI } from '../../services/api';
 
 // Tipos de comprobantes
-export type TipoComprobante = 
-  | 'FACTURA_A' 
-  | 'FACTURA_B' 
-  | 'FACTURA_C' 
-  | 'NOTA_CREDITO_A' 
-  | 'NOTA_CREDITO_B' 
+export type TipoComprobante =
+  | 'FACTURA_A'
+  | 'FACTURA_B'
+  | 'FACTURA_C'
+  | 'NOTA_CREDITO_A'
+  | 'NOTA_CREDITO_B'
   | 'NOTA_CREDITO_C'
-  | 'NOTA_DEBITO_A' 
-  | 'NOTA_DEBITO_B' 
+  | 'NOTA_DEBITO_A'
+  | 'NOTA_DEBITO_B'
   | 'NOTA_DEBITO_C';
 
-export type EstadoFactura = 
-  | 'borrador' 
-  | 'autorizada' 
-  | 'rechazada' 
-  | 'anulada' 
+export type EstadoFactura =
+  | 'borrador'
+  | 'autorizada'
+  | 'rechazada'
+  | 'anulada'
   | 'error';
 
 export interface ItemFactura {
@@ -35,8 +35,8 @@ export interface ItemFactura {
 }
 
 export interface DatosAFIP {
-  CAE?: string;
-  CAEVencimiento?: string;
+  cae?: string;
+  fechaVencimientoCAE?: string;
   numeroComprobante?: string;
   puntoVenta: number;
   numeroSecuencial?: number;
@@ -61,14 +61,16 @@ export interface Factura {
   };
   tipoComprobante: TipoComprobante;
   estado: EstadoFactura;
-  puntoVenta: number;
-  numeroSecuencial: number;
+  puntoVenta?: number; // DEPRECATED: Usar datosAFIP.puntoVenta
+  numeroSecuencial?: number; // DEPRECATED: Usar datosAFIP.numeroSecuencial
   emisorCUIT: string;
   emisorRazonSocial: string;
   emisorDomicilio: string;
   emisorCondicionIVA: string;
+  emisorIngresosBrutos?: string;
   receptorRazonSocial: string;
   receptorNumeroDocumento: string;
+  receptorDomicilio?: string;
   receptorCondicionIVA: string;
   fecha: string;
   items: ItemFactura[];
@@ -194,8 +196,8 @@ export const autorizarFactura = createAsyncThunk(
       return response.data.factura;
     } catch (error: any) {
       return rejectWithValue(
-        error.response?.data?.error || 
-        error.response?.data?.errores?.join(', ') || 
+        error.response?.data?.error ||
+        error.response?.data?.errores?.join(', ') ||
         'Error al autorizar factura'
       );
     }

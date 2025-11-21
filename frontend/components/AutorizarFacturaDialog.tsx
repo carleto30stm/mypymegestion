@@ -49,10 +49,10 @@ const AutorizarFacturaDialog: React.FC<AutorizarFacturaDialogProps> = ({
     try {
       const result = await dispatch(autorizarFactura(factura._id)).unwrap();
       
-      if (result.datosAFIP?.CAE) {
+      if (result.datosAFIP?.cae) {
         setCAEData({
-          CAE: result.datosAFIP.CAE,
-          CAEVencimiento: result.datosAFIP.CAEVencimiento,
+          CAE: result.datosAFIP.cae,
+          CAEVencimiento: result.datosAFIP.fechaVencimientoCAE,
         });
         setSuccess(true);
       }

@@ -803,7 +803,11 @@ export const autorizarFactura = async (req: Request, res: Response) => {
         factura,
         cae: resultado.cae,
         numeroComprobante: resultado.numeroComprobante,
-        ventasActualizadas: ventasIds.length
+        ventasActualizadas: ventasIds.length,
+        ...(resultado.observaciones && resultado.observaciones.length > 0 && {
+          observaciones: resultado.observaciones,
+          advertencia: 'Factura autorizada con observaciones informativas de AFIP'
+        })
       });
     } else {
       // Rechazada por AFIP
