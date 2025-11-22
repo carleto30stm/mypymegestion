@@ -21,6 +21,13 @@ src/**/*.d.ts.map
 .env.test.local
 .env.production.local
 
+# AFIP certificates and tokens (sensitive data - NEVER commit)
+certs/
+afip_tokens/
+*.crt
+*.key
+*.pem
+
 # Runtime data
 pids
 *.pid
