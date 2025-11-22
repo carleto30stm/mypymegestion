@@ -14,7 +14,6 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 import axios from 'axios';
 import { parseStringPromise } from 'xml2js';
-import { asegurarCarpetaTokens } from '../../utils/certificadosHelper.js';
 
 // URLs de WSAA según ambiente
 const WSAA_URLS = {
@@ -46,8 +45,11 @@ export class AFIPWSAAService {
   constructor(config: WSAAConfig) {
     this.config = config;
     
-    // Asegurar que la carpeta de tokens exista
-    this.taFolder = asegurarCarpetaTokens(config.taFolder);
+    // Usar ruta absoluta para la carpeta de tokens
+    const folder = config.taFolder || process.env.AFIP_TA_FOLDER || './afip_tokens';
+    this.taFolder = path.resolve(folder);
+    
+    console.log(`🔧 AFIPWSAAService inicializado con carpeta tokens: ${this.taFolder}`);
   }
 
   /**
@@ -137,17 +139,17 @@ export class AFIPWSAAService {
    * Firma el TRA usando OpenSSL (formato CMS requerido por AFIP)
    */
   private async firmarTRA(tra: string): Promise<string> {
-    // Usar ruta absoluta para la carpeta de tokens
-    const folderPath = path.resolve(this.taFolder);
-    const traFile = path.join(folderPath, 'tra_temp.xml');
-    const traSignedFile = path.join(folderPath, 'tra_signed.tmp');
+    // this.taFolder ya es una ruta absoluta (resuelto en constructor)
+    const traFile = path.join(this.taFolder, 'tra_temp.xml');
+    const traSignedFile = path.join(this.taFolder, 'tra_signed.tmp');
     
-    console.log(`📁 Carpeta tokens: ${folderPath}`);
+    console.log(`📁 Carpeta tokens: ${this.taFolder}`);
+    console.log(`📝 Archivo TRA temporal: ${traFile}`);
     
     try {
-      console.log(`📝 Escribiendo TRA temporal en: ${traFile}`);
       // Escribir TRA temporal
       fs.writeFileSync(traFile, tra, 'utf8');
+      console.log(`✅ TRA temporal escrito exitosamente`);
       
       // Firmar con OpenSSL usando formato CMS
       // AFIP requiere: CMS, SHA256, nodetach, formato DER
@@ -296,8 +298,7 @@ export class AFIPWSAAService {
    * Lee un TA del caché en disco
    */
   private leerTACache(servicio: string): TicketAcceso | null {
-    const folderPath = path.resolve(this.taFolder);
-    const taFile = path.join(folderPath, `TA-${servicio}.json`);
+    const taFile = path.join(this.taFolder, `TA-${servicio}.json`);
     
     if (!fs.existsSync(taFile)) {
       return null;
@@ -316,9 +317,7 @@ export class AFIPWSAAService {
    * Guarda un TA en el caché en disco
    */
   private guardarTACache(servicio: string, ta: TicketAcceso): void {
-    // Usar ruta absoluta para la carpeta de tokens
-    const folderPath = path.resolve(this.taFolder);
-    const taFile = path.join(folderPath, `TA-${servicio}.json`);
+    const taFile = path.join(this.taFolder, `TA-${servicio}.json`);
     
     try {
       fs.writeFileSync(taFile, JSON.stringify(ta, null, 2), 'utf8');
@@ -343,21 +342,19 @@ export class AFIPWSAAService {
    * Limpia el caché de TAs (útil para debugging)
    */
   limpiarCache(servicio?: string): void {
-    const folderPath = path.resolve(this.taFolder);
-    
     if (servicio) {
-      const taFile = path.join(folderPath, `TA-${servicio}.json`);
+      const taFile = path.join(this.taFolder, `TA-${servicio}.json`);
       if (fs.existsSync(taFile)) {
         fs.unlinkSync(taFile);
         console.log(`🗑️  Cache de ${servicio} eliminado`);
       }
     } else {
       // Limpiar todos los TAs
-      if (fs.existsSync(folderPath)) {
-        const files = fs.readdirSync(folderPath);
+      if (fs.existsSync(this.taFolder)) {
+        const files = fs.readdirSync(this.taFolder);
         files.filter(f => f.startsWith('TA-') && f.endsWith('.json'))
           .forEach(f => {
-            fs.unlinkSync(path.join(folderPath, f));
+            fs.unlinkSync(path.join(this.taFolder, f));
           });
         console.log(`🗑️  Todo el cache de TAs eliminado`);
       }
