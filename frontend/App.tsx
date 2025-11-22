@@ -20,6 +20,9 @@ import { ProveedoresPage, MateriasPrimasPage, ComprasPage } from './pages';
 import MovimientosInventarioPage from './pages/MovimientosInventarioPage';
 import RecetasPage from './pages/RecetasPage';
 import OrdenesProduccionPage from './pages/OrdenesProduccionPage';
+import OrdenProcesamientoList from './pages/OrdenProcesamientoList';
+import OrdenProcesamientoForm from './pages/OrdenProcesamientoForm';
+import OrdenProcesamientoRecepcion from './pages/OrdenProcesamientoRecepcion';
 import Layout from './components/Layout';
 import { useTokenExpiration } from './hooks/useTokenExpiration';
 
@@ -58,6 +61,10 @@ const App: React.FC = () => {
           <Route path="/movimientos-inventario" element={<MovimientosInventarioPage />} />
           <Route path="/recetas" element={<RecetasPage />} />
           <Route path="/ordenes-produccion" element={<OrdenesProduccionPage />} />
+          <Route path="/ordenes-procesamiento" element={<OrdenProcesamientoList />} />
+          <Route path="/ordenes-procesamiento/nueva" element={<OrdenProcesamientoForm />} />
+          <Route path="/ordenes-procesamiento/:id" element={<OrdenProcesamientoForm />} />
+          <Route path="/ordenes-procesamiento/:id/recibir" element={<OrdenProcesamientoRecepcion />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

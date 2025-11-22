@@ -18,6 +18,7 @@ import comprasRoutes from './routes/compras.js';
 import movimientosInventarioRoutes from './routes/movimientosInventario.js';
 import recetasRoutes from './routes/recetas.js';
 import ordenesProduccionRoutes from './routes/ordenesProduccion.js';
+import ordenProcesamientoRoutes from './routes/ordenProcesamientoRoutes.js';
 import remitosRoutes from './routes/remitos.js';
 import recibosRoutes from './routes/recibos.js';
 import cuentaCorrienteRoutes from './routes/cuentaCorriente.js';
@@ -46,18 +47,18 @@ const start = async () => {
       origin: function (origin: string | undefined, callback: Function) {
         // Permitir requests sin origin (apps móviles, Postman, etc.)
         if (!origin) return callback(null, true);
-        
+
         // En producción, verificar la lista de orígenes permitidos
         if (process.env.NODE_ENV === 'production') {
-          if (allowedOrigins.some(allowedOrigin => 
-            allowedOrigin && (origin.includes(allowedOrigin) || 
-            origin.endsWith('.railway.app'))
+          if (allowedOrigins.some(allowedOrigin =>
+            allowedOrigin && (origin.includes(allowedOrigin) ||
+              origin.endsWith('.railway.app'))
           )) {
             return callback(null, true);
           }
           return callback(new Error('No permitido por CORS'));
         }
-        
+
         // En desarrollo, permitir todo
         return callback(null, true);
       },
@@ -71,8 +72,8 @@ const start = async () => {
 
     // Health check endpoint
     app.get('/health', (req, res) => {
-      res.status(200).json({ 
-        status: 'OK', 
+      res.status(200).json({
+        status: 'OK',
         timestamp: new Date().toISOString(),
         environment: process.env.NODE_ENV || 'development'
       });
@@ -95,6 +96,7 @@ const start = async () => {
     app.use('/api/movimientos-inventario', movimientosInventarioRoutes);
     app.use('/api/recetas', recetasRoutes);
     app.use('/api/ordenes-produccion', ordenesProduccionRoutes);
+    app.use('/api/ordenes-procesamiento', ordenProcesamientoRoutes);
     app.use('/api/remitos', remitosRoutes);
     app.use('/api/recibos', recibosRoutes);
     app.use('/api/cuenta-corriente', cuentaCorrienteRoutes);
@@ -106,7 +108,7 @@ const start = async () => {
       console.log(`🚀 Servidor corriendo en puerto ${PORT} (env: ${env})`);
       console.log(`[DB] Conectado a MongoDB: ${conn?.connection.host}/${conn?.connection.name}`);
       console.log(`[CORS] Origen permitido: ${process.env.CORS_ORIGIN || "http://localhost:5173"}`);
-      
+
       // Iniciar cron job para cálculo diario de intereses
       iniciarCalculoInteresesDiario();
     });

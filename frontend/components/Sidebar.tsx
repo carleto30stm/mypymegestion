@@ -35,6 +35,7 @@ import PrecisionManufacturingIcon from '@mui/icons-material/PrecisionManufacturi
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
+import EngineeringIcon from '@mui/icons-material/Engineering';
 
 export const drawerWidth = 240;
 export const drawerHandleWidth = 40;
@@ -355,6 +356,17 @@ const Sidebar: React.FC<SidebarProps> = ({
               <PrecisionManufacturingIcon />
             </ListItemIcon>
             <ListItemText primary="Órdenes de Producción" />
+          </ListItemButton>
+        </ListItem>
+        <ListItem disablePadding>
+          <ListItemButton 
+            onClick={() => navigate('/ordenes-procesamiento')}
+            selected={location.pathname.startsWith('/ordenes-procesamiento')}
+          >
+            <ListItemIcon>
+              <EngineeringIcon />
+            </ListItemIcon>
+            <ListItemText primary="Procesamiento Externo" />
           </ListItemButton>
         </ListItem>
       </List>

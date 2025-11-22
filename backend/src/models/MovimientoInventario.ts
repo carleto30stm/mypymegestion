@@ -35,7 +35,7 @@ const MovimientoInventarioSchema = new Schema({
   tipo: {
     type: String,
     required: [true, 'El tipo de movimiento es requerido'],
-    enum: ['entrada', 'salida', 'ajuste', 'produccion', 'devolucion', 'merma']
+    enum: ['entrada', 'salida', 'ajuste', 'produccion', 'devolucion', 'merma', 'envio_procesamiento', 'recepcion_procesamiento']
   },
   materiaPrimaId: {
     type: Schema.Types.ObjectId,
@@ -56,7 +56,7 @@ const MovimientoInventarioSchema = new Schema({
     type: Number,
     required: [true, 'La cantidad es requerida'],
     validate: {
-      validator: function(v: number) {
+      validator: function (v: number) {
         return v !== 0;
       },
       message: 'La cantidad no puede ser 0'
@@ -141,7 +141,7 @@ MovimientoInventarioSchema.index({ documentoOrigenId: 1 });
 MovimientoInventarioSchema.index({ usuario: 1 });
 
 // Método para calcular valor total antes de guardar
-MovimientoInventarioSchema.pre('save', function(next) {
+MovimientoInventarioSchema.pre('save', function (next) {
   if (this.precioUnitario && this.cantidad) {
     this.valorTotal = Math.abs(this.cantidad) * this.precioUnitario;
   }

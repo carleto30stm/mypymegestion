@@ -8,7 +8,11 @@ import {
   updateSaldoCuenta,
   searchProveedores
 } from '../controllers/proveedoresController.js';
-import { agregarNota, obtenerNotas, eliminarNota } from '../controllers/proveedoresController.js';
+import {
+  agregarNota, obtenerNotas, eliminarNota,
+  registrarPagoProveedor,
+  getMovimientosProveedor
+} from '../controllers/proveedoresController.js';
 
 const router = express.Router();
 
@@ -23,5 +27,9 @@ router.delete('/:id', deleteProveedor);
 router.patch('/:id/saldo', updateSaldoCuenta);
 router.post('/:id/notas', agregarNota);
 router.delete('/:id/notas/:notaId', eliminarNota);
+router.get('/:id/movimientos', getMovimientosProveedor);
+
+// Registrar pago
+router.post('/:id/pagar', registrarPagoProveedor);
 
 export default router;
