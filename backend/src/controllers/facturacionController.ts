@@ -20,24 +20,37 @@ const getAfipConfig = (): {
 } => {
   let certPath: string;
   let keyPath: string;
-  
+
   // Si hay variables de entorno con certificados, crear archivos temporales
   if (process.env.AFIP_CERT && process.env.AFIP_KEY) {
     // Usar directorio temporal del sistema (compatible con Vercel/Railway)
     const tempDir = os.tmpdir();
     certPath = path.join(tempDir, `afip_cert_${process.env.AFIP_CUIT || 'default'}.crt`);
     keyPath = path.join(tempDir, `afip_key_${process.env.AFIP_CUIT || 'default'}.key`);
-    
+
     try {
-      // Decodificar y escribir solo si no existen
-      if (!fs.existsSync(certPath) || !fs.existsSync(keyPath)) {
-        const cert = process.env.AFIP_CERT.replace(/\\n/g, '\n');
-        const key = process.env.AFIP_KEY.replace(/\\n/g, '\n');
-        
-        fs.writeFileSync(certPath, cert, 'utf8');
-        fs.writeFileSync(keyPath, key, 'utf8');
-        console.log('✅ Certificados temporales creados desde variables de entorno');
-      }
+      // Decodificar y escribir SIEMPRE (para asegurar contenido fresco y válido)
+      // Sanitizar contenido: reemplazar \n literales, eliminar \r, y reducir múltiples saltos de línea
+      const cleanContent = (content: string) => {
+        return content
+          .replace(/\\n/g, '\n')
+          .replace(/\r/g, '')
+          .replace(/\n+/g, '\n')
+          .trim();
+      };
+
+      const cert = cleanContent(process.env.AFIP_CERT);
+      const key = cleanContent(process.env.AFIP_KEY);
+
+      fs.writeFileSync(certPath, cert, 'utf8');
+      fs.writeFileSync(keyPath, key, 'utf8');
+
+      // Verificar tamaño para debugging
+      const certStats = fs.statSync(certPath);
+      const keyStats = fs.statSync(keyPath);
+      console.log(`✅ Certificados temporales creados/actualizados:`);
+      console.log(`   - Cert: ${certPath} (${certStats.size} bytes)`);
+      console.log(`   - Key: ${keyPath} (${keyStats.size} bytes)`);
     } catch (error) {
       console.error('❌ Error al crear certificados temporales:', error);
       throw new Error('No se pudieron crear certificados temporales AFIP');
@@ -47,7 +60,7 @@ const getAfipConfig = (): {
     certPath = path.resolve(process.env.AFIP_CERT_PATH || './certs/cert.crt');
     keyPath = path.resolve(process.env.AFIP_KEY_PATH || './certs/private.key');
   }
-  
+
   const config: any = {
     cuit: process.env.AFIP_CUIT || '',
     certPath,
@@ -56,12 +69,12 @@ const getAfipConfig = (): {
     puntoVenta: parseInt(process.env.AFIP_PUNTO_VENTA || '1'),
     razonSocial: process.env.EMPRESA_RAZON_SOCIAL || ''
   };
-  
+
   // Solo incluir taFolder si está definido
   if (process.env.AFIP_TA_FOLDER) {
     config.taFolder = process.env.AFIP_TA_FOLDER;
   }
-  
+
   return config;
 };
 
@@ -109,7 +122,7 @@ const convertirTipoComprobanteALetra = (tipo: TipoComprobante | undefined): stri
   if (!tipo) {
     throw new Error('Tipo de comprobante no definido');
   }
-  
+
   const mapa: Record<TipoComprobante, string> = {
     'FACTURA_A': 'A',
     'FACTURA_B': 'B',
@@ -121,12 +134,12 @@ const convertirTipoComprobanteALetra = (tipo: TipoComprobante | undefined): stri
     'NOTA_DEBITO_B': 'B_ND',
     'NOTA_DEBITO_C': 'C_ND'
   };
-  
+
   const resultado = mapa[tipo];
   if (!resultado) {
     throw new Error(`Tipo de comprobante no reconocido: ${tipo}`);
   }
-  
+
   return resultado;
 };
 
@@ -164,7 +177,7 @@ const convertirLetraATipoComprobante = (letra: string, tipo: 'factura' | 'nota_d
 const convertirCodigoALetra = (codigo: number): string => {
   // Normalizar el código a número (por si viene como string desde Mongoose)
   const codigoNum = typeof codigo === 'string' ? parseInt(codigo, 10) : codigo;
-  
+
   const mapa: Record<number, string> = {
     1: 'A',     // FACTURA_A
     6: 'B',     // FACTURA_B
@@ -176,13 +189,13 @@ const convertirCodigoALetra = (codigo: number): string => {
     8: 'B_NC',  // NOTA_CREDITO_B
     13: 'C_NC'  // NOTA_CREDITO_C
   };
-  
+
   const resultado = mapa[codigoNum];
-  
+
   if (!resultado) {
     throw new Error(`Código de comprobante no reconocido: ${codigo} (normalizado: ${codigoNum})`);
   }
-  
+
   return resultado;
 };
 
@@ -194,15 +207,15 @@ const adaptarFacturaParaSOAP = (factura: IFactura): DatosFactura => {
   console.log('🔍 [DEBUG] receptorCondicionIVACodigo:', factura.receptorCondicionIVACodigo);
   console.log('🔍 [DEBUG] receptorTipoDocumento:', factura.receptorTipoDocumento);
   console.log('🔍 [DEBUG] tipoComprobante:', factura.tipoComprobante);
-  
+
   // IMPORTANTE: Si tenemos el código numérico, usarlo directamente
   // Si no, intentar convertir la descripción (fallback para facturas viejas)
-  const condicionIVA = factura.receptorCondicionIVACodigo 
+  const condicionIVA = factura.receptorCondicionIVACodigo
     ? factura.receptorCondicionIVACodigo.toString() // AFIP espera string del código
     : factura.receptorCondicionIVA; // Fallback a descripción (se convierte después)
-  
+
   console.log('🔍 [DEBUG] condicionIVA a enviar:', condicionIVA);
-  
+
   return {
     puntoVenta: factura.datosAFIP.puntoVenta,
     tipoComprobante: convertirTipoComprobanteALetra(factura.tipoComprobante),
@@ -288,15 +301,15 @@ export const crearFacturaDesdeVenta = async (req: Request, res: Response) => {
     }
 
     // Validar consistencia entre tipo de documento y condición IVA
-    if ((cliente.tipoDocumento === 'CUIT' || cliente.tipoDocumento === 'CUIL') && 
-        cliente.condicionIVA === 'Consumidor Final') {
+    if ((cliente.tipoDocumento === 'CUIT' || cliente.tipoDocumento === 'CUIL') &&
+      cliente.condicionIVA === 'Consumidor Final') {
       console.warn(`⚠️  ADVERTENCIA: Cliente ${cliente.numeroDocumento} tiene CUIT/CUIL pero está marcado como Consumidor Final`);
       console.warn(`⚠️  Esto puede causar rechazo en AFIP. Considere actualizar condicionIVA a 'Responsable Inscripto' o 'Monotributista'`);
     }
 
     // NUEVO ENFOQUE: Consultar tipo de factura desde AFIP
     console.log('\n🚀 ========== USANDO CONSULTA AFIP PARA DETERMINAR TIPO FACTURA ==========');
-    
+
     const afipConfig: any = {
       cuit: EMPRESA.cuit,
       certPath: process.env.AFIP_CERT_PATH || '',
@@ -305,12 +318,12 @@ export const crearFacturaDesdeVenta = async (req: Request, res: Response) => {
       puntoVenta: EMPRESA.puntoVenta,
       razonSocial: EMPRESA.razonSocial
     };
-    
+
     // Solo incluir taFolder si está definido
     if (process.env.AFIP_TA_FOLDER) {
       afipConfig.taFolder = process.env.AFIP_TA_FOLDER;
     }
-    
+
     const afipService = new AFIPServiceSOAP(afipConfig);
 
     const resultadoAFIP = await afipService.determinarTipoFacturaDesdeAFIP(
@@ -326,12 +339,12 @@ export const crearFacturaDesdeVenta = async (req: Request, res: Response) => {
 
     const tipoComprobanteLetra = resultadoAFIP.tipoFactura;
     const tipoComprobante = convertirLetraATipoComprobante(tipoComprobanteLetra);
-    
+
     // Determinar si el comprobante discrimina IVA
     // CRÍTICO: Respetar venta.aplicaIVA (decisión del usuario) Y resultado de AFIP
     const discriminaIVA = venta.aplicaIVA && resultadoAFIP.discriminaIVA;
     console.log('💰 [DEBUG] Discrimina IVA final:', discriminaIVA);
-    
+
     // Informar al usuario el tipo de factura que se va a emitir
     console.log('\n🎯 ========== TIPO DE FACTURA DETERMINADO ==========');
     console.log('📄 Se creará una FACTURA tipo', tipoComprobanteLetra);
@@ -348,18 +361,18 @@ export const crearFacturaDesdeVenta = async (req: Request, res: Response) => {
 
     // CRÍTICO: Calcular IVA proporcional por item basado en el IVA total de la venta
     const totalVentaSinIVA = venta.total - venta.iva;
-    
+
     // Convertir items de venta a items de factura
     const items = venta.items.map(item => {
       // El item.total ya tiene descuentos aplicados pero NO incluye IVA
       const importeNeto = item.total;
-      
+
       // Calcular IVA proporcional de este item respecto al total
       // Proporción: (importeNeto / totalVentaSinIVA) * ivaTotal
-      const ivaProporcion = totalVentaSinIVA > 0 
-        ? (importeNeto / totalVentaSinIVA) * venta.iva 
+      const ivaProporcion = totalVentaSinIVA > 0
+        ? (importeNeto / totalVentaSinIVA) * venta.iva
         : 0;
-      
+
       const importeIVA = discriminaIVA ? ivaProporcion : 0;
 
       return {
@@ -673,14 +686,14 @@ export const crearFacturaManual = async (req: Request, res: Response) => {
     // Crear factura
     const factura = new Factura({
       clienteId: cliente._id,
-      tipoComprobante: tipoComprobante 
+      tipoComprobante: tipoComprobante
         ? convertirLetraATipoComprobante(tipoComprobante as string)
         : convertirLetraATipoComprobante(
-            AFIPServiceSOAP.determinarTipoFactura(
-              EMPRESA.condicionIVA,
-              cliente.condicionIVA
-            )
-          ),
+          AFIPServiceSOAP.determinarTipoFactura(
+            EMPRESA.condicionIVA,
+            cliente.condicionIVA
+          )
+        ),
       estado: 'borrador',
 
       // Datos emisor
@@ -948,18 +961,18 @@ export const obtenerFactura = async (req: Request, res: Response) => {
 export const resetearFacturaRechazada = async (req: Request, res: Response) => {
   try {
     let { id } = req.params;
-    
+
     // Validar que el ID exista
     if (!id) {
       return res.status(400).json({ error: 'ID de factura requerido' });
     }
-    
+
     // Limpiar ID (remover llaves, espacios, comillas)
     id = id.replace(/[{}"'\s]/g, '').trim();
-    
+
     // Validar formato de ObjectId (24 caracteres hexadecimales)
     if (!/^[0-9a-fA-F]{24}$/.test(id)) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'ID de factura inválido',
         idRecibido: req.params.id
       });
@@ -972,7 +985,7 @@ export const resetearFacturaRechazada = async (req: Request, res: Response) => {
 
     // Solo se pueden resetear facturas rechazadas
     if (factura.estado !== 'rechazada') {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Solo se pueden resetear facturas rechazadas',
         estadoActual: factura.estado
       });
@@ -980,7 +993,7 @@ export const resetearFacturaRechazada = async (req: Request, res: Response) => {
 
     // Limpiar datos de AFIP del intento fallido
     factura.estado = 'borrador';
-    
+
     // Usar $unset para eliminar campos opcionales
     await Factura.updateOne(
       { _id: id },
