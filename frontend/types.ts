@@ -161,17 +161,17 @@ export interface LiquidacionPeriodo {
 
 // SubRubros mapping
 export const subRubrosByRubro: Record<string, string[]> = {
-  'SERVICIOS': ['ELECTRICIDAD', 'PROGRAMACION', 'AGUA', 'GAS', 'Servicios de Internet/Telecomunicaciones', 'JARDIN','LIMPIEZA'],
+  'SERVICIOS': ['ELECTRICIDAD', 'PROGRAMACION', 'AGUA', 'GAS', 'Servicios de Internet/Telecomunicaciones', 'JARDIN', 'LIMPIEZA'],
   'COBRO.VENTA': ['DEVOLUCION', 'COBRO', 'ADEUDADO', 'FLETE', 'COMISION', 'AJUSTE'],
   'PROOV.MATERIA.PRIMA': ['ALAMBRE INDUSTRIA', 'ALAMBRE RAUP', 'EMBALAJE', 'POLIESTIRENO', 'FUNDICION', 'PORTARRETRATOS', 'LLAVEROS Y PORTA'],
   'PROOVMANO.DE.OBRA': ['PORTA RETRATOS', 'SIN/FINES', 'INYECCION DE PLASTICO', 'TRIANGULOS', 'ARGOLLAS', 'GALVANO CADENAS', 'GALVANO CABEZALES', 'ARMADORAS'],
-  'BANCO': ['MOVIMIENTOS AJUSTE', 'MOV.BANC', 'AJUSTE DE BANCO','AJUSTE CAJA','PRESTAMO'],
-  'GASTOS.ADMIN': ['MANT.CTA', 'B.PERSONALES', 'CONVENIO MULT','IMP.DEB.CRED','HONORARIOS MARKETING','ARCA','SIRCREB'],
+  'BANCO': ['MOVIMIENTOS AJUSTE', 'MOV.BANC', 'AJUSTE DE BANCO', 'AJUSTE CAJA', 'PRESTAMO'],
+  'GASTOS.ADMIN': ['MANT.CTA', 'B.PERSONALES', 'CONVENIO MULT', 'IMP.DEB.CRED', 'HONORARIOS MARKETING', 'ARCA', 'SIRCREB'],
   'GASTOS ADMINISTRATIVOS': ['HONORARIOS', 'IMPUESTO BANCARIOS', 'IMPUESTO TARJETAS', 'VEPS', 'PLAN DE PAGO', 'MONOTRIBUTO', 'II.BB/SIRCREB', 'MANT. CTA.', 'CONSULTORIAS'],
   'ARCA': ['IVA'],
-  'MANT.EMPRESA': ['GASTOS OFICINA', 'REFRIGERIO', 'BOTIQUIN','ELECT./PLOMERIA/PINTURA','INDUMENTARIA','PAPELERA','COMPUTACION','ARTICULOS DE LIMPIEZA','OTROS'],
-  'MANT.MAQ': ['MECANICO', 'MATERIALES', 'TORNERO','MAQ. NUEVA'],
-  'MOVILIDAD': ['COMBUSTIBLE', 'PEAJES', 'ESTACIONAMIENTO','MECANICO','SERVICE']
+  'MANT.EMPRESA': ['GASTOS OFICINA', 'REFRIGERIO', 'BOTIQUIN', 'ELECT./PLOMERIA/PINTURA', 'INDUMENTARIA', 'PAPELERA', 'COMPUTACION', 'ARTICULOS DE LIMPIEZA', 'OTROS'],
+  'MANT.MAQ': ['MECANICO', 'MATERIALES', 'TORNERO', 'MAQ. NUEVA'],
+  'MOVILIDAD': ['COMBUSTIBLE', 'PEAJES', 'ESTACIONAMIENTO', 'MECANICO', 'SERVICE']
 };
 
 export interface Gasto {
@@ -252,12 +252,12 @@ export interface Cliente {
   // Virtuals (calculados por el backend)
   nombreCompleto?: string;
   puedeComprarCredito?: boolean;
-  
+
   // Campos para facturación fiscal
   requiereFacturaAFIP: boolean;
   aplicaIVA: boolean;
   facturacionAutomatica?: boolean; // Generar factura automáticamente al cobrar (Fase 2)
-  
+
   // Campos para entregas
   direccionEntrega?: string;
   direccionesAlternativas?: Array<{
@@ -268,11 +268,11 @@ export interface Cliente {
     contacto?: string;
     telefono?: string;
   }>;
-  
+
   // Preferencias de pago
   aceptaCheques: boolean;
   diasVencimientoCheques?: number;
-  
+
   // Notas e incidentes
   notas?: Array<{
     _id?: string;
@@ -325,11 +325,11 @@ export interface Venta {
   motivoAnulacion?: string;
   usuarioAnulacion?: string;
   usuarioConfirmacion?: string;
-  
+
   // Campos fiscales
   aplicaIVA: boolean;
   requiereFacturaAFIP: boolean;
-  
+
   // Campos para cheques
   datosCheque?: {
     numeroCheque: string;
@@ -343,20 +343,20 @@ export interface Venta {
     fechaDeposito?: string;
     observaciones?: string;
   };
-  
+
   // Campos para remito y entrega
   estadoEntrega: typeof ESTADOS_ENTREGA[number];
   remitoId?: string;
   direccionEntrega?: string;
   fechaEntrega?: string;
-  
+
   // Campos para cobranza
   estadoCobranza: typeof ESTADOS_COBRANZA[number];
   montoCobrado: number;
   saldoPendiente: number;
   recibosRelacionados?: string[];
   ultimaCobranza?: string;
-  
+
   // Campos para facturación
   facturaId?: string;
   facturada?: boolean;
@@ -385,34 +385,34 @@ export interface MetricaProducto {
   codigoProducto: string;
   nombreProducto: string;
   categoria: string;
-  
+
   // Métricas de cantidad
   unidadesVendidas: number;
   numeroVentas: number;
-  
+
   // Métricas de montos
   totalVendido: number;
   totalNetoSinIVA: number;
   totalDescuentos: number;
-  
+
   // Precios
   precioPromedioVenta: number;
   precioVentaActual: number;
   precioCompraActual: number;
   ticketPromedio: number;
-  
+
   // Márgenes
   margenBrutoUnitario: number;
   porcentajeMargenBruto: number;
   utilidadNetaEstimada: number;
   porcentajeUtilidadNeta: number;
-  
+
   // Costos
   costoTotalEstimado: number;
-  
+
   // Stock
   stockActual: number;
-  
+
   // Ranking y clasificación
   ranking: number;
   participacionVentas: number;
@@ -502,6 +502,7 @@ export interface EstadisticasRemitos {
 // Interface para proveedores
 export interface Proveedor {
   _id?: string;
+  tipoProveedor: 'MATERIA_PRIMA' | 'PROOVMANO.DE.OBRA';
   tipoDocumento: 'DNI' | 'CUIT' | 'CUIL' | 'Pasaporte';
   numeroDocumento: string;
   razonSocial: string;
@@ -835,12 +836,12 @@ export interface FormaPago {
   medioPago: typeof MEDIOS_PAGO[number];
   monto: number;
   banco?: typeof BANCOS[number];
-  
+
   // Datos específicos según medio de pago
   datosCheque?: DatosCheque;
   datosTransferencia?: DatosTransferencia;
   datosTarjeta?: DatosTarjeta;
-  
+
   observaciones?: string;
 }
 
@@ -862,13 +863,13 @@ export interface ReciboPago {
   clienteId: string;
   nombreCliente: string;
   documentoCliente: string;
-  
+
   // Comprobantes relacionados (ventas cobradas)
   ventasRelacionadas: VentaRelacionada[];
-  
+
   // Formas de pago utilizadas
   formasPago: FormaPago[];
-  
+
   // Totales
   totales: {
     totalACobrar: number;      // Suma de saldos pendientes de ventas
@@ -876,14 +877,14 @@ export interface ReciboPago {
     vuelto: number;             // Si totalCobrado > totalACobrar
     saldoPendiente: number;     // Si totalCobrado < totalACobrar (no debería pasar)
   };
-  
+
   // Metadata
   momentoCobro: typeof MOMENTO_COBRO[number];
   estadoRecibo: typeof ESTADOS_RECIBO[number];
   observaciones?: string;
   motivoAnulacion?: string;
   fechaAnulacion?: string;
-  
+
   creadoPor: string;
   modificadoPor?: string;
   createdAt?: string;
@@ -1054,34 +1055,34 @@ export interface InteresPunitorio {
     numeroDocumento?: string;
   };
   documentoRelacionado: DocumentoRelacionado;
-  
+
   // Montos originales
   capitalOriginal: number;
-  
+
   // Fechas relevantes
   fechaVencimiento: string;
   fechaInicioPunitorio: string; // Vencimiento + aplicaDesde días
   fechaFinCalculo: string; // Última fecha hasta la que se calculó
-  
+
   // Tasas aplicadas
   tasaInteresMensual: number;
   tasaDiariaAplicada: number;
-  
+
   // Tiempo transcurrido
   diasTranscurridos: number;
-  
+
   // Montos de interés
   interesDevengado: number; // Total calculado
   interesCobrado: number; // Ya cobrado (vía Nota Débito)
   interesCondonado: number; // Perdonado
   interesPendiente: number; // Devengado - Cobrado - Condonado
-  
+
   // Estado
   estado: typeof ESTADOS_INTERES[number];
-  
+
   // Auditoría de acciones
   acciones: AccionInteres[];
-  
+
   createdAt?: string;
   updatedAt?: string;
 }

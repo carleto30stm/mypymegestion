@@ -67,7 +67,7 @@ const OrdenProcesamientoForm: React.FC<OrdenProcesamientoFormProps> = ({ orderId
     try {
       setLoading(true);
       const [provRes, mpRes] = await Promise.all([
-        api.get('/api/proveedores'),
+        api.get('/api/proveedores?tipoProveedor=PROOVMANO.DE.OBRA'),
         api.get('/api/materias-primas')
       ]);
       setProveedores(provRes.data);

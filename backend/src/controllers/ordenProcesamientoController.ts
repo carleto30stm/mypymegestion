@@ -21,6 +21,15 @@ export const crearOrden = async (req: Request, res: Response) => {
             estado: 'borrador'
         });
 
+        // Validar que el proveedor sea de mano de obra
+        const proveedor = await Proveedor.findById(proveedorId);
+        if (!proveedor) {
+            return res.status(404).json({ message: 'Proveedor no encontrado' });
+        }
+        if (proveedor.tipoProveedor !== 'PROOVMANO.DE.OBRA') {
+            return res.status(400).json({ message: 'El proveedor debe ser de tipo PROOVMANO.DE.OBRA' });
+        }
+
         await orden.save();
         res.status(201).json(orden);
     } catch (error: any) {

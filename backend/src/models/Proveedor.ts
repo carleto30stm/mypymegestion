@@ -1,6 +1,7 @@
 import mongoose, { Document } from 'mongoose';
 
 export interface IProveedor extends Document {
+  tipoProveedor: 'MATERIA_PRIMA' | 'PROOVMANO.DE.OBRA';
   tipoDocumento: 'DNI' | 'CUIT' | 'CUIL' | 'Pasaporte';
   numeroDocumento: string;
   razonSocial: string;
@@ -42,6 +43,13 @@ const proveedorSchema = new mongoose.Schema<IProveedor>({
     enum: ['DNI', 'CUIT', 'CUIL', 'Pasaporte'],
     default: 'CUIT'
   },
+  tipoProveedor: {
+    type: String,
+    required: [true, 'El tipo de proveedor es requerido'],
+    enum: ['MATERIA_PRIMA', 'PROOVMANO.DE.OBRA'],
+    default: 'MATERIA_PRIMA',
+    index: true
+  },
   numeroDocumento: {
     type: String,
     required: [true, 'El número de documento es requerido'],
@@ -65,7 +73,7 @@ const proveedorSchema = new mongoose.Schema<IProveedor>({
     trim: true,
     lowercase: true,
     validate: {
-      validator: function(v: string) {
+      validator: function (v: string) {
         return !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
       },
       message: 'Email inválido'
@@ -206,12 +214,12 @@ proveedorSchema.index({ categorias: 1 });
 proveedorSchema.index({ email: 1 });
 
 // Método virtual para verificar si tenemos saldo pendiente
-proveedorSchema.virtual('tieneSaldoPendiente').get(function(this: IProveedor) {
+proveedorSchema.virtual('tieneSaldoPendiente').get(function (this: IProveedor) {
   return this.saldoCuenta > 0;
 });
 
 // Método virtual para verificar si podemos seguir comprando a crédito
-proveedorSchema.virtual('puedeComprarCredito').get(function(this: IProveedor) {
+proveedorSchema.virtual('puedeComprarCredito').get(function (this: IProveedor) {
   return this.estado === 'activo' && this.saldoCuenta < this.limiteCredito;
 });
 

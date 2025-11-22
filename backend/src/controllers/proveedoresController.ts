@@ -7,12 +7,13 @@ import mongoose from 'mongoose';
 // Obtener todos los proveedores
 export const getProveedores = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { estado, categoria } = req.query;
+    const { estado, categoria, tipoProveedor } = req.query;
 
     // Construir filtros
     const filtros: any = {};
     if (estado) filtros.estado = estado;
     if (categoria) filtros.categorias = categoria;
+    if (tipoProveedor) filtros.tipoProveedor = tipoProveedor;
 
     const proveedores = await Proveedor.find(filtros).sort({ razonSocial: 1 });
     res.json(proveedores);
