@@ -26,7 +26,9 @@
     "afip:crear-punto-venta": "node scripts/crear-punto-venta.js",
     "afip:test-conexion": "node scripts/test-afip-conexion.js",
     "afip:test-completo": "node scripts/test-afip-completo.js",
-    "afip:generar-datos": "node scripts/generar-datos-prueba.js"
+    "afip:generar-datos": "node scripts/generar-datos-prueba.js",
+    "afip:generar-ta-local": "node scripts/obtener-ta-afip.js",
+    "afip:setup-local": "node scripts/setup-local-afip.js"
   },
   "dependencies": {
     "@types/pdfkit": "^0.17.3",
