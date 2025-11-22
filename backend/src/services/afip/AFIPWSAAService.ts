@@ -137,16 +137,19 @@ export class AFIPWSAAService {
    * Firma el TRA usando OpenSSL (formato CMS requerido por AFIP)
    */
   private async firmarTRA(tra: string): Promise<string> {
-    // Asegurar que la carpeta existe antes de escribir
-    if (!fs.existsSync(this.taFolder)) {
-      fs.mkdirSync(this.taFolder, { recursive: true });
-      console.log(`✅ Carpeta de tokens creada: ${this.taFolder}`);
+    // Asegurar que la carpeta existe antes de crear rutas
+    const folderPath = path.resolve(this.taFolder);
+    if (!fs.existsSync(folderPath)) {
+      console.log(`📁 Creando carpeta de tokens: ${folderPath}`);
+      fs.mkdirSync(folderPath, { recursive: true });
+      console.log(`✅ Carpeta de tokens creada exitosamente`);
     }
     
-    const traFile = path.join(this.taFolder, 'tra_temp.xml');
-    const traSignedFile = path.join(this.taFolder, 'tra_signed.tmp');
+    const traFile = path.join(folderPath, 'tra_temp.xml');
+    const traSignedFile = path.join(folderPath, 'tra_signed.tmp');
     
     try {
+      console.log(`📝 Escribiendo TRA temporal en: ${traFile}`);
       // Escribir TRA temporal
       fs.writeFileSync(traFile, tra, 'utf8');
       
@@ -297,7 +300,8 @@ export class AFIPWSAAService {
    * Lee un TA del caché en disco
    */
   private leerTACache(servicio: string): TicketAcceso | null {
-    const taFile = path.join(this.taFolder, `TA-${servicio}.json`);
+    const folderPath = path.resolve(this.taFolder);
+    const taFile = path.join(folderPath, `TA-${servicio}.json`);
     
     if (!fs.existsSync(taFile)) {
       return null;
@@ -317,12 +321,14 @@ export class AFIPWSAAService {
    */
   private guardarTACache(servicio: string, ta: TicketAcceso): void {
     // Asegurar que la carpeta existe antes de escribir
-    if (!fs.existsSync(this.taFolder)) {
-      fs.mkdirSync(this.taFolder, { recursive: true });
-      console.log(`✅ Carpeta de tokens creada: ${this.taFolder}`);
+    const folderPath = path.resolve(this.taFolder);
+    if (!fs.existsSync(folderPath)) {
+      console.log(`📁 Creando carpeta de tokens: ${folderPath}`);
+      fs.mkdirSync(folderPath, { recursive: true });
+      console.log(`✅ Carpeta de tokens creada exitosamente`);
     }
     
-    const taFile = path.join(this.taFolder, `TA-${servicio}.json`);
+    const taFile = path.join(folderPath, `TA-${servicio}.json`);
     
     try {
       fs.writeFileSync(taFile, JSON.stringify(ta, null, 2), 'utf8');
@@ -347,20 +353,24 @@ export class AFIPWSAAService {
    * Limpia el caché de TAs (útil para debugging)
    */
   limpiarCache(servicio?: string): void {
+    const folderPath = path.resolve(this.taFolder);
+    
     if (servicio) {
-      const taFile = path.join(this.taFolder, `TA-${servicio}.json`);
+      const taFile = path.join(folderPath, `TA-${servicio}.json`);
       if (fs.existsSync(taFile)) {
         fs.unlinkSync(taFile);
         console.log(`🗑️  Cache de ${servicio} eliminado`);
       }
     } else {
       // Limpiar todos los TAs
-      const files = fs.readdirSync(this.taFolder);
-      files.filter(f => f.startsWith('TA-') && f.endsWith('.json'))
-        .forEach(f => {
-          fs.unlinkSync(path.join(this.taFolder, f));
-        });
-      console.log(`🗑️  Todo el cache de TAs eliminado`);
+      if (fs.existsSync(folderPath)) {
+        const files = fs.readdirSync(folderPath);
+        files.filter(f => f.startsWith('TA-') && f.endsWith('.json'))
+          .forEach(f => {
+            fs.unlinkSync(path.join(folderPath, f));
+          });
+        console.log(`🗑️  Todo el cache de TAs eliminado`);
+      }
     }
   }
 }
