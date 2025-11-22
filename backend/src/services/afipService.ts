@@ -2,7 +2,7 @@ import Afip from '@afipsdk/afip.js';
 import moment from 'moment';
 import type { IFactura } from '../models/Factura.js';
 import { TIPO_COMPROBANTE_CODIGO } from '../models/Factura.js';
-import { cargarCertificadosAFIP } from '../utils/certificadosHelper.js';
+import { cargarCertificadosAFIP, asegurarCarpetaTokens } from '../utils/certificadosHelper.js';
 
 // Configuración de AFIP
 export interface AFIPConfig {

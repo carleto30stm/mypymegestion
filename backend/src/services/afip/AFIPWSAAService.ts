@@ -14,6 +14,7 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 import axios from 'axios';
 import { parseStringPromise } from 'xml2js';
+import { asegurarCarpetaTokens } from '../../utils/certificadosHelper.js';
 
 // URLs de WSAA según ambiente
 const WSAA_URLS = {
@@ -44,12 +45,9 @@ export class AFIPWSAAService {
 
   constructor(config: WSAAConfig) {
     this.config = config;
-    this.taFolder = config.taFolder || './afip_tokens';
     
-    // Crear carpeta de tokens si no existe
-    if (!fs.existsSync(this.taFolder)) {
-      fs.mkdirSync(this.taFolder, { recursive: true });
-    }
+    // Asegurar que la carpeta de tokens exista
+    this.taFolder = asegurarCarpetaTokens(config.taFolder);
   }
 
   /**
