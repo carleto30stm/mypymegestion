@@ -3,7 +3,7 @@
  * Soporta tanto archivos locales como variables de entorno (Railway)
  */
 
-import { readFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 
 interface CertificadoConfig {
@@ -95,13 +95,4 @@ export function validarClavePrivada(key: string): boolean {
     (key.includes('BEGIN RSA PRIVATE KEY') && key.includes('END RSA PRIVATE KEY')) ||
     (key.includes('BEGIN PRIVATE KEY') && key.includes('END PRIVATE KEY'))
   );
-}
-
-/**
- * Retorna la ruta absoluta de la carpeta de tokens AFIP
- * La carpeta debe existir en el repositorio (con .gitkeep)
- */
-export function asegurarCarpetaTokens(taFolder?: string): string {
-  const folder = taFolder || process.env.AFIP_TA_FOLDER || './afip_tokens';
-  return folder;
 }
