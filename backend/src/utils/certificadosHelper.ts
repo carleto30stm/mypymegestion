@@ -3,7 +3,7 @@
  * Soporta tanto archivos locales como variables de entorno (Railway)
  */
 
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 
 interface CertificadoConfig {
@@ -95,4 +95,24 @@ export function validarClavePrivada(key: string): boolean {
     (key.includes('BEGIN RSA PRIVATE KEY') && key.includes('END RSA PRIVATE KEY')) ||
     (key.includes('BEGIN PRIVATE KEY') && key.includes('END PRIVATE KEY'))
   );
+}
+
+/**
+ * Asegura que la carpeta de tokens AFIP exista
+ * Crea la carpeta si no existe (útil para deployment)
+ */
+export function asegurarCarpetaTokens(taFolder?: string): string {
+  const folder = taFolder || process.env.AFIP_TA_FOLDER || './afip_tokens';
+  
+  if (!existsSync(folder)) {
+    try {
+      mkdirSync(folder, { recursive: true });
+      console.log(`✅ Carpeta de tokens AFIP creada: ${folder}`);
+    } catch (error) {
+      console.error(`⚠️  No se pudo crear carpeta de tokens: ${error instanceof Error ? error.message : String(error)}`);
+      // No lanzar error, dejar que falle después si realmente es necesario
+    }
+  }
+  
+  return folder;
 }
