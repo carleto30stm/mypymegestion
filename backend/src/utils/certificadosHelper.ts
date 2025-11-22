@@ -98,21 +98,10 @@ export function validarClavePrivada(key: string): boolean {
 }
 
 /**
- * Asegura que la carpeta de tokens AFIP exista
- * Crea la carpeta si no existe (útil para deployment)
+ * Retorna la ruta absoluta de la carpeta de tokens AFIP
+ * La carpeta debe existir en el repositorio (con .gitkeep)
  */
 export function asegurarCarpetaTokens(taFolder?: string): string {
   const folder = taFolder || process.env.AFIP_TA_FOLDER || './afip_tokens';
-  
-  if (!existsSync(folder)) {
-    try {
-      mkdirSync(folder, { recursive: true });
-      console.log(`✅ Carpeta de tokens AFIP creada: ${folder}`);
-    } catch (error) {
-      console.error(`⚠️  No se pudo crear carpeta de tokens: ${error instanceof Error ? error.message : String(error)}`);
-      // No lanzar error, dejar que falle después si realmente es necesario
-    }
-  }
-  
   return folder;
 }
