@@ -137,6 +137,12 @@ export class AFIPWSAAService {
    * Firma el TRA usando OpenSSL (formato CMS requerido por AFIP)
    */
   private async firmarTRA(tra: string): Promise<string> {
+    // Asegurar que la carpeta existe antes de escribir
+    if (!fs.existsSync(this.taFolder)) {
+      fs.mkdirSync(this.taFolder, { recursive: true });
+      console.log(`✅ Carpeta de tokens creada: ${this.taFolder}`);
+    }
+    
     const traFile = path.join(this.taFolder, 'tra_temp.xml');
     const traSignedFile = path.join(this.taFolder, 'tra_signed.tmp');
     
@@ -310,6 +316,12 @@ export class AFIPWSAAService {
    * Guarda un TA en el caché en disco
    */
   private guardarTACache(servicio: string, ta: TicketAcceso): void {
+    // Asegurar que la carpeta existe antes de escribir
+    if (!fs.existsSync(this.taFolder)) {
+      fs.mkdirSync(this.taFolder, { recursive: true });
+      console.log(`✅ Carpeta de tokens creada: ${this.taFolder}`);
+    }
+    
     const taFile = path.join(this.taFolder, `TA-${servicio}.json`);
     
     try {
