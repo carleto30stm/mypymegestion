@@ -1,0 +1,19 @@
+﻿==============================================
+AFIP_CERT
+==============================================
+Copia desde aqui (SIN incluir esta linea):
+
+-----BEGIN CERTIFICATE-----\nMIIDSDCCAjCgAwIBAgIICbilO66Mk9gwDQYJKoZIhvcNAQENBQAwODEaMBgGA1UEAwwRQ29tcHV0\nYWRvcmVzIFRlc3QxDTALBgNVBAoMBEFGSVAxCzAJBgNVBAYTAkFSMB4XDTI1MTEyMDE3NDY0M1oX\nDTI3MTEyMDE3NDY0M1owLjERMA8GA1UEAwwIa3VydEhvbW8xGTAXBgNVBAUTEENVSVQgMjcxMTgx\nNTQ1MjAwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDk5t4oIiA3G6vvAhIQ1mDuYQZy\nS6umYl3rm4yE3fnRrzk3MXAuPPWzRl0A4oJev7h9lFl76mIk3Mq7IgDgSAnl/F2/ixDJ29qYhfi5\nQnmdHHlczye+1RKiArDArxW39tClzKv7RiuonLoaMBsGI27N2d3fYITs7e+f0ewVtc2uiHglNdvy\nzBD3PsiJhiCVcrSKd4MI1XnNuJ4m7NYRcwww6Dg+lRBjtcRt13XXHVDQDI33WCWGHoLhj2QerKKg\nFvmWVt/da2/e3tLTmlaKZd2I1Cocve2O1d6Z3VH/l6WVMuhZI/JB6gpeS/dZyO0mx6f0uVkeo7Gb\nav/jdlQ4rwLlAgMBAAGjYDBeMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUs7LT//3put7eja8R\nIZzWIH3yT28wHQYDVR0OBBYEFNc9U5CFtXZEe4K45pmEDSdb/SwsMA4GA1UdDwEB/wQEAwIF4DAN\nBgkqhkiG9w0BAQ0FAAOCAQEAaC+0tNRgdZE9zsytWuTef2YGQss2B8KOU/ydQPi3qIOzMkY9TFmq\nRF1oAI2YdWcJ5WIex3xdDMMSrmDFc9x0ET4HjSsf9s+fybrT4807CDoFPDr+9zzxATJ4YUhyBFym\nM5L1gRujjX/JUQAJDrbERqk44XsB3pJ/JCjTcP9RTr0sJ4o1fkgVviJK595e+nAdussb0UHX5D7i\nNvc0VYw0cXHnGGH7LA93eru1lgtgE0z1PskDc6nSJ0jpRRSKl6+ArGNM7i+mJobyAMX8wt9nNBA7\nKHCgOhSfg6lGpSeAo1RrC57roOPabG4CLjT8jT0Y3uxQSvcEBbalU8QptjKfyA==\n-----END CERTIFICATE-----
+
+Hasta aqui (SIN incluir esta linea)
+==============================================
+
+==============================================
+AFIP_KEY
+==============================================
+Copia desde aqui (SIN incluir esta linea):
+
+-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDk5t4oIiA3G6vv\nAhIQ1mDuYQZyS6umYl3rm4yE3fnRrzk3MXAuPPWzRl0A4oJev7h9lFl76mIk3Mq7\nIgDgSAnl/F2/ixDJ29qYhfi5QnmdHHlczye+1RKiArDArxW39tClzKv7RiuonLoa\nMBsGI27N2d3fYITs7e+f0ewVtc2uiHglNdvyzBD3PsiJhiCVcrSKd4MI1XnNuJ4m\n7NYRcwww6Dg+lRBjtcRt13XXHVDQDI33WCWGHoLhj2QerKKgFvmWVt/da2/e3tLT\nmlaKZd2I1Cocve2O1d6Z3VH/l6WVMuhZI/JB6gpeS/dZyO0mx6f0uVkeo7Gbav/j\ndlQ4rwLlAgMBAAECggEAMNXIg8t0EA3JSr6oWAtEttbgZzYZsu+9leyjuB0blU7K\n6CmWA2diDBNw+CVbJxfEJpal2LgSpEauwenpQfBcnEKRRbJHrKlJI81BWVUDWS+f\n/Nr9YctXpFTqnNE90vfHX/ggoQVBf0GgusGUomSg2S4oFeYjteC1hOVmduNItHll\nyzZHbOusdKjpgVNLPY1/R9yAEOUKtv1HCpCfAVVDiwaEBVlzQd3xaJTKToZAq9NE\n5G6O4s4IIjGml2a4B7QclDzFarIP/8Fx6c0y4pwWQK00Qgu2wSopb8NFY+g3j5bR\nHLHdiSi2Ta7aFugRk+XfXzKbtTgQVS+0hEwt1U816QKBgQD1n6BZi66kmqNnsHxl\nSY+oxLMnPyp0PKaktaWOplVFShwai/D3voBHgv874EiVgW00J4FT02D1NKkTGyob\nNpjuUms9TYKpTVq2aaNeFMsumWeTb+StNYlGT8AUhP/wM0qk08T8TgrnNdiw02EY\n4p02k9WxrunTLDzl3tIZbVXavwKBgQDukmYvxPwTQ0dMl+pplcUA6JhhjEZwFt/X\n1F/SPXK3QplOlgPXslU/3V2JxLoDz3KNoe35ekIFoiylb82uOE+kp2NiRRIRkQN5\n6i6w+8sTxMYHzbIqLbTWNnlHKUUkvi3Tei80vA97zd8fBKBuuUgnY7WSRisQnYnW\nIJr2eTr/WwKBgDrK7a/hbnk6BpkANpZsCDYGdzeSuA/AoMbWL/24NLr0JUv5aUFz\n2PLFGWD0q4sVwtT0C9HLy+6Fn17SZr7Cz9Jj6gVvczIhMPBu0srnQUczMwaoht0q\n7mPlHP4MY9LUBC71/bXC3HtBeU/CGQDC5Yy10DXKv29rrFv9fN7XO/CzAoGBANbz\nQO65ZQVWEN+J4MLRFncDGoiJgs1rTrN/vfYHN1y2vLp5n2ywWO753FVM0uyr9GJ4\nC5pD9UhuHhvQ6FiYk+meh4T7BpSdO6yUuwzrUMW2/VX6lxQ5qj13Rz4+iPXaBCAO\nbontB2ZczzN7T7FzbvdOd0IbxqFpz88GAZkhEW8RAoGANwaSLsHPvtoPtpEd+24y\n8OooJsgN/bkOyK7EKMtKFw8HMv4t28xZAzPlpszPQov18PaiQ3Z4+wLxicP9j4V3\nsq4/kIw6A7JHKwPHBhbmPQCM/aYyzx3KHVMj1rvukT1xYvFmV6Ru8IjCp5L/yTF4\nT2I2ITdnNs47vGMvIesuZSY=\n-----END PRIVATE KEY-----\n
+
+Hasta aqui (SIN incluir esta linea)
+==============================================

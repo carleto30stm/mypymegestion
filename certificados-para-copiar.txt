@@ -1,0 +1,5 @@
+﻿AFIP_CERT (copia desde aqui sin las comillas externas):
+""
+
+AFIP_KEY (copia desde aqui sin las comillas externas):
+""
