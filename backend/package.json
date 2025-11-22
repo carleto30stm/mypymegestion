@@ -9,6 +9,7 @@
     "dev": "nodemon --watch src --ext ts --exec \"node --loader ts-node/esm src/server.ts\"",
     "build": "tsc",
     "afip:generar-cert": "node scripts/generar-certificado-afip.js",
+    "afip:exportar-cert": "node scripts/exportar-certificados.cjs",
     "afip:verificar-cert": "node scripts/verificar-certificado-wsass.js",
     "afip:debug-wsaa": "node scripts/debug-wsaa-url.js",
     "afip:test-sdk-api": "node scripts/test-sdk-api-direct.js",
