@@ -39,7 +39,8 @@ import {
   FormControlLabel,
   Switch,
   Divider,
-  Alert
+  Alert,
+  Snackbar
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -61,6 +62,12 @@ const ClientesPage: React.FC = () => {
   const [filtro, setFiltro] = useState<'todos' | 'activos' | 'morosos'>('activos');
   const [openNotas, setOpenNotas] = useState(false);
   const [clienteNotas, setClienteNotas] = useState<Cliente | null>(null);
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const [formData, setFormData] = useState<Partial<Cliente>>({
     tipoDocumento: 'DNI',
@@ -120,28 +127,127 @@ const ClientesPage: React.FC = () => {
   const handleCloseForm = () => {
     setOpenForm(false);
     setClienteEdit(null);
+    setFieldErrors({});
+  };
+
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    // Validar número de documento
+    if (!formData.numeroDocumento || formData.numeroDocumento.trim() === '') {
+      errors.numeroDocumento = 'El número de documento es obligatorio';
+    } else {
+      const soloNumeros = formData.numeroDocumento.replace(/[^0-9]/g, '');
+      if (formData.tipoDocumento === 'CUIT' || formData.tipoDocumento === 'CUIL') {
+        if (soloNumeros.length !== 11) {
+          errors.numeroDocumento = `${formData.tipoDocumento} debe tener exactamente 11 dígitos`;
+        }
+      } else if (formData.tipoDocumento === 'DNI') {
+        if (soloNumeros.length < 7 || soloNumeros.length > 8) {
+          errors.numeroDocumento = 'DNI debe tener entre 7 y 8 dígitos';
+        }
+      }
+    }
+
+    // Validar nombre
+    if (!formData.nombre || formData.nombre.trim() === '') {
+      errors.nombre = 'El nombre es obligatorio';
+    }
+
+    // Validaciones específicas para facturación AFIP
+    if (formData.requiereFacturaAFIP) {
+      if (!formData.email || formData.email.trim() === '') {
+        errors.email = 'Email es obligatorio para facturación AFIP';
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+        errors.email = 'Formato de email inválido';
+      }
+
+      if (!formData.direccion || formData.direccion.trim() === '') {
+        errors.direccion = 'Dirección es obligatoria para facturación AFIP';
+      }
+
+      if (!formData.ciudad || formData.ciudad.trim() === '') {
+        errors.ciudad = 'Ciudad es obligatoria para facturación AFIP';
+      }
+
+      // Código postal obligatorio para CF y Monotributista con facturación AFIP
+      if (formData.condicionIVA !== 'Responsable Inscripto') {
+        if (!formData.codigoPostal || formData.codigoPostal.trim() === '') {
+          errors.codigoPostal = 'Código postal obligatorio para CF/Monotributista con facturación AFIP';
+        }
+      }
+
+      // Validar CUIT/CUIL para facturación
+      if (formData.tipoDocumento !== 'CUIT' && formData.tipoDocumento !== 'CUIL' && formData.condicionIVA !== 'Consumidor Final') {
+        errors.tipoDocumento = 'Se requiere CUIT/CUIL para facturación AFIP (excepto Consumidor Final)';
+      }
+    }
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const handleSubmitForm = async () => {
-    if (clienteEdit) {
-      await dispatch(updateCliente({ ...formData, _id: clienteEdit._id } as Cliente));
-    } else {
-      await dispatch(createCliente(formData as Omit<Cliente, '_id'>));
+    // Validar formulario antes de enviar
+    if (!validateForm()) {
+      setSnackbar({ 
+        open: true, 
+        message: 'Por favor, corrija los errores en el formulario', 
+        severity: 'error' 
+      });
+      return;
     }
-    handleCloseForm();
-    dispatch(fetchClientes());
+
+    try {
+      if (clienteEdit) {
+        await dispatch(updateCliente({ ...formData, _id: clienteEdit._id } as Cliente)).unwrap();
+        setSnackbar({ open: true, message: 'Cliente actualizado exitosamente', severity: 'success' });
+      } else {
+        await dispatch(createCliente(formData as Omit<Cliente, '_id'>)).unwrap();
+        setSnackbar({ open: true, message: 'Cliente creado exitosamente', severity: 'success' });
+      }
+      handleCloseForm();
+      dispatch(fetchClientes());
+    } catch (error: any) {
+      // Extraer mensaje de error específico del backend
+      let errorMessage = 'Error al guardar el cliente';
+      
+      if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error?.details) {
+        errorMessage = error.details;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+
+      setSnackbar({ 
+        open: true, 
+        message: errorMessage, 
+        severity: 'error' 
+      });
+    }
   };
 
   const handleDelete = async (id: string) => {
     if (confirm('¿Está seguro de desactivar este cliente?')) {
-      await dispatch(deleteCliente(id));
-      dispatch(fetchClientes());
+      try {
+        await dispatch(deleteCliente(id)).unwrap();
+        setSnackbar({ open: true, message: 'Cliente desactivado exitosamente', severity: 'success' });
+        dispatch(fetchClientes());
+      } catch (error: any) {
+        setSnackbar({ open: true, message: error || 'Error al desactivar cliente', severity: 'error' });
+      }
     }
   };
 
   const handleReactivar = async (id: string) => {
-    await dispatch(reactivarCliente(id));
-    dispatch(fetchClientes());
+    try {
+      await dispatch(reactivarCliente(id)).unwrap();
+      setSnackbar({ open: true, message: 'Cliente reactivado exitosamente', severity: 'success' });
+      dispatch(fetchClientes());
+    } catch (error: any) {
+      setSnackbar({ open: true, message: error || 'Error al reactivar cliente', severity: 'error' });
+    }
   };
 
   const handleOpenNotas = (cliente: Cliente) => {
@@ -319,11 +425,16 @@ const ClientesPage: React.FC = () => {
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
             <Grid item xs={12} md={6}>
-              <FormControl fullWidth>
+              <FormControl fullWidth error={!!fieldErrors.tipoDocumento}>
                 <InputLabel>Tipo Documento</InputLabel>
                 <Select
                   value={formData.tipoDocumento}
-                  onChange={(e) => setFormData({ ...formData, tipoDocumento: e.target.value as any })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, tipoDocumento: e.target.value as any });
+                    if (fieldErrors.tipoDocumento) {
+                      setFieldErrors({ ...fieldErrors, tipoDocumento: '' });
+                    }
+                  }}
                   label="Tipo Documento"
                 >
                   <MenuItem value="DNI">DNI</MenuItem>
@@ -331,6 +442,11 @@ const ClientesPage: React.FC = () => {
                   <MenuItem value="CUIL">CUIL</MenuItem>
                   <MenuItem value="Pasaporte">Pasaporte</MenuItem>
                 </Select>
+                {fieldErrors.tipoDocumento && (
+                  <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 1.5 }}>
+                    {fieldErrors.tipoDocumento}
+                  </Typography>
+                )}
               </FormControl>
             </Grid>
             <Grid item xs={12} md={6}>
@@ -338,13 +454,20 @@ const ClientesPage: React.FC = () => {
                 fullWidth
                 label="Número Documento *"
                 value={formData.numeroDocumento}
-                onChange={(e) => setFormData({ ...formData, numeroDocumento: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, numeroDocumento: e.target.value });
+                  if (fieldErrors.numeroDocumento) {
+                    setFieldErrors({ ...fieldErrors, numeroDocumento: '' });
+                  }
+                }}
+                error={!!fieldErrors.numeroDocumento}
                 helperText={
-                  formData.tipoDocumento === 'CUIT' || formData.tipoDocumento === 'CUIL'
+                  fieldErrors.numeroDocumento ||
+                  (formData.tipoDocumento === 'CUIT' || formData.tipoDocumento === 'CUIL'
                     ? 'Exactamente 11 dígitos (ej: 20-12345678-9)'
                     : formData.tipoDocumento === 'DNI'
                     ? '7 u 8 dígitos'
-                    : 'Cualquier formato'
+                    : 'Cualquier formato')
                 }
               />
             </Grid>
@@ -353,7 +476,14 @@ const ClientesPage: React.FC = () => {
                 fullWidth
                 label="Nombre *"
                 value={formData.nombre}
-                onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, nombre: e.target.value });
+                  if (fieldErrors.nombre) {
+                    setFieldErrors({ ...fieldErrors, nombre: '' });
+                  }
+                }}
+                error={!!fieldErrors.nombre}
+                helperText={fieldErrors.nombre}
               />
             </Grid>
             <Grid item xs={12} md={6}>
@@ -378,13 +508,19 @@ const ClientesPage: React.FC = () => {
                 label="Email"
                 type="email"
                 value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, email: e.target.value });
+                  if (fieldErrors.email) {
+                    setFieldErrors({ ...fieldErrors, email: '' });
+                  }
+                }}
                 required={formData.requiereFacturaAFIP}
-                error={formData.requiereFacturaAFIP && !formData.email}
+                error={!!fieldErrors.email}
                 helperText={
-                  formData.requiereFacturaAFIP && !formData.email
+                  fieldErrors.email ||
+                  (formData.requiereFacturaAFIP && !formData.email
                     ? 'Email obligatorio para facturación electrónica AFIP'
-                    : 'Formato: usuario@dominio.com'
+                    : 'Formato: usuario@dominio.com')
                 }
               />
             </Grid>
@@ -417,13 +553,19 @@ const ClientesPage: React.FC = () => {
                 fullWidth
                 label="Ciudad"
                 value={formData.ciudad}
-                onChange={(e) => setFormData({ ...formData, ciudad: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, ciudad: e.target.value });
+                  if (fieldErrors.ciudad) {
+                    setFieldErrors({ ...fieldErrors, ciudad: '' });
+                  }
+                }}
                 required={formData.requiereFacturaAFIP}
-                error={formData.requiereFacturaAFIP && !formData.ciudad}
+                error={!!fieldErrors.ciudad}
                 helperText={
-                  formData.requiereFacturaAFIP && !formData.ciudad
+                  fieldErrors.ciudad ||
+                  (formData.requiereFacturaAFIP && !formData.ciudad
                     ? 'Ciudad obligatoria para facturación AFIP'
-                    : ''
+                    : '')
                 }
               />
             </Grid>
@@ -432,22 +574,24 @@ const ClientesPage: React.FC = () => {
                 fullWidth
                 label="Código Postal"
                 value={formData.codigoPostal || ''}
-                onChange={(e) => setFormData({ ...formData, codigoPostal: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, codigoPostal: e.target.value });
+                  if (fieldErrors.codigoPostal) {
+                    setFieldErrors({ ...fieldErrors, codigoPostal: '' });
+                  }
+                }}
                 required={
                   formData.requiereFacturaAFIP && 
                   formData.condicionIVA !== 'Responsable Inscripto'
                 }
-                error={
-                  formData.requiereFacturaAFIP && 
-                  formData.condicionIVA !== 'Responsable Inscripto' && 
-                  !formData.codigoPostal
-                }
+                error={!!fieldErrors.codigoPostal}
                 helperText={
-                  formData.requiereFacturaAFIP && formData.condicionIVA !== 'Responsable Inscripto' && !formData.codigoPostal
+                  fieldErrors.codigoPostal ||
+                  (formData.requiereFacturaAFIP && formData.condicionIVA !== 'Responsable Inscripto' && !formData.codigoPostal
                     ? 'Código postal obligatorio para CF/Monotributista con facturación AFIP'
                     : formData.condicionIVA === 'Responsable Inscripto'
                     ? 'Opcional para Responsable Inscripto'
-                    : ''
+                    : '')
                 }
               />
             </Grid>
@@ -456,13 +600,19 @@ const ClientesPage: React.FC = () => {
                 fullWidth
                 label="Dirección"
                 value={formData.direccion}
-                onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, direccion: e.target.value });
+                  if (fieldErrors.direccion) {
+                    setFieldErrors({ ...fieldErrors, direccion: '' });
+                  }
+                }}
                 required={formData.requiereFacturaAFIP}
-                error={formData.requiereFacturaAFIP && !formData.direccion}
+                error={!!fieldErrors.direccion}
                 helperText={
-                  formData.requiereFacturaAFIP && !formData.direccion
+                  fieldErrors.direccion ||
+                  (formData.requiereFacturaAFIP && !formData.direccion
                     ? 'Dirección obligatoria para facturación AFIP'
-                    : ''
+                    : '')
                 }
               />
             </Grid>
@@ -615,6 +765,21 @@ const ClientesPage: React.FC = () => {
         onEliminarNota={handleEliminarNota}
         userType={user?.userType}
       />
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert 
+          onClose={() => setSnackbar({ ...snackbar, open: false })} 
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

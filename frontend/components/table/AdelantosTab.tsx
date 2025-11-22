@@ -25,6 +25,7 @@ import { LiquidacionPeriodo, BANCOS } from '../../types';
 import { registrarAdelanto, fetchPeriodoById } from '../../redux/slices/liquidacionSlice';
 import { fetchGastos } from '../../redux/slices/gastosSlice';
 import { formatCurrency, parseCurrency } from '../../utils/formatters';
+import { ConfirmDialog } from '../modal';
 
 interface AdelantosTabProps {
   periodo: LiquidacionPeriodo;
@@ -35,6 +36,7 @@ const AdelantosTab: React.FC<AdelantosTabProps> = ({ periodo }) => {
   const user = useSelector((state: RootState) => state.auth.user);
   
   const [openAdelanto, setOpenAdelanto] = useState(false);
+  const [openConfirm, setOpenConfirm] = useState(false);
   const [selectedEmpleadoId, setSelectedEmpleadoId] = useState('');
   const [monto, setMonto] = useState('');
   const [banco, setBanco] = useState('EFECTIVO');
@@ -52,6 +54,10 @@ const AdelantosTab: React.FC<AdelantosTabProps> = ({ periodo }) => {
 
   const handleCloseAdelanto = () => {
     setOpenAdelanto(false);
+  };
+
+  const handleOpenConfirm = () => {
+    setOpenConfirm(true);
   };
 
   const handleRegistrarAdelanto = async () => {
@@ -220,14 +226,14 @@ const AdelantosTab: React.FC<AdelantosTabProps> = ({ periodo }) => {
               onChange={(e) => {
                 const value = e.target.value;
                 // Permitir solo números y punto decimal
-                if (value === '' || /^\d*\.?\d{0,2}$/.test(value)) {
+                if (value === '' || /^\d*\.?\d{0,3}$/.test(value)) {
                   setMonto(value);
                 }
               }}
               fullWidth
               required
               placeholder="0.00"
-              helperText="Ingrese el monto con hasta 2 decimales (ej: 1500.50)"
+              helperText="Ingrese el monto con hasta 3 decimales (ej: 1500.50)"
             />
 
             <FormControl fullWidth required>
@@ -263,7 +269,7 @@ const AdelantosTab: React.FC<AdelantosTabProps> = ({ periodo }) => {
         <DialogActions>
           <Button onClick={handleCloseAdelanto}>Cancelar</Button>
           <Button
-            onClick={handleRegistrarAdelanto}
+            onClick={handleOpenConfirm}
             variant="contained"
             disabled={!selectedEmpleadoId || !monto || !banco || parseCurrency(monto) <= 0}
           >
@@ -271,6 +277,19 @@ const AdelantosTab: React.FC<AdelantosTabProps> = ({ periodo }) => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Dialog de Confirmación */}
+      <ConfirmDialog
+        open={openConfirm}
+        onClose={() => setOpenConfirm(false)}
+        onConfirm={handleRegistrarAdelanto}
+        title="¿Confirmar registro de adelanto?"
+        message={`Se registrará un adelanto de ${formatCurrency(parseCurrency(monto) || 0)} para ${periodo.liquidaciones.find(liq => liq.empleadoId === selectedEmpleadoId)?.empleadoApellido}, ${periodo.liquidaciones.find(liq => liq.empleadoId === selectedEmpleadoId)?.empleadoNombre}. Este monto se descontará automáticamente del total a pagar en la liquidación.`}
+        confirmText="Registrar Adelanto"
+        cancelText="Cancelar"
+        severity="warning"
+        confirmColor="primary"
+      />
     </Box>
   );
 };

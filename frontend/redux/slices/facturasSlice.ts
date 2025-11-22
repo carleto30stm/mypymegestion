@@ -193,7 +193,8 @@ export const autorizarFactura = createAsyncThunk(
   async (facturaId: string, { rejectWithValue }) => {
     try {
       const response = await facturasAPI.autorizar(facturaId);
-      return response.data.factura;
+      // Backend devuelve { message, factura, cae, numeroComprobante, ... }
+      return response.factura;
     } catch (error: any) {
       return rejectWithValue(
         error.response?.data?.error ||

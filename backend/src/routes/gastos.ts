@@ -9,6 +9,7 @@ import { protect } from '../middleware/authMiddleware.js';
 import { requireEditDeletePermission } from '../middleware/operAuth.js';
 import Gasto from '../models/Gasto.js';
 import ReciboPago from '../models/ReciboPago.js';
+import LiquidacionPeriodo from '../models/LiquidacionPeriodo.js';
 import mongoose from 'mongoose';
 
 const router = express.Router();
@@ -193,6 +194,52 @@ router.patch('/:id/cancel', async (req, res) => {
   try {
     const { comentario } = req.body;
     
+    // Obtener el gasto antes de cancelarlo para verificar si es adelanto
+    const gastoAntesDeCancelar = await Gasto.findById(req.params.id);
+    
+    if (!gastoAntesDeCancelar) {
+      return res.status(404).json({ message: 'Gasto no encontrado' });
+    }
+    
+    // Si es un adelanto y está activo, revertir el monto en la liquidación
+    if (gastoAntesDeCancelar.concepto === 'adelanto' && gastoAntesDeCancelar.estado === 'activo') {
+      const periodo = await LiquidacionPeriodo.findOne({
+        'liquidaciones.gastosRelacionados': gastoAntesDeCancelar._id
+      });
+      
+      if (periodo) {
+        if (periodo.estado === 'cerrado') {
+          return res.status(400).json({ 
+            message: 'No se puede cancelar un adelanto de un período cerrado' 
+          });
+        }
+        
+        const liquidacion = periodo.liquidaciones.find((liq: any) =>
+          liq.gastosRelacionados.some((id: any) => 
+            id.toString() === gastoAntesDeCancelar._id.toString()
+          )
+        );
+        
+        if (liquidacion) {
+          // Revertir el adelanto
+          liquidacion.adelantos -= gastoAntesDeCancelar.salida;
+          
+          // Recalcular totalAPagar
+          liquidacion.totalAPagar = 
+            liquidacion.sueldoBase +
+            liquidacion.totalHorasExtra +
+            liquidacion.aguinaldos +
+            liquidacion.bonus -
+            liquidacion.adelantos -
+            liquidacion.descuentos;
+          
+          await periodo.save();
+          
+          console.log(`✅ Adelanto cancelado y revertido: $${gastoAntesDeCancelar.salida} restado de ${liquidacion.empleadoApellido}, ${liquidacion.empleadoNombre}`);
+        }
+      }
+    }
+    
     const updateData: any = { estado: 'cancelado' };
     
     // Si se proporciona un comentario, actualizar también ese campo
@@ -210,8 +257,12 @@ router.patch('/:id/cancel', async (req, res) => {
       return res.status(404).json({ message: 'Gasto no encontrado' });
     }
     
-    res.json(gasto);
+    res.json({
+      ...gasto.toObject(),
+      adelantoRevertido: gastoAntesDeCancelar.concepto === 'adelanto'
+    });
   } catch (error) {
+    console.error('Error al cancelar el gasto:', error);
     res.status(500).json({ message: 'Error al cancelar el gasto' });
   }
 });
@@ -220,6 +271,52 @@ router.patch('/:id/cancel', async (req, res) => {
 router.patch('/:id/reactivate', async (req, res) => {
   try {
     const { comentario } = req.body;
+    
+    // Obtener el gasto antes de reactivarlo para verificar si es adelanto
+    const gastoAntesDeReactivar = await Gasto.findById(req.params.id);
+    
+    if (!gastoAntesDeReactivar) {
+      return res.status(404).json({ message: 'Gasto no encontrado' });
+    }
+    
+    // Si es un adelanto y está cancelado, volver a aplicar el monto en la liquidación
+    if (gastoAntesDeReactivar.concepto === 'adelanto' && gastoAntesDeReactivar.estado === 'cancelado') {
+      const periodo = await LiquidacionPeriodo.findOne({
+        'liquidaciones.gastosRelacionados': gastoAntesDeReactivar._id
+      });
+      
+      if (periodo) {
+        if (periodo.estado === 'cerrado') {
+          return res.status(400).json({ 
+            message: 'No se puede reactivar un adelanto de un período cerrado' 
+          });
+        }
+        
+        const liquidacion = periodo.liquidaciones.find((liq: any) =>
+          liq.gastosRelacionados.some((id: any) => 
+            id.toString() === gastoAntesDeReactivar._id.toString()
+          )
+        );
+        
+        if (liquidacion) {
+          // Re-aplicar el adelanto
+          liquidacion.adelantos += gastoAntesDeReactivar.salida;
+          
+          // Recalcular totalAPagar
+          liquidacion.totalAPagar = 
+            liquidacion.sueldoBase +
+            liquidacion.totalHorasExtra +
+            liquidacion.aguinaldos +
+            liquidacion.bonus -
+            liquidacion.adelantos -
+            liquidacion.descuentos;
+          
+          await periodo.save();
+          
+          console.log(`✅ Adelanto reactivado: $${gastoAntesDeReactivar.salida} sumado nuevamente a ${liquidacion.empleadoApellido}, ${liquidacion.empleadoNombre}`);
+        }
+      }
+    }
     
     const updateData: any = { estado: 'activo' };
     
@@ -238,8 +335,12 @@ router.patch('/:id/reactivate', async (req, res) => {
       return res.status(404).json({ message: 'Gasto no encontrado' });
     }
     
-    res.json(gasto);
+    res.json({
+      ...gasto.toObject(),
+      adelantoReaplicado: gastoAntesDeReactivar.concepto === 'adelanto'
+    });
   } catch (error) {
+    console.error('Error al reactivar el gasto:', error);
     res.status(500).json({ message: 'Error al reactivar el gasto' });
   }
 });

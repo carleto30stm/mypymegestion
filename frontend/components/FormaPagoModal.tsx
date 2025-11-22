@@ -23,7 +23,7 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PaymentIcon from '@mui/icons-material/Payment';
 import { MEDIOS_PAGO, BANCOS, Cliente, FormaPago } from '../types';
-import { formatCurrency, parseCurrency } from '../utils/formatters';
+import { formatCurrency, parseCurrency, formatNumberInput, getNumericValue } from '../utils/formatters';
 
 interface FormaPagoModalProps {
   open: boolean;
@@ -55,57 +55,6 @@ const FormaPagoModal: React.FC<FormaPagoModalProps> = ({
   const [errores, setErrores] = useState<string[]>([]);
   const [montoTransferenciaFormatted, setMontoTransferenciaFormatted] = useState('');
   const [observacionesGenerales, setObservacionesGenerales] = useState<string>('');
-
-  // Función para formatear el número mientras se escribe (con decimales)
-  const formatNumberInput = (value: string): string => {
-    // Si el valor está vacío, retornar vacío
-    if (!value) return '';
-    
-    // Permitir solo números y una coma
-    const cleanValue = value.replace(/[^\d,]/g, '');
-    
-    // Si solo hay una coma al final, permitirla
-    if (cleanValue === ',') return '';
-    
-    // Dividir por la coma (separador decimal argentino)
-    const parts = cleanValue.split(',');
-    
-    // Solo permitir una coma
-    if (parts.length > 2) {
-      // Si hay más de una coma, tomar solo las primeras dos partes
-      parts.splice(2);
-    }
-    
-    // Parte entera
-    let integerPart = parts[0] || '';
-    
-    // Formatear la parte entera con puntos cada tres dígitos (solo si tiene valor)
-    if (integerPart.length > 0) {
-      const num = parseInt(integerPart, 10);
-      if (!isNaN(num) && num > 0) {
-        integerPart = num.toLocaleString('es-AR');
-      } else if (integerPart === '0') {
-        integerPart = '0';
-      }
-    }
-    
-    // Parte decimal (máximo 2 dígitos)
-    let decimalPart = parts[1];
-    if (decimalPart !== undefined) {
-      if (decimalPart.length > 2) {
-        decimalPart = decimalPart.substring(0, 2);
-      }
-      // Si hay parte decimal (incluso vacía), agregar la coma
-      return `${integerPart},${decimalPart}`;
-    }
-    
-    // Si termina con coma en el input original, mantenerla
-    if (value.endsWith(',') && parts.length === 2) {
-      return `${integerPart},`;
-    }
-    
-    return integerPart;
-  };
 
   // Resetear al abrir el modal
   useEffect(() => {
@@ -184,11 +133,13 @@ const FormaPagoModal: React.FC<FormaPagoModalProps> = ({
     setFormasPago(nuevasFormas);
   };
 
-  // Actualizar monto
+  // Actualizar monto con formato argentino (igual que ExpenseForm)
   const handleChangeMonto = (index: number, value: string) => {
-    const monto = parseCurrency(value);
+    const formatted = formatNumberInput(value);
+    const numericValue = getNumericValue(formatted);
+    
     const nuevasFormas = [...formasPago];
-    nuevasFormas[index].monto = monto;
+    nuevasFormas[index].monto = numericValue;
     setFormasPago(nuevasFormas);
   };
 
@@ -459,7 +410,7 @@ const FormaPagoModal: React.FC<FormaPagoModalProps> = ({
                   label="Monto *"
                   value={formatCurrency(fp.monto || 0)}
                   onChange={(e) => handleChangeMonto(index, e.target.value)}
-                  placeholder="$0.00"
+                  placeholder="0,00"
                 />
               </Grid>
 

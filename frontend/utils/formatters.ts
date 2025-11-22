@@ -12,8 +12,8 @@ export const formatCurrency = (value: number | string): string => {
   if (isNaN(numValue)) return '';
   
   return numValue.toLocaleString('es-AR', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
   });
 };
 
@@ -105,6 +105,80 @@ export const parseCurrency = (value: string): number => {
   const cleanValue = value
     .replace(/\s/g, '') // Remover espacios
     .replace(/\./g, '') // Remover puntos (miles)
+    .replace(',', '.'); // Cambiar coma por punto (decimales)
+  
+  const parsed = parseFloat(cleanValue);
+  return isNaN(parsed) ? 0 : parsed;
+};
+
+/**
+ * Formatea un número mientras el usuario escribe (formato argentino con decimales)
+ * Permite escribir cómodamente con comas y formatea en tiempo real
+ * @param value - String ingresado por el usuario
+ * @returns String formateado para mostrar en el input
+ */
+export const formatNumberInput = (value: string): string => {
+  // Si el valor está vacío, retornar vacío
+  if (!value) return '';
+  
+  // Permitir solo números y una coma
+  const cleanValue = value.replace(/[^\d,]/g, '');
+  
+  // Si solo hay una coma al final, permitirla
+  if (cleanValue === ',') return '';
+  
+  // Dividir por la coma (separador decimal argentino)
+  const parts = cleanValue.split(',');
+  
+  // Solo permitir una coma
+  if (parts.length > 2) {
+    // Si hay más de una coma, tomar solo las primeras dos partes
+    parts.splice(2);
+  }
+  
+  // Parte entera
+  let integerPart = parts[0] || '';
+  
+  // Formatear la parte entera con puntos cada tres dígitos (solo si tiene valor)
+  if (integerPart.length > 0) {
+    const num = parseInt(integerPart, 10);
+    if (!isNaN(num) && num > 0) {
+      integerPart = num.toLocaleString('es-AR');
+    } else if (integerPart === '0') {
+      integerPart = '0';
+    }
+  }
+  
+  // Parte decimal (máximo 2 dígitos)
+  let decimalPart = parts[1];
+  if (decimalPart !== undefined) {
+    if (decimalPart.length > 2) {
+      decimalPart = decimalPart.substring(0, 2);
+    }
+    // Si hay parte decimal (incluso vacía), agregar la coma
+    return `${integerPart},${decimalPart}`;
+  }
+  
+  // Si termina con coma en el input original, mantenerla
+  if (value.endsWith(',') && parts.length === 2) {
+    return `${integerPart},`;
+  }
+  
+  return integerPart;
+};
+
+/**
+ * Obtiene el valor numérico desde el formato visual (con decimales)
+ * Convierte el formato argentino (1.000,50) a número (1000.50)
+ * @param formattedValue - String formateado en formato argentino
+ * @returns Número parseado
+ */
+export const getNumericValue = (formattedValue: string): number => {
+  if (!formattedValue) return 0;
+  
+  // Convertir formato argentino a número: 1.000,50 -> 1000.50
+  const cleanValue = formattedValue
+    .replace(/\./g, '') // Remover puntos (separadores de miles)
     .replace(',', '.'); // Cambiar coma por punto (decimales)
   
   const parsed = parseFloat(cleanValue);
