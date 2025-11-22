@@ -39,7 +39,8 @@
     "mongoose": "^8.3.0",
     "node-cron": "^4.2.1",
     "pdfkit": "^0.17.2",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "xml2js": "^0.6.2"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -50,6 +51,7 @@
     "@types/node": "^20.19.24",
     "@types/node-cron": "^3.0.11",
     "@types/qrcode": "^1.5.6",
+    "@types/xml2js": "^0.4.14",
     "nodemon": "^3.1.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.3"
