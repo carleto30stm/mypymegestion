@@ -4,9 +4,9 @@ import type { IFactura, TipoComprobante } from '../models/Factura.js';
 import Venta from '../models/Venta.js';
 import Cliente from '../models/Cliente.js';
 import AFIPServiceSOAP, { type DatosFactura } from '../services/afip/AFIPServiceSOAP.js';
-import { cargarCertificadosAFIP } from '../utils/certificadosHelper.js';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 // Helper para obtener configuración de AFIP (lee variables al momento de la llamada)
 const getAfipConfig = (): {
@@ -18,37 +18,34 @@ const getAfipConfig = (): {
   puntoVenta: number;
   razonSocial: string;
 } => {
-  // Intentar cargar certificados desde helper (maneja env vars y archivos)
   let certPath: string;
   let keyPath: string;
   
-  try {
-    // Si hay variables de entorno, escribir archivos temporales
-    if (process.env.AFIP_CERT && process.env.AFIP_KEY) {
-      const tempDir = path.resolve('./temp_certs');
-      if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true });
+  // Si hay variables de entorno con certificados, crear archivos temporales
+  if (process.env.AFIP_CERT && process.env.AFIP_KEY) {
+    // Usar directorio temporal del sistema (compatible con Vercel/Railway)
+    const tempDir = os.tmpdir();
+    certPath = path.join(tempDir, `afip_cert_${process.env.AFIP_CUIT || 'default'}.crt`);
+    keyPath = path.join(tempDir, `afip_key_${process.env.AFIP_CUIT || 'default'}.key`);
+    
+    try {
+      // Decodificar y escribir solo si no existen
+      if (!fs.existsSync(certPath) || !fs.existsSync(keyPath)) {
+        const cert = process.env.AFIP_CERT.replace(/\\n/g, '\n');
+        const key = process.env.AFIP_KEY.replace(/\\n/g, '\n');
+        
+        fs.writeFileSync(certPath, cert, 'utf8');
+        fs.writeFileSync(keyPath, key, 'utf8');
+        console.log('✅ Certificados temporales creados desde variables de entorno');
       }
-      
-      certPath = path.join(tempDir, 'cert.crt');
-      keyPath = path.join(tempDir, 'private.key');
-      
-      // Decodificar y escribir
-      const cert = process.env.AFIP_CERT.replace(/\\n/g, '\n');
-      const key = process.env.AFIP_KEY.replace(/\\n/g, '\n');
-      
-      fs.writeFileSync(certPath, cert, 'utf8');
-      fs.writeFileSync(keyPath, key, 'utf8');
-    } else {
-      // Usar archivos locales con rutas absolutas
-      certPath = path.resolve(process.env.AFIP_CERT_PATH || './certs/cert.crt');
-      keyPath = path.resolve(process.env.AFIP_KEY_PATH || './certs/private.key');
+    } catch (error) {
+      console.error('❌ Error al crear certificados temporales:', error);
+      throw new Error('No se pudieron crear certificados temporales AFIP');
     }
-  } catch (error) {
-    console.error('❌ Error al cargar certificados AFIP:', error);
-    // Fallback a rutas por defecto
-    certPath = path.resolve('./certs/cert.crt');
-    keyPath = path.resolve('./certs/private.key');
+  } else {
+    // Usar archivos locales con rutas absolutas
+    certPath = path.resolve(process.env.AFIP_CERT_PATH || './certs/cert.crt');
+    keyPath = path.resolve(process.env.AFIP_KEY_PATH || './certs/private.key');
   }
   
   const config: any = {
@@ -64,14 +61,6 @@ const getAfipConfig = (): {
   if (process.env.AFIP_TA_FOLDER) {
     config.taFolder = process.env.AFIP_TA_FOLDER;
   }
-  
-  console.log('🔧 AFIP Config generado:', {
-    cuit: config.cuit,
-    certPath: config.certPath,
-    keyPath: config.keyPath,
-    production: config.production,
-    taFolder: config.taFolder || '(default)'
-  });
   
   return config;
 };
