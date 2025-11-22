@@ -86,7 +86,8 @@ export interface IFactura extends Document {
   receptorNumeroDocumento: string;
   receptorRazonSocial: string;
   receptorDomicilio?: string;
-  receptorCondicionIVA: string;
+  receptorCondicionIVA: string; // Descripción legible (ej: "Responsable Inscripto")
+  receptorCondicionIVACodigo?: number; // Código numérico AFIP (ej: 1)
   
   // Fecha y lugar
   fecha: Date;
@@ -276,6 +277,10 @@ const FacturaSchema = new Schema({
   receptorCondicionIVA: {
     type: String,
     required: true
+  },
+  receptorCondicionIVACodigo: {
+    type: Number,
+    required: false // Opcional para compatibilidad con facturas previas
   },
   
   // Fechas

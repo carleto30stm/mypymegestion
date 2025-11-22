@@ -49,15 +49,20 @@ const AutorizarFacturaDialog: React.FC<AutorizarFacturaDialogProps> = ({
     try {
       const result = await dispatch(autorizarFactura(factura._id)).unwrap();
       
-      if (result.datosAFIP?.CAE) {
+      // result es la factura actualizada desde el backend
+      if (result?.datosAFIP?.cae) {
         setCAEData({
-          CAE: result.datosAFIP.CAE,
-          CAEVencimiento: result.datosAFIP.CAEVencimiento,
+          CAE: result.datosAFIP.cae,
+          CAEVencimiento: result.datosAFIP.fechaVencimientoCAE,
         });
         setSuccess(true);
+      } else {
+        // Si no hay CAE en la respuesta, algo salió mal
+        setError('La factura no tiene CAE asignado. Verifique el estado de la factura.');
       }
     } catch (err: any) {
-      setError(err.message || 'Error al autorizar la factura con AFIP');
+      // err ya contiene el mensaje de error procesado por rejectWithValue
+      setError(err || 'Error al autorizar la factura con AFIP');
     } finally {
       setLoading(false);
     }

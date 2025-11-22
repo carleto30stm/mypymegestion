@@ -209,7 +209,7 @@ const FacturasPage: React.FC = () => {
       width: 160,
       renderCell: (params: GridRenderCellParams) => {
         const factura = params.row as Factura;
-        return factura.datosAFIP?.CAE || '-';
+        return factura.datosAFIP?.cae || '-';
       },
     },
     {

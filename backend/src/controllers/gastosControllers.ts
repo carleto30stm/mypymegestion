@@ -107,13 +107,70 @@ export const deleteGasto = async (req: ExpressRequest, res: ExpressResponse) => 
     try {
         const gasto = await Gasto.findById(req.params.id);
 
-        if (gasto) {
-            await Gasto.findByIdAndDelete(req.params.id);
-            res.json({ message: 'Gasto eliminado correctamente' });
-        } else {
-            res.status(404).json({ message: 'Gasto no encontrado' });
+        if (!gasto) {
+            return res.status(404).json({ message: 'Gasto no encontrado' });
         }
+
+        // Si es un adelanto, revertir el monto en la liquidación
+        if (gasto.concepto === 'adelanto') {
+            const { default: LiquidacionPeriodo } = await import('../models/LiquidacionPeriodo.js');
+            
+            // Buscar el periodo que contiene este gasto en gastosRelacionados
+            const periodo = await LiquidacionPeriodo.findOne({
+                'liquidaciones.gastosRelacionados': gasto._id
+            });
+            
+            if (periodo) {
+                // Verificar que el periodo no esté cerrado
+                if (periodo.estado === 'cerrado') {
+                    return res.status(400).json({ 
+                        message: 'No se puede eliminar un adelanto de un período cerrado' 
+                    });
+                }
+                
+                // Encontrar la liquidación específica que contiene este gasto
+                const liquidacion = periodo.liquidaciones.find((liq: any) =>
+                    liq.gastosRelacionados.some((id: any) => 
+                        id.toString() === gasto._id.toString()
+                    )
+                );
+                
+                if (liquidacion) {
+                    // Revertir el adelanto
+                    liquidacion.adelantos -= gasto.salida;
+                    
+                    // Remover el gasto de gastosRelacionados
+                    liquidacion.gastosRelacionados = liquidacion.gastosRelacionados.filter(
+                        (id: any) => id.toString() !== gasto._id.toString()
+                    );
+                    
+                    // Recalcular totalAPagar
+                    liquidacion.totalAPagar = 
+                        liquidacion.sueldoBase +
+                        liquidacion.totalHorasExtra +
+                        liquidacion.aguinaldos +
+                        liquidacion.bonus -
+                        liquidacion.adelantos -
+                        liquidacion.descuentos;
+                    
+                    // Guardar el periodo actualizado
+                    await periodo.save();
+                    
+                    console.log(`✅ Adelanto revertido: $${gasto.salida} restado de ${liquidacion.empleadoApellido}, ${liquidacion.empleadoNombre}`);
+                }
+            }
+        }
+        
+        // Eliminar el gasto
+        await Gasto.findByIdAndDelete(req.params.id);
+        
+        res.json({ 
+            message: 'Gasto eliminado correctamente',
+            adelantoRevertido: gasto.concepto === 'adelanto'
+        });
+        
     } catch (error) {
+        console.error('Error al eliminar gasto:', error);
         res.status(500).json({ message: 'Error en el servidor' });
     }
 };

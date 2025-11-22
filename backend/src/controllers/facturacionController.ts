@@ -3,14 +3,34 @@ import Factura from '../models/Factura.js';
 import type { IFactura, TipoComprobante } from '../models/Factura.js';
 import Venta from '../models/Venta.js';
 import Cliente from '../models/Cliente.js';
-import AFIPService from '../services/afipService.js';
+import AFIPServiceSOAP, { type DatosFactura } from '../services/afip/AFIPServiceSOAP.js';
 
 // Helper para obtener configuración de AFIP (lee variables al momento de la llamada)
-const getAfipConfig = () => ({
-  CUIT: process.env.AFIP_CUIT || '',
-  production: process.env.AFIP_PRODUCTION === 'true',
-  ta_folder: process.env.AFIP_TA_FOLDER || './afip_tokens'
-});
+const getAfipConfig = (): {
+  cuit: string;
+  certPath: string;
+  keyPath: string;
+  production: boolean;
+  taFolder?: string;
+  puntoVenta: number;
+  razonSocial: string;
+} => {
+  const config: any = {
+    cuit: process.env.AFIP_CUIT || '',
+    certPath: process.env.AFIP_CERT_PATH || './afip_cert/cert.pem',
+    keyPath: process.env.AFIP_KEY_PATH || './afip_cert/key.pem',
+    production: process.env.AFIP_PRODUCTION === 'true',
+    puntoVenta: parseInt(process.env.AFIP_PUNTO_VENTA || '1'),
+    razonSocial: process.env.EMPRESA_RAZON_SOCIAL || ''
+  };
+  
+  // Solo incluir taFolder si está definido
+  if (process.env.AFIP_TA_FOLDER) {
+    config.taFolder = process.env.AFIP_TA_FOLDER;
+  }
+  
+  return config;
+};
 
 // Helper para obtener datos de la empresa (lee variables al momento de la llamada)
 const getEmpresaData = () => ({
@@ -22,6 +42,186 @@ const getEmpresaData = () => ({
   inicioActividades: new Date(process.env.EMPRESA_INICIO_ACTIVIDADES || '2020-01-01'),
   puntoVenta: parseInt(process.env.AFIP_PUNTO_VENTA || '1')
 });
+
+/**
+ * Convierte código de tipo de documento AFIP a string
+ */
+const convertirCodigoTipoDocumento = (codigo: number): string => {
+  const mapa: Record<number, string> = {
+    80: 'CUIT',
+    86: 'CUIL',
+    96: 'DNI',
+    94: 'PASAPORTE',
+    99: 'SIN_IDENTIFICAR'
+  };
+  return mapa[codigo] || 'DNI';
+};
+
+/**
+ * Convierte código de concepto a string
+ */
+const convertirConcepto = (codigo: number): 'productos' | 'servicios' | 'productos_servicios' => {
+  switch (codigo) {
+    case 1: return 'productos';
+    case 2: return 'servicios';
+    case 3: return 'productos_servicios';
+    default: return 'productos';
+  }
+};
+
+/**
+ * Convierte TipoComprobante del modelo a formato de letra para AFIP Service (A, B, C, A_NC, etc.)
+ */
+const convertirTipoComprobanteALetra = (tipo: TipoComprobante | undefined): string => {
+  if (!tipo) {
+    throw new Error('Tipo de comprobante no definido');
+  }
+  
+  const mapa: Record<TipoComprobante, string> = {
+    'FACTURA_A': 'A',
+    'FACTURA_B': 'B',
+    'FACTURA_C': 'C',
+    'NOTA_CREDITO_A': 'A_NC',
+    'NOTA_CREDITO_B': 'B_NC',
+    'NOTA_CREDITO_C': 'C_NC',
+    'NOTA_DEBITO_A': 'A_ND',
+    'NOTA_DEBITO_B': 'B_ND',
+    'NOTA_DEBITO_C': 'C_ND'
+  };
+  
+  const resultado = mapa[tipo];
+  if (!resultado) {
+    throw new Error(`Tipo de comprobante no reconocido: ${tipo}`);
+  }
+  
+  return resultado;
+};
+
+/**
+ * Convierte letra de tipo de comprobante (A, B, C) a enum TipoComprobante del modelo
+ */
+const convertirLetraATipoComprobante = (letra: string, tipo: 'factura' | 'nota_debito' | 'nota_credito' = 'factura'): TipoComprobante => {
+  if (tipo === 'factura') {
+    switch (letra.toUpperCase()) {
+      case 'A': return 'FACTURA_A';
+      case 'B': return 'FACTURA_B';
+      case 'C': return 'FACTURA_C';
+      default: throw new Error(`Tipo de factura no reconocido: ${letra}`);
+    }
+  } else if (tipo === 'nota_debito') {
+    switch (letra.toUpperCase()) {
+      case 'A': case 'A_ND': return 'NOTA_DEBITO_A';
+      case 'B': case 'B_ND': return 'NOTA_DEBITO_B';
+      case 'C': case 'C_ND': return 'NOTA_DEBITO_C';
+      default: throw new Error(`Tipo de nota débito no reconocido: ${letra}`);
+    }
+  } else {
+    switch (letra.toUpperCase()) {
+      case 'A': case 'A_NC': return 'NOTA_CREDITO_A';
+      case 'B': case 'B_NC': return 'NOTA_CREDITO_B';
+      case 'C': case 'C_NC': return 'NOTA_CREDITO_C';
+      default: throw new Error(`Tipo de nota crédito no reconocido: ${letra}`);
+    }
+  }
+};
+
+/**
+ * Convierte código numérico AFIP a letra (para comprobantes asociados)
+ */
+const convertirCodigoALetra = (codigo: number): string => {
+  // Normalizar el código a número (por si viene como string desde Mongoose)
+  const codigoNum = typeof codigo === 'string' ? parseInt(codigo, 10) : codigo;
+  
+  const mapa: Record<number, string> = {
+    1: 'A',     // FACTURA_A
+    6: 'B',     // FACTURA_B
+    11: 'C',    // FACTURA_C
+    2: 'A_ND',  // NOTA_DEBITO_A
+    7: 'B_ND',  // NOTA_DEBITO_B
+    12: 'C_ND', // NOTA_DEBITO_C
+    3: 'A_NC',  // NOTA_CREDITO_A
+    8: 'B_NC',  // NOTA_CREDITO_B
+    13: 'C_NC'  // NOTA_CREDITO_C
+  };
+  
+  const resultado = mapa[codigoNum];
+  
+  if (!resultado) {
+    throw new Error(`Código de comprobante no reconocido: ${codigo} (normalizado: ${codigoNum})`);
+  }
+  
+  return resultado;
+};
+
+/**
+ * Adaptador: Convierte IFactura (modelo Mongoose) a DatosFactura (formato SOAP)
+ */
+const adaptarFacturaParaSOAP = (factura: IFactura): DatosFactura => {
+  console.log('🔍 [DEBUG] receptorCondicionIVA:', factura.receptorCondicionIVA);
+  console.log('🔍 [DEBUG] receptorCondicionIVACodigo:', factura.receptorCondicionIVACodigo);
+  console.log('🔍 [DEBUG] receptorTipoDocumento:', factura.receptorTipoDocumento);
+  console.log('🔍 [DEBUG] tipoComprobante:', factura.tipoComprobante);
+  
+  // IMPORTANTE: Si tenemos el código numérico, usarlo directamente
+  // Si no, intentar convertir la descripción (fallback para facturas viejas)
+  const condicionIVA = factura.receptorCondicionIVACodigo 
+    ? factura.receptorCondicionIVACodigo.toString() // AFIP espera string del código
+    : factura.receptorCondicionIVA; // Fallback a descripción (se convierte después)
+  
+  console.log('🔍 [DEBUG] condicionIVA a enviar:', condicionIVA);
+  
+  return {
+    puntoVenta: factura.datosAFIP.puntoVenta,
+    tipoComprobante: convertirTipoComprobanteALetra(factura.tipoComprobante),
+    concepto: convertirConcepto(factura.concepto),
+
+    cliente: {
+      tipoDocumento: convertirCodigoTipoDocumento(factura.receptorTipoDocumento),
+      numeroDocumento: factura.receptorNumeroDocumento,
+      condicionIVA: condicionIVA // ✅ Usar código numérico si existe, sino descripción
+    },
+
+    fecha: factura.fecha,
+
+    importes: {
+      total: factura.importeTotal,
+      noGravado: factura.importeNoGravado,
+      exento: factura.importeExento,
+      neto: factura.importeNetoGravado,
+      iva: factura.importeIVA,
+      tributos: factura.importeOtrosTributos
+    },
+
+    iva: factura.detalleIVA.map(detalle => ({
+      alicuota: detalle.alicuota,
+      baseImponible: detalle.baseImponible,
+      importe: detalle.importe
+    })),
+
+    ...(factura.otrosTributos && factura.otrosTributos.length > 0 && {
+      tributos: factura.otrosTributos.map(trib => ({
+        id: trib.codigo,
+        descripcion: trib.descripcion,
+        baseImponible: trib.baseImponible,
+        alicuota: trib.alicuota,
+        importe: trib.importe
+      }))
+    }),
+
+    ...(factura.fechaServicioDesde && { fechaServicioDesde: factura.fechaServicioDesde }),
+    ...(factura.fechaServicioHasta && { fechaServicioHasta: factura.fechaServicioHasta }),
+    ...(factura.fechaVencimientoPago && { fechaVencimientoPago: factura.fechaVencimientoPago }),
+
+    ...(factura.comprobanteAsociado && factura.comprobanteAsociado.tipo && {
+      comprobantesAsociados: [{
+        tipo: convertirCodigoALetra(factura.comprobanteAsociado.tipo),
+        puntoVenta: factura.comprobanteAsociado.puntoVenta,
+        numero: factura.comprobanteAsociado.numero
+      }]
+    })
+  };
+};
+
 
 /**
  * Crear factura desde una venta
@@ -36,7 +236,7 @@ export const crearFacturaDesdeVenta = async (req: Request, res: Response) => {
 
     // Validar que los datos de la empresa estén configurados
     if (!EMPRESA.cuit || !EMPRESA.razonSocial || !EMPRESA.domicilio) {
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Configuración de empresa incompleta',
         detalle: 'Faltan variables de entorno: EMPRESA_CUIT, EMPRESA_RAZON_SOCIAL o EMPRESA_DOMICILIO'
       });
@@ -54,25 +254,81 @@ export const crearFacturaDesdeVenta = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Cliente no encontrado' });
     }
 
-    // Determinar tipo de factura según condiciones IVA
-    const tipoComprobante = AFIPService.determinarTipoFactura(
-      EMPRESA.condicionIVA,
-      cliente.condicionIVA
+    // Validar consistencia entre tipo de documento y condición IVA
+    if ((cliente.tipoDocumento === 'CUIT' || cliente.tipoDocumento === 'CUIL') && 
+        cliente.condicionIVA === 'Consumidor Final') {
+      console.warn(`⚠️  ADVERTENCIA: Cliente ${cliente.numeroDocumento} tiene CUIT/CUIL pero está marcado como Consumidor Final`);
+      console.warn(`⚠️  Esto puede causar rechazo en AFIP. Considere actualizar condicionIVA a 'Responsable Inscripto' o 'Monotributista'`);
+    }
+
+    // NUEVO ENFOQUE: Consultar tipo de factura desde AFIP
+    console.log('\n🚀 ========== USANDO CONSULTA AFIP PARA DETERMINAR TIPO FACTURA ==========');
+    
+    const afipConfig: any = {
+      cuit: EMPRESA.cuit,
+      certPath: process.env.AFIP_CERT_PATH || '',
+      keyPath: process.env.AFIP_KEY_PATH || '',
+      production: process.env.AFIP_PRODUCTION === 'true',
+      puntoVenta: EMPRESA.puntoVenta,
+      razonSocial: EMPRESA.razonSocial
+    };
+    
+    // Solo incluir taFolder si está definido
+    if (process.env.AFIP_TA_FOLDER) {
+      afipConfig.taFolder = process.env.AFIP_TA_FOLDER;
+    }
+    
+    const afipService = new AFIPServiceSOAP(afipConfig);
+
+    const resultadoAFIP = await afipService.determinarTipoFacturaDesdeAFIP(
+      cliente.numeroDocumento,
+      EMPRESA.condicionIVA
     );
 
-    // Determinar si el comprobante discrimina IVA
-    const discriminaIVA = tipoComprobante === 'FACTURA_A';
-    
-    // Alícuota IVA por defecto (21% para productos)
-    const alicuotaIVA = discriminaIVA ? 21 : 0;
+    console.log('📋 Resultado consulta AFIP:');
+    console.log('  - Tipo factura:', resultadoAFIP.tipoFactura);
+    console.log('  - Condición IVA:', resultadoAFIP.descripcionCondicion, `(código ${resultadoAFIP.condicionIVA})`);
+    console.log('  - Discrimina IVA:', resultadoAFIP.discriminaIVA);
+    console.log('========== FIN CONSULTA AFIP ==========\n');
 
+    const tipoComprobanteLetra = resultadoAFIP.tipoFactura;
+    const tipoComprobante = convertirLetraATipoComprobante(tipoComprobanteLetra);
+    
+    // Determinar si el comprobante discrimina IVA
+    // CRÍTICO: Respetar venta.aplicaIVA (decisión del usuario) Y resultado de AFIP
+    const discriminaIVA = venta.aplicaIVA && resultadoAFIP.discriminaIVA;
+    console.log('💰 [DEBUG] Discrimina IVA final:', discriminaIVA);
+    
+    // Informar al usuario el tipo de factura que se va a emitir
+    console.log('\n🎯 ========== TIPO DE FACTURA DETERMINADO ==========');
+    console.log('📄 Se creará una FACTURA tipo', tipoComprobanteLetra);
+    console.log('👤 Cliente:', cliente.razonSocial || `${cliente.nombre} ${cliente.apellido || ''}`.trim());
+    console.log('📋 CUIT/DNI:', cliente.numeroDocumento);
+    console.log('💼 Condición IVA detectada:', resultadoAFIP.descripcionCondicion);
+    console.log('💰 Discriminará IVA:', discriminaIVA ? 'SÍ' : 'NO');
+    console.log('========== FIN TIPO FACTURA ==========\n');
+
+    // Alícuota IVA: usar la de la venta original
+    // Si la venta tiene IVA, es 21%, sino 0
+    const alicuotaIVA = venta.aplicaIVA ? 21 : 0;
+    console.log('💰 [DEBUG] Alícuota IVA:', alicuotaIVA);
+
+    // CRÍTICO: Calcular IVA proporcional por item basado en el IVA total de la venta
+    const totalVentaSinIVA = venta.total - venta.iva;
+    
     // Convertir items de venta a items de factura
     const items = venta.items.map(item => {
-      const importeNeto = item.total; // Total ya con descuento
-      const importeIVA = discriminaIVA 
-        ? AFIPService.calcularIVA(importeNeto, alicuotaIVA)
+      // El item.total ya tiene descuentos aplicados pero NO incluye IVA
+      const importeNeto = item.total;
+      
+      // Calcular IVA proporcional de este item respecto al total
+      // Proporción: (importeNeto / totalVentaSinIVA) * ivaTotal
+      const ivaProporcion = totalVentaSinIVA > 0 
+        ? (importeNeto / totalVentaSinIVA) * venta.iva 
         : 0;
       
+      const importeIVA = discriminaIVA ? ivaProporcion : 0;
+
       return {
         codigo: item.codigoProducto,
         descripcion: item.nombreProducto,
@@ -94,7 +350,7 @@ export const crearFacturaDesdeVenta = async (req: Request, res: Response) => {
       clienteId: cliente._id,
       tipoComprobante,
       estado: 'borrador',
-      
+
       // Datos emisor
       emisorCUIT: EMPRESA.cuit,
       emisorRazonSocial: EMPRESA.razonSocial,
@@ -102,20 +358,21 @@ export const crearFacturaDesdeVenta = async (req: Request, res: Response) => {
       emisorCondicionIVA: EMPRESA.condicionIVA,
       emisorIngresosBrutos: EMPRESA.ingresosBrutos,
       emisorInicioActividades: EMPRESA.inicioActividades,
-      
-      // Datos receptor
-      receptorTipoDocumento: AFIPService.obtenerCodigoTipoDocumento(cliente.tipoDocumento),
+
+      // Datos receptor - USAR CONDICIÓN IVA DETECTADA POR AFIP
+      receptorTipoDocumento: AFIPServiceSOAP.convertirTipoDocumento(cliente.tipoDocumento),
       receptorNumeroDocumento: cliente.numeroDocumento,
       receptorRazonSocial: cliente.razonSocial || `${cliente.nombre} ${cliente.apellido || ''}`.trim(),
       receptorDomicilio: cliente.direccion,
-      receptorCondicionIVA: cliente.condicionIVA,
-      
+      receptorCondicionIVA: resultadoAFIP.descripcionCondicion, // ✅ Condición detectada por AFIP (string descriptivo)
+      receptorCondicionIVACodigo: resultadoAFIP.condicionIVA, // ✅ Código numérico para AFIP
+
       // Fechas
       fecha: venta.fecha,
-      
+
       // Items
       items,
-      
+
       // Totales se calculan automáticamente en el middleware
       subtotal: 0,
       descuentoTotal: 0,
@@ -126,12 +383,12 @@ export const crearFacturaDesdeVenta = async (req: Request, res: Response) => {
       importeOtrosTributos: 0,
       importeTotal: 0,
       detalleIVA: [],
-      
+
       // Datos AFIP
       datosAFIP: {
         puntoVenta: EMPRESA.puntoVenta
       },
-      
+
       // Otros
       concepto: 1, // Productos
       monedaId: 'PES',
@@ -147,9 +404,9 @@ export const crearFacturaDesdeVenta = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Error al crear factura:', error);
-    res.status(500).json({ 
-      error: 'Error al crear factura', 
-      detalle: error.message 
+    res.status(500).json({
+      error: 'Error al crear factura',
+      detalle: error.message
     });
   }
 };
@@ -172,7 +429,7 @@ export const crearFacturaDesdeVentas = async (req: Request, res: Response) => {
 
     // Validar configuración
     if (!EMPRESA.cuit || !EMPRESA.razonSocial || !EMPRESA.domicilio) {
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Configuración de empresa incompleta',
         detalle: 'Faltan variables de entorno: EMPRESA_CUIT, EMPRESA_RAZON_SOCIAL o EMPRESA_DOMICILIO'
       });
@@ -180,7 +437,7 @@ export const crearFacturaDesdeVentas = async (req: Request, res: Response) => {
 
     // Buscar todas las ventas
     const ventas = await Venta.find({ _id: { $in: ventasIds } }).populate('clienteId');
-    
+
     if (ventas.length === 0) {
       return res.status(404).json({ error: 'No se encontraron ventas' });
     }
@@ -193,7 +450,7 @@ export const crearFacturaDesdeVentas = async (req: Request, res: Response) => {
     const primeraVenta = ventas[0]!; // Type assertion: sabemos que existe por validación anterior
     const primerClienteId = primeraVenta.clienteId._id.toString();
     const todosDelMismoCliente = ventas.every(v => v.clienteId._id.toString() === primerClienteId);
-    
+
     if (!todosDelMismoCliente) {
       return res.status(400).json({ error: 'Todas las ventas deben ser del mismo cliente' });
     }
@@ -217,21 +474,22 @@ export const crearFacturaDesdeVentas = async (req: Request, res: Response) => {
     }
 
     // Determinar tipo de factura
-    const tipoComprobante = AFIPService.determinarTipoFactura(
+    const tipoComprobanteLetra = AFIPServiceSOAP.determinarTipoFactura(
       EMPRESA.condicionIVA,
       cliente.condicionIVA
     );
+    const tipoComprobante = convertirLetraATipoComprobante(tipoComprobanteLetra);
 
     const discriminaIVA = tipoComprobante === 'FACTURA_A';
     const alicuotaIVA = discriminaIVA ? 21 : 0;
 
     // Agrupar items de todas las ventas
     const itemsMap = new Map();
-    
+
     ventas.forEach(venta => {
       venta.items.forEach(item => {
         const key = `${item.codigoProducto}-${item.precioUnitario}`;
-        
+
         if (itemsMap.has(key)) {
           const existing = itemsMap.get(key);
           existing.cantidad += item.cantidad;
@@ -258,10 +516,10 @@ export const crearFacturaDesdeVentas = async (req: Request, res: Response) => {
 
     // Calcular IVA para cada item agrupado
     const items = Array.from(itemsMap.values()).map(item => {
-      const importeIVA = discriminaIVA 
-        ? AFIPService.calcularIVA(item.importeNeto, alicuotaIVA)
+      const importeIVA = discriminaIVA
+        ? AFIPServiceSOAP.calcularIVA(item.importeNeto, alicuotaIVA)
         : 0;
-      
+
       return {
         ...item,
         importeIVA,
@@ -275,7 +533,7 @@ export const crearFacturaDesdeVentas = async (req: Request, res: Response) => {
       clienteId: cliente._id,
       tipoComprobante,
       estado: 'borrador',
-      
+
       // Datos emisor
       emisorCUIT: EMPRESA.cuit,
       emisorRazonSocial: EMPRESA.razonSocial,
@@ -283,20 +541,20 @@ export const crearFacturaDesdeVentas = async (req: Request, res: Response) => {
       emisorCondicionIVA: EMPRESA.condicionIVA,
       emisorIngresosBrutos: EMPRESA.ingresosBrutos,
       emisorInicioActividades: EMPRESA.inicioActividades,
-      
+
       // Datos receptor
-      receptorTipoDocumento: AFIPService.obtenerCodigoTipoDocumento(cliente.tipoDocumento),
+      receptorTipoDocumento: AFIPServiceSOAP.convertirTipoDocumento(cliente.tipoDocumento),
       receptorNumeroDocumento: cliente.numeroDocumento,
       receptorRazonSocial: cliente.razonSocial || `${cliente.nombre} ${cliente.apellido || ''}`.trim(),
       receptorDomicilio: cliente.direccion,
       receptorCondicionIVA: cliente.condicionIVA,
-      
+
       // Fechas
       fecha: new Date(),
-      
+
       // Items agrupados
       items,
-      
+
       // Totales (se calculan automáticamente)
       subtotal: 0,
       descuentoTotal: 0,
@@ -307,15 +565,15 @@ export const crearFacturaDesdeVentas = async (req: Request, res: Response) => {
       importeOtrosTributos: 0,
       importeTotal: 0,
       detalleIVA: [],
-      
+
       // Datos AFIP
       datosAFIP: {
         puntoVenta: EMPRESA.puntoVenta
       },
-      
+
       // Observaciones
       observaciones: `Factura generada desde ${ventas.length} venta(s): ${ventas.map(v => v.numeroVenta).join(', ')}`,
-      
+
       // Otros
       concepto: 1,
       monedaId: 'PES',
@@ -332,9 +590,9 @@ export const crearFacturaDesdeVentas = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Error al crear factura desde ventas:', error);
-    res.status(500).json({ 
-      error: 'Error al crear factura', 
-      detalle: error.message 
+    res.status(500).json({
+      error: 'Error al crear factura',
+      detalle: error.message
     });
   }
 };
@@ -345,14 +603,14 @@ export const crearFacturaDesdeVentas = async (req: Request, res: Response) => {
 export const crearFacturaManual = async (req: Request, res: Response) => {
   try {
     const username = (req as any).user?.username || 'sistema';
-    const { 
-      clienteId, 
-      tipoComprobante, 
-      items, 
+    const {
+      clienteId,
+      tipoComprobante,
+      items,
       concepto,
       fechaServicioDesde,
       fechaServicioHasta,
-      observaciones 
+      observaciones
     } = req.body;
 
     // Obtener configuración de empresa
@@ -360,7 +618,7 @@ export const crearFacturaManual = async (req: Request, res: Response) => {
 
     // Validar que los datos de la empresa estén configurados
     if (!EMPRESA.cuit || !EMPRESA.razonSocial || !EMPRESA.domicilio) {
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Configuración de empresa incompleta',
         detalle: 'Faltan variables de entorno: EMPRESA_CUIT, EMPRESA_RAZON_SOCIAL o EMPRESA_DOMICILIO'
       });
@@ -368,8 +626,8 @@ export const crearFacturaManual = async (req: Request, res: Response) => {
 
     // Validar datos requeridos
     if (!clienteId || !items || items.length === 0) {
-      return res.status(400).json({ 
-        error: 'Cliente y items son requeridos' 
+      return res.status(400).json({
+        error: 'Cliente y items son requeridos'
       });
     }
 
@@ -382,12 +640,16 @@ export const crearFacturaManual = async (req: Request, res: Response) => {
     // Crear factura
     const factura = new Factura({
       clienteId: cliente._id,
-      tipoComprobante: tipoComprobante || AFIPService.determinarTipoFactura(
-        EMPRESA.condicionIVA,
-        cliente.condicionIVA
-      ),
+      tipoComprobante: tipoComprobante 
+        ? convertirLetraATipoComprobante(tipoComprobante as string)
+        : convertirLetraATipoComprobante(
+            AFIPServiceSOAP.determinarTipoFactura(
+              EMPRESA.condicionIVA,
+              cliente.condicionIVA
+            )
+          ),
       estado: 'borrador',
-      
+
       // Datos emisor
       emisorCUIT: EMPRESA.cuit,
       emisorRazonSocial: EMPRESA.razonSocial,
@@ -395,22 +657,22 @@ export const crearFacturaManual = async (req: Request, res: Response) => {
       emisorCondicionIVA: EMPRESA.condicionIVA,
       emisorIngresosBrutos: EMPRESA.ingresosBrutos,
       emisorInicioActividades: EMPRESA.inicioActividades,
-      
+
       // Datos receptor
-      receptorTipoDocumento: AFIPService.obtenerCodigoTipoDocumento(cliente.tipoDocumento),
+      receptorTipoDocumento: AFIPServiceSOAP.convertirTipoDocumento(cliente.tipoDocumento),
       receptorNumeroDocumento: cliente.numeroDocumento,
       receptorRazonSocial: cliente.razonSocial || `${cliente.nombre} ${cliente.apellido || ''}`.trim(),
       receptorDomicilio: cliente.direccion,
       receptorCondicionIVA: cliente.condicionIVA,
-      
+
       // Fechas
       fecha: new Date(),
       fechaServicioDesde: fechaServicioDesde ? new Date(fechaServicioDesde) : undefined,
       fechaServicioHasta: fechaServicioHasta ? new Date(fechaServicioHasta) : undefined,
-      
+
       // Items
       items,
-      
+
       // Totales se calculan automáticamente
       subtotal: 0,
       descuentoTotal: 0,
@@ -421,12 +683,12 @@ export const crearFacturaManual = async (req: Request, res: Response) => {
       importeOtrosTributos: 0,
       importeTotal: 0,
       detalleIVA: [],
-      
+
       // Datos AFIP
       datosAFIP: {
         puntoVenta: EMPRESA.puntoVenta
       },
-      
+
       // Otros
       concepto: concepto || 1,
       monedaId: 'PES',
@@ -443,9 +705,9 @@ export const crearFacturaManual = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Error al crear factura manual:', error);
-    res.status(500).json({ 
-      error: 'Error al crear factura', 
-      detalle: error.message 
+    res.status(500).json({
+      error: 'Error al crear factura',
+      detalle: error.message
     });
   }
 };
@@ -465,60 +727,70 @@ export const autorizarFactura = async (req: Request, res: Response) => {
 
     // Verificar que esté en borrador
     if (factura.estado !== 'borrador') {
-      return res.status(400).json({ 
-        error: `La factura ya está en estado: ${factura.estado}` 
+      return res.status(400).json({
+        error: `La factura ya está en estado: ${factura.estado}`
+      });
+    }
+
+    // Validar que tenga tipo de comprobante
+    if (!factura.tipoComprobante) {
+      return res.status(400).json({
+        error: 'La factura no tiene tipo de comprobante definido',
+        detalle: 'Verifique que el campo tipoComprobante esté presente en la factura'
       });
     }
 
     // Validar factura antes de enviar
-    const validacion = AFIPService.validarFactura(factura);
+    const datosParaValidar = adaptarFacturaParaSOAP(factura);
+    const validacion = AFIPServiceSOAP.validarFactura(datosParaValidar);
     if (!validacion.valido) {
-      return res.status(400).json({ 
-        error: 'Factura inválida', 
-        errores: validacion.errores 
+      return res.status(400).json({
+        error: 'Factura inválida',
+        errores: validacion.errores
       });
     }
 
     // Crear servicio AFIP
-    const afipService = new AFIPService(getAfipConfig());
+    const afipService = new AFIPServiceSOAP(getAfipConfig());
 
-    // Solicitar CAE
-    const resultado = await afipService.solicitarCAE(factura);
+    // Adaptar factura al formato SOAP y solicitar CAE
+    const datosFactura = adaptarFacturaParaSOAP(factura);
+    const resultado = await afipService.solicitarCAE(datosFactura);
 
-    if (resultado.resultado === 'A') {
+    if (resultado.aprobado) {
       // Actualizar factura con datos de AFIP
       factura.datosAFIP.cae = resultado.cae;
       factura.datosAFIP.fechaVencimientoCAE = resultado.fechaVencimientoCAE;
-      factura.datosAFIP.numeroComprobante = resultado.numeroComprobante;
-      factura.datosAFIP.numeroSecuencial = parseInt(resultado.numeroComprobante.split('-')[1] || '0');
+      factura.datosAFIP.numeroSecuencial = resultado.numeroComprobante;
+      factura.datosAFIP.numeroComprobante = `${String(factura.datosAFIP.puntoVenta).padStart(5, '0')}-${String(resultado.numeroComprobante).padStart(8, '0')}`;
       factura.datosAFIP.fechaAutorizacion = new Date();
       factura.datosAFIP.resultado = 'A';
       if (resultado.observaciones) {
         factura.datosAFIP.observacionesAFIP = resultado.observaciones;
       }
-      
+
       // Generar código de barras
-      factura.datosAFIP.codigoBarras = AFIPService.generarCodigoBarras(
+      factura.datosAFIP.codigoBarras = AFIPServiceSOAP.generarCodigoBarras(
         factura.emisorCUIT,
-        TIPO_COMPROBANTE_CODIGO[factura.tipoComprobante],
+        convertirTipoComprobanteALetra(factura.tipoComprobante),
         factura.datosAFIP.puntoVenta,
         resultado.cae,
         resultado.fechaVencimientoCAE
       );
-      
+
       factura.estado = 'autorizada';
       await factura.save();
 
       // Marcar ventas relacionadas como facturadas
-      const ventasIds = factura.ventasRelacionadas && factura.ventasRelacionadas.length > 0 
-        ? factura.ventasRelacionadas 
+      const ventasIds = factura.ventasRelacionadas && factura.ventasRelacionadas.length > 0
+        ? factura.ventasRelacionadas
         : factura.ventaId ? [factura.ventaId] : [];
-      
+
       if (ventasIds.length > 0) {
         await Venta.updateMany(
           { _id: { $in: ventasIds } },
-          { 
-            $set: { 
+          {
+            $set: {
               facturada: true,
               facturaId: factura._id
             }
@@ -531,7 +803,11 @@ export const autorizarFactura = async (req: Request, res: Response) => {
         factura,
         cae: resultado.cae,
         numeroComprobante: resultado.numeroComprobante,
-        ventasActualizadas: ventasIds.length
+        ventasActualizadas: ventasIds.length,
+        ...(resultado.observaciones && resultado.observaciones.length > 0 && {
+          observaciones: resultado.observaciones,
+          advertencia: 'Factura autorizada con observaciones informativas de AFIP'
+        })
       });
     } else {
       // Rechazada por AFIP
@@ -550,9 +826,9 @@ export const autorizarFactura = async (req: Request, res: Response) => {
     }
   } catch (error: any) {
     console.error('Error al autorizar factura:', error);
-    res.status(500).json({ 
-      error: 'Error al autorizar factura', 
-      detalle: error.message 
+    res.status(500).json({
+      error: 'Error al autorizar factura',
+      detalle: error.message
     });
   }
 };
@@ -562,11 +838,11 @@ export const autorizarFactura = async (req: Request, res: Response) => {
  */
 export const listarFacturas = async (req: Request, res: Response) => {
   try {
-    const { 
-      estado, 
-      clienteId, 
-      desde, 
-      hasta, 
+    const {
+      estado,
+      clienteId,
+      desde,
+      hasta,
       tipoComprobante,
       page = 1,
       limit = 50
@@ -577,7 +853,7 @@ export const listarFacturas = async (req: Request, res: Response) => {
     if (estado) filtro.estado = estado;
     if (clienteId) filtro.clienteId = clienteId;
     if (tipoComprobante) filtro.tipoComprobante = tipoComprobante;
-    
+
     if (desde || hasta) {
       filtro.fecha = {};
       if (desde) filtro.fecha.$gte = new Date(desde as string);
@@ -601,9 +877,9 @@ export const listarFacturas = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Error al listar facturas:', error);
-    res.status(500).json({ 
-      error: 'Error al listar facturas', 
-      detalle: error.message 
+    res.status(500).json({
+      error: 'Error al listar facturas',
+      detalle: error.message
     });
   }
 };
@@ -626,9 +902,77 @@ export const obtenerFactura = async (req: Request, res: Response) => {
     res.json(factura);
   } catch (error: any) {
     console.error('Error al obtener factura:', error);
-    res.status(500).json({ 
-      error: 'Error al obtener factura', 
-      detalle: error.message 
+    res.status(500).json({
+      error: 'Error al obtener factura',
+      detalle: error.message
+    });
+  }
+};
+
+/**
+ * Resetear factura rechazada a borrador (para reintentar autorización)
+ */
+export const resetearFacturaRechazada = async (req: Request, res: Response) => {
+  try {
+    let { id } = req.params;
+    
+    // Validar que el ID exista
+    if (!id) {
+      return res.status(400).json({ error: 'ID de factura requerido' });
+    }
+    
+    // Limpiar ID (remover llaves, espacios, comillas)
+    id = id.replace(/[{}"'\s]/g, '').trim();
+    
+    // Validar formato de ObjectId (24 caracteres hexadecimales)
+    if (!/^[0-9a-fA-F]{24}$/.test(id)) {
+      return res.status(400).json({ 
+        error: 'ID de factura inválido',
+        idRecibido: req.params.id
+      });
+    }
+
+    const factura = await Factura.findById(id);
+    if (!factura) {
+      return res.status(404).json({ error: 'Factura no encontrada' });
+    }
+
+    // Solo se pueden resetear facturas rechazadas
+    if (factura.estado !== 'rechazada') {
+      return res.status(400).json({ 
+        error: 'Solo se pueden resetear facturas rechazadas',
+        estadoActual: factura.estado
+      });
+    }
+
+    // Limpiar datos de AFIP del intento fallido
+    factura.estado = 'borrador';
+    
+    // Usar $unset para eliminar campos opcionales
+    await Factura.updateOne(
+      { _id: id },
+      {
+        $set: { estado: 'borrador' },
+        $unset: {
+          'datosAFIP.resultado': '',
+          'datosAFIP.motivoRechazo': '',
+          'datosAFIP.observacionesAFIP': ''
+        }
+      }
+    );
+
+    // Recargar factura actualizada
+    const facturaActualizada = await Factura.findById(id);
+
+    res.json({
+      message: 'Factura reseteada a borrador. Puede intentar autorizarla nuevamente.',
+      factura: facturaActualizada
+    });
+  } catch (error: any) {
+    console.error('Error al resetear factura:', error);
+    res.status(500).json({
+      error: 'Error al resetear factura',
+      detalle: error.message
     });
   }
 };
@@ -665,9 +1009,9 @@ export const anularFactura = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Error al anular factura:', error);
-    res.status(500).json({ 
-      error: 'Error al anular factura', 
-      detalle: error.message 
+    res.status(500).json({
+      error: 'Error al anular factura',
+      detalle: error.message
     });
   }
 };
@@ -688,12 +1032,11 @@ export const verificarCAE = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'La factura no tiene CAE' });
     }
 
-    const afipService = new AFIPService(getAfipConfig());
-    
+    const afipService = new AFIPServiceSOAP(getAfipConfig());
+
     const valido = await afipService.verificarCAE(
-      factura.datosAFIP.cae,
-      TIPO_COMPROBANTE_CODIGO[factura.tipoComprobante],
       factura.datosAFIP.puntoVenta,
+      convertirTipoComprobanteALetra(factura.tipoComprobante),
       factura.datosAFIP.numeroSecuencial!
     );
 
@@ -705,9 +1048,9 @@ export const verificarCAE = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('Error al verificar CAE:', error);
-    res.status(500).json({ 
-      error: 'Error al verificar CAE', 
-      detalle: error.message 
+    res.status(500).json({
+      error: 'Error al verificar CAE',
+      detalle: error.message
     });
   }
 };
@@ -717,15 +1060,15 @@ export const verificarCAE = async (req: Request, res: Response) => {
  */
 export const obtenerPuntosVenta = async (req: Request, res: Response) => {
   try {
-    const afipService = new AFIPService(getAfipConfig());
+    const afipService = new AFIPServiceSOAP(getAfipConfig());
     const puntosVenta = await afipService.obtenerPuntosVenta();
 
     res.json({ puntosVenta });
   } catch (error: any) {
     console.error('Error al obtener puntos de venta:', error);
-    res.status(500).json({ 
-      error: 'Error al obtener puntos de venta', 
-      detalle: error.message 
+    res.status(500).json({
+      error: 'Error al obtener puntos de venta',
+      detalle: error.message
     });
   }
 };

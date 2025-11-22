@@ -66,6 +66,13 @@ router.get('/:id', facturacionController.obtenerFactura);
 router.post('/:id/autorizar', facturacionController.autorizarFactura);
 
 /**
+ * @route   POST /api/facturacion/:id/resetear
+ * @desc    Resetear factura rechazada a borrador (para reintentar)
+ * @access  Private (admin)
+ */
+router.post('/:id/resetear', facturacionController.resetearFacturaRechazada);
+
+/**
  * @route   POST /api/facturacion/:id/anular
  * @desc    Anular factura
  * @access  Private (admin)

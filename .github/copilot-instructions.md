@@ -82,26 +82,34 @@ Breve: este proyecto es una aplicación fullstack (React + Vite en frontend, Nod
     - **CRÍTICO - Inputs de Moneda en Formularios**:
       - **SIEMPRE** usar formato argentino de moneda en inputs que representan dinero (precios, montos, totales, entrada, salida, debe, haber, etc).
       - **NO usar type="number"** para inputs de moneda - usar TextField con formateo manual.
-      - **Patrón obligatorio para inputs de moneda**:
+      - **Patrón obligatorio**: usar funciones centralizadas de `utils/formatters.ts`
+      - **Implementación estándar**:
         ```tsx
-        // En el estado: guardar como string formateado
-        const [monto, setMonto] = useState<string>('');
+        import { formatNumberInput, getNumericValue, formatCurrency } from '../utils/formatters';
         
-        // En el onChange: formatear mientras el usuario escribe
-        const handleMontoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-          const value = e.target.value;
-          // Permitir solo números, puntos y comas
-          const numericValue = value.replace(/[^0-9]/g, '');
-          if (numericValue) {
-            setMonto(formatCurrency(Number(numericValue) / 100));
-          } else {
-            setMonto('');
-          }
+        // Estado para display formateado
+        const [montoFormatted, setMontoFormatted] = useState('');
+        
+        // Handler: formatea mientras el usuario escribe
+        const handleMontoChange = (value: string) => {
+          const formatted = formatNumberInput(value);
+          setMontoFormatted(formatted);
+          const numericValue = getNumericValue(formatted);
+          // Usar numericValue para cálculos/backend
         };
         
-        // Al enviar: parsear a número
-        const montoNumerico = parseCurrency(monto);
+        // TextField
+        <TextField
+          value={formatCurrency(monto || 0)}
+          onChange={(e) => handleMontoChange(e.target.value)}
+          placeholder="0,00"
+        />
         ```
+      - **Funciones disponibles en utils/formatters.ts**:
+        - `formatNumberInput(value)`: Formatea mientras el usuario escribe (permite comas, agrega puntos cada 3 dígitos)
+        - `getNumericValue(formatted)`: Convierte formato argentino a número (1.000,50 → 1000.5)
+        - `formatCurrency(value)`: Formatea número para display (1000 → "1.000,00")
+        - `parseCurrency(value)`: Parsea string formateado a número
       - **Ejemplos de campos que DEBEN usar este formato**:
         - Gastos: entrada, salida, montos de transferencia
         - Ventas: precio unitario, subtotal, total, IVA, descuentos
@@ -109,8 +117,46 @@ Breve: este proyecto es una aplicación fullstack (React + Vite en frontend, Nod
         - Cuenta Corriente: debe, haber, saldo, límite de crédito, montos de ajustes
         - Productos: precio, costo
         - Clientes: límite de crédito, saldo
-      - **Referencia**: Ver `FormaPagoModal.tsx` como ejemplo de implementación correcta de inputs de moneda.
+      - **Referencia**: Ver `FormaPagoModal.tsx` y `ExpenseForm.tsx` como ejemplos de implementación correcta.
     - **NO reinventar formatos** - usar estas funciones en todo el proyecto.
+  - **Componentes Reutilizables - UI/UX**:
+    - **ConfirmDialog**: Modal de confirmación reutilizable en `frontend/components/modal/ConfirmDialog.tsx`
+      - **Uso obligatorio**: SIEMPRE usar este componente para confirmar acciones críticas (eliminar, cancelar, modificar datos financieros)
+      - **Patrón de implementación**:
+        ```tsx
+        import { ConfirmDialog } from '@/components/modal';
+        
+        const [openConfirm, setOpenConfirm] = useState(false);
+        
+        <ConfirmDialog
+          open={openConfirm}
+          onClose={() => setOpenConfirm(false)}
+          onConfirm={handleAction}
+          title="¿Confirmar acción?"
+          message="Descripción clara de lo que sucederá al confirmar"
+          confirmText="Confirmar"
+          cancelText="Cancelar"
+          severity="warning" // 'warning' | 'error' | 'info' | 'question'
+          confirmColor="primary" // 'primary' | 'error' | 'warning' | 'info' | 'success'
+          showAlert={true} // true=Alert con ícono, false=DialogContentText simple
+        />
+        ```
+      - **Props disponibles**:
+        - `severity`: Tipo visual ('warning'=amarillo, 'error'=rojo, 'info'=azul, 'question'=ayuda)
+        - `confirmColor`: Color del botón de confirmación
+        - `showAlert`: true muestra Alert con ícono, false muestra texto simple
+      - **Casos de uso comunes**:
+        - Eliminar registros: `severity="error"`, `confirmColor="error"`
+        - Cancelar operaciones: `severity="warning"`, `confirmColor="warning"`
+        - Confirmar acciones financieras: `severity="warning"`, `confirmColor="primary"`
+        - Información/ayuda: `severity="question"`, `confirmColor="info"`
+      - **Ejemplo real**: Ver `frontend/components/table/AdelantosTab.tsx` líneas 282-291
+    - **FormaPagoModal**: Componente ÚNICO para manejo de cheques, transferencias, tarjetas y efectivo
+      - Ubicación: `frontend/components/FormaPagoModal.tsx`
+      - Maneja validaciones completas de cada medio de pago
+      - Auto-calcula fechas de vencimiento para cheques
+      - Valida restricciones de cliente (ej: aceptaCheques)
+    - **NO crear modales de confirmación custom** - usar ConfirmDialog en su lugar
 
 5) Archivos clave para mirar antes de editar
   - `frontend/redux/slices/authSlice.ts` — rehidratación, tokenExpiration, guardado de `user` en localStorage.
@@ -118,6 +164,7 @@ Breve: este proyecto es una aplicación fullstack (React + Vite en frontend, Nod
   - `frontend/services/api.ts` — baseURL, interceptors, manejo 401/expiración.
   - `frontend/components/ExpenseTable.tsx` — lógica UI para permisos (el lugar más común donde se comprueba `user.userType`).
   - `frontend/components/FormaPagoModal.tsx` — componente ÚNICO para manejo de cheques, transferencias, tarjetas y efectivo.
+  - `frontend/components/modal/ConfirmDialog.tsx` — modal de confirmación reutilizable para acciones críticas.
   - `frontend/utils/formatters.ts` — funciones centralizadas de formato (fechas dd/mm/yyyy, moneda argentina).
   - `frontend/types.ts` — tipos centrales (User, Gasto, Venta) y enums centralizados (ESTADOS_VENTA, etc).
   - `backend/src/Types/Types.ts` — enums centralizados del backend (ESTADOS_VENTA, CAJAS, MEDIO_PAGO, etc).
