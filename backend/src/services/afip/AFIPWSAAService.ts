@@ -67,6 +67,7 @@ export class AFIPWSAAService {
     }
 
     console.log(`🔧 AFIPWSAAService inicializado con carpeta tokens: ${this.taFolder}`);
+    console.log('🚀 AFIPWSAAService VERSION: FIX-2025-11-22-TEMP-DIR');
   }
 
   /**
