@@ -23,7 +23,9 @@ src/**/*.d.ts.map
 
 # AFIP certificates and tokens (sensitive data - NEVER commit)
 certs/
-afip_tokens/
+afip_tokens/*.json
+afip_tokens/*.tmp
+afip_tokens/*.xml
 *.crt
 *.key
 *.pem

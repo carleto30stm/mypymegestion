@@ -10,6 +10,9 @@ COPY package*.json ./
 # Instalar dependencias
 RUN npm ci --only=production
 
+# Instalar OpenSSL (requerido para firmar TRA de AFIP)
+RUN apk add --no-cache openssl
+
 # Copiar código fuente
 COPY . .
 

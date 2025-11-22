@@ -10,10 +10,28 @@
 
 import axios from 'axios';
 import { parseStringPromise } from 'xml2js';
-import * as momentModule from 'moment';
-const moment = momentModule.default || momentModule;
 import type { TicketAcceso } from './AFIPWSAAService.js';
 import AFIPWSAAService from './AFIPWSAAService.js';
+
+/**
+ * Formatea fecha a YYYYMMDD para AFIP
+ */
+function formatearFechaAFIP(fecha: Date): string {
+  const año = fecha.getFullYear();
+  const mes = String(fecha.getMonth() + 1).padStart(2, '0');
+  const dia = String(fecha.getDate()).padStart(2, '0');
+  return `${año}${mes}${dia}`;
+}
+
+/**
+ * Parsea fecha YYYYMMDD de AFIP a Date
+ */
+function parsearFechaAFIP(fechaStr: string): Date {
+  const año = parseInt(fechaStr.substring(0, 4));
+  const mes = parseInt(fechaStr.substring(4, 6)) - 1;
+  const dia = parseInt(fechaStr.substring(6, 8));
+  return new Date(año, mes, dia);
+}
 
 // URLs de WSFE según ambiente
 const WSFE_URLS = {
@@ -423,7 +441,7 @@ export class AFIPWSFEService {
         <ar:DocNro>${datos.numeroDocumento.replace(/[^0-9]/g, '')}</ar:DocNro>
         <ar:CbteDesde>${numeroComprobante}</ar:CbteDesde>
         <ar:CbteHasta>${numeroComprobante}</ar:CbteHasta>
-        <ar:CbteFch>${moment(datos.fecha).format('YYYYMMDD')}</ar:CbteFch>
+        <ar:CbteFch>${formatearFechaAFIP(datos.fecha)}</ar:CbteFch>
         <ar:ImpTotal>${this.redondear(datos.importeTotal)}</ar:ImpTotal>
         <ar:ImpTotConc>${this.redondear(datos.importeNoGravado)}</ar:ImpTotConc>
         <ar:ImpNeto>${this.redondear(datos.importeNeto)}</ar:ImpNeto>
@@ -438,9 +456,9 @@ export class AFIPWSFEService {
     // Fechas de servicio (si concepto 2 o 3)
     if (datos.concepto === 2 || datos.concepto === 3) {
       xml += `
-        <ar:FchServDesde>${moment(datos.fechaServicioDesde).format('YYYYMMDD')}</ar:FchServDesde>
-        <ar:FchServHasta>${moment(datos.fechaServicioHasta).format('YYYYMMDD')}</ar:FchServHasta>
-        <ar:FchVtoPago>${moment(datos.fechaVencimientoPago || datos.fecha).format('YYYYMMDD')}</ar:FchVtoPago>
+        <ar:FchServDesde>${formatearFechaAFIP(datos.fechaServicioDesde!)}</ar:FchServDesde>
+        <ar:FchServHasta>${formatearFechaAFIP(datos.fechaServicioHasta!)}</ar:FchServHasta>
+        <ar:FchVtoPago>${formatearFechaAFIP(datos.fechaVencimientoPago || datos.fecha)}</ar:FchVtoPago>
       `;
     }
 
@@ -574,7 +592,7 @@ export class AFIPWSFEService {
       const observaciones = this.extraerObservaciones(feDetResp.Observaciones);
       return {
         cae: feDetResp.CAE,
-        fechaVencimientoCAE: moment(feDetResp.CAEFchVto, 'YYYYMMDD').toDate(),
+        fechaVencimientoCAE: parsearFechaAFIP(feDetResp.CAEFchVto),
         numeroComprobante,
         resultado: 'A',
         ...(observaciones && { observaciones })

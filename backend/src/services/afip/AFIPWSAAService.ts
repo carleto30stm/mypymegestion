@@ -11,10 +11,10 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { execSync } from 'child_process';
 import axios from 'axios';
 import { parseStringPromise } from 'xml2js';
-import { asegurarCarpetaTokens } from '../../utils/certificadosHelper.js';
 
 // URLs de WSAA según ambiente
 const WSAA_URLS = {
@@ -45,9 +45,29 @@ export class AFIPWSAAService {
 
   constructor(config: WSAAConfig) {
     this.config = config;
-    
-    // Asegurar que la carpeta de tokens exista
-    this.taFolder = asegurarCarpetaTokens(config.taFolder);
+
+    // Determinar carpeta de tokens
+    let folder = config.taFolder || process.env.AFIP_TA_FOLDER || './afip_tokens';
+    let resolvedFolder = path.resolve(folder);
+
+    // Intentar crear/verificar la carpeta. Si falla (ej: read-only fs), usar temp
+    try {
+      if (!fs.existsSync(resolvedFolder)) {
+        fs.mkdirSync(resolvedFolder, { recursive: true });
+      }
+      // Verificar escritura
+      const testFile = path.join(resolvedFolder, '.write_test');
+      fs.writeFileSync(testFile, 'test');
+      fs.unlinkSync(testFile);
+
+      this.taFolder = resolvedFolder;
+    } catch (error) {
+      console.warn(`⚠️ No se puede escribir en ${resolvedFolder}, usando directorio temporal del sistema.`);
+      this.taFolder = os.tmpdir();
+    }
+
+    console.log(`🔧 AFIPWSAAService inicializado con carpeta tokens: ${this.taFolder}`);
+    console.log('🚀 AFIPWSAAService VERSION: FIX-2025-11-22-TEMP-DIR');
   }
 
   /**
@@ -65,10 +85,10 @@ export class AFIPWSAAService {
     // Generar nuevo TA
     console.log(`🔄 Generando nuevo TA para ${servicio}...`);
     const ta = await this.generarNuevoTicket(servicio);
-    
+
     // Guardar en caché
     this.guardarTACache(servicio, ta);
-    
+
     return ta;
   }
 
@@ -79,13 +99,13 @@ export class AFIPWSAAService {
     try {
       // 1. Generar TRA (Ticket de Requerimiento de Acceso)
       const tra = this.generarTRA(servicio);
-      
+
       // 2. Firmar TRA con certificado (formato CMS/PKCS#7)
       const traFirmado = await this.firmarTRA(tra);
-      
+
       // 3. Enviar a WSAA y obtener TA
       const ta = await this.solicitarTAAlWSAA(traFirmado);
-      
+
       return ta;
     } catch (error: any) {
       throw new Error(`Error al generar TA: ${error.message}`);
@@ -101,10 +121,10 @@ export class AFIPWSAAService {
     const argentinaOffset = -3 * 60; // Argentina es UTC-3
     const localOffset = now.getTimezoneOffset(); // Offset local en minutos
     const offsetDiff = (argentinaOffset - localOffset) * 60 * 1000;
-    
+
     const nowArgentina = new Date(now.getTime() + offsetDiff);
     const expirationArgentina = new Date(nowArgentina.getTime() + 12 * 60 * 60 * 1000); // 12 horas
-    
+
     // Formatear fechas según requerimiento AFIP (ISO 8601 con offset -03:00)
     const formatoAFIP = (fecha: Date): string => {
       const año = fecha.getUTCFullYear();
@@ -115,11 +135,11 @@ export class AFIPWSAAService {
       const segundos = String(fecha.getUTCSeconds()).padStart(2, '0');
       return `${año}-${mes}-${dia}T${horas}:${minutos}:${segundos}-03:00`;
     };
-    
+
     const generationTime = formatoAFIP(nowArgentina);
     const expirationTime = formatoAFIP(expirationArgentina);
     const uniqueId = Math.floor(nowArgentina.getTime() / 1000);
-    
+
     const tra = `<?xml version="1.0" encoding="UTF-8"?>
 <loginTicketRequest version="1.0">
   <header>
@@ -137,36 +157,43 @@ export class AFIPWSAAService {
    * Firma el TRA usando OpenSSL (formato CMS requerido por AFIP)
    */
   private async firmarTRA(tra: string): Promise<string> {
-    const traFile = path.join(this.taFolder, 'tra_temp.xml');
-    const traSignedFile = path.join(this.taFolder, 'tra_signed.tmp');
-    
+    // Usar directorio temporal del sistema para archivos intermedios
+    // Esto evita errores en sistemas de archivos de solo lectura (como Vercel)
+    const tempDir = os.tmpdir();
+    const traFile = path.join(tempDir, `tra_${Date.now()}.xml`);
+    const traSignedFile = path.join(tempDir, `tra_signed_${Date.now()}.tmp`);
+
+    console.log(`📁 Carpeta tokens (cache): ${this.taFolder}`);
+    console.log(`📝 Archivo TRA temporal: ${traFile}`);
+
     try {
       // Escribir TRA temporal
       fs.writeFileSync(traFile, tra, 'utf8');
-      
+      console.log(`✅ TRA temporal escrito exitosamente`);
+
       // Firmar con OpenSSL usando formato CMS
       // AFIP requiere: CMS, SHA256, nodetach, formato DER
       const certPath = path.resolve(this.config.certPath);
       const keyPath = path.resolve(this.config.keyPath);
-      
+
       const command = `openssl cms -sign -in "${traFile}" -signer "${certPath}" -inkey "${keyPath}" -nodetach -outform DER -out "${traSignedFile}"`;
-      
+
       execSync(command, { stdio: 'pipe' });
-      
+
       // Leer archivo firmado y codificar en base64
       const traSignedBuffer = fs.readFileSync(traSignedFile);
       const traSignedBase64 = traSignedBuffer.toString('base64');
-      
+
       // Limpiar archivos temporales
       fs.unlinkSync(traFile);
       fs.unlinkSync(traSignedFile);
-      
+
       return traSignedBase64;
     } catch (error: any) {
       // Limpiar archivos temporales en caso de error
       if (fs.existsSync(traFile)) fs.unlinkSync(traFile);
       if (fs.existsSync(traSignedFile)) fs.unlinkSync(traSignedFile);
-      
+
       throw new Error(`Error al firmar TRA con OpenSSL: ${error.message}`);
     }
   }
@@ -175,10 +202,10 @@ export class AFIPWSAAService {
    * Envía el TRA firmado al WSAA de AFIP y obtiene el TA
    */
   private async solicitarTAAlWSAA(traFirmado: string): Promise<TicketAcceso> {
-    const wsaaUrl = this.config.production 
-      ? WSAA_URLS.production 
+    const wsaaUrl = this.config.production
+      ? WSAA_URLS.production
       : WSAA_URLS.homologacion;
-    
+
     // Construir mensaje SOAP
     const soapMessage = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:wsaa="http://wsaa.view.sua.dvadac.desein.afip.gov">
@@ -189,7 +216,7 @@ export class AFIPWSAAService {
     </wsaa:loginCms>
   </soapenv:Body>
 </soapenv:Envelope>`;
-    
+
     try {
       const response = await axios.post(wsaaUrl, soapMessage, {
         headers: {
@@ -198,57 +225,57 @@ export class AFIPWSAAService {
         },
         timeout: 30000
       });
-      
+
       // Parsear respuesta SOAP
-      const result = await parseStringPromise(response.data, { 
+      const result = await parseStringPromise(response.data, {
         explicitArray: false,
-        ignoreAttrs: true 
+        ignoreAttrs: true
       });
-      
+
       // Navegar estructura SOAP (maneja múltiples formatos)
-      const soapBody = result['soapenv:Envelope']?.['soapenv:Body'] || 
-                       result['soap:Envelope']?.['soap:Body'] ||
-                       result['Envelope']?.['Body'];
-      
+      const soapBody = result['soapenv:Envelope']?.['soapenv:Body'] ||
+        result['soap:Envelope']?.['soap:Body'] ||
+        result['Envelope']?.['Body'];
+
       if (!soapBody) {
         console.log('📄 Respuesta completa:', JSON.stringify(result, null, 2));
         throw new Error('Respuesta SOAP sin estructura válida');
       }
-      
+
       // Verificar si hay error
       const fault = soapBody['soapenv:Fault'] || soapBody['soap:Fault'] || soapBody['Fault'];
       if (fault) {
         const faultCode = fault.faultcode;
         const faultString = fault.faultstring;
-        
+
         // Manejar error específico de TA ya existente
         if (faultCode && faultCode.includes('alreadyAuthenticated')) {
           throw new Error(`AFIP ya generó un TA válido previamente. Espera a que expire o elimina el cache en ${this.taFolder}`);
         }
-        
+
         throw new Error(`SOAP Fault [${faultCode}]: ${faultString}`);
       }
-      
+
       // Extraer loginCmsReturn (intentar múltiples variantes de namespace)
-      const loginReturn = soapBody['loginCmsReturn'] || 
-                          soapBody['ns1:loginCmsReturn'] ||
-                          soapBody['ns:loginCmsReturn'] ||
-                          soapBody['loginCmsResponse']?.['loginCmsReturn'];
-      
+      const loginReturn = soapBody['loginCmsReturn'] ||
+        soapBody['ns1:loginCmsReturn'] ||
+        soapBody['ns:loginCmsReturn'] ||
+        soapBody['loginCmsResponse']?.['loginCmsReturn'];
+
       if (!loginReturn) {
         console.log('📄 SOAP Body:', JSON.stringify(soapBody, null, 2));
         throw new Error('loginCmsReturn no encontrado en respuesta SOAP');
       }
-      
+
       // Parsear XML interno del TA
       const taData = await parseStringPromise(loginReturn, {
         explicitArray: false,
         ignoreAttrs: true
       });
-      
+
       const credentials = taData.loginTicketResponse.credentials;
       const header = taData.loginTicketResponse.header;
-      
+
       const ta: TicketAcceso = {
         token: credentials.token,
         sign: credentials.sign,
@@ -257,21 +284,21 @@ export class AFIPWSAAService {
         service: header.service,
         destination: header.destination
       };
-      
+
       return ta;
     } catch (error: any) {
       if (error.response) {
         // Error HTTP del servidor
         const status = error.response.status;
         const data = error.response.data;
-        
+
         // Intentar extraer detalle del error SOAP
         try {
           const errorResult = await parseStringPromise(data, {
             explicitArray: false,
             ignoreAttrs: true
           });
-          
+
           const fault = errorResult['soapenv:Envelope']?.['soapenv:Body']?.['soapenv:Fault'];
           if (fault) {
             throw new Error(`AFIP Error [${fault.faultcode}]: ${fault.faultstring}`);
@@ -279,10 +306,10 @@ export class AFIPWSAAService {
         } catch (parseError) {
           // No se pudo parsear, lanzar error genérico
         }
-        
+
         throw new Error(`Error HTTP ${status} al conectar con WSAA`);
       }
-      
+
       throw error;
     }
   }
@@ -292,11 +319,11 @@ export class AFIPWSAAService {
    */
   private leerTACache(servicio: string): TicketAcceso | null {
     const taFile = path.join(this.taFolder, `TA-${servicio}.json`);
-    
+
     if (!fs.existsSync(taFile)) {
       return null;
     }
-    
+
     try {
       const taData = JSON.parse(fs.readFileSync(taFile, 'utf8'));
       return taData;
@@ -311,7 +338,7 @@ export class AFIPWSAAService {
    */
   private guardarTACache(servicio: string, ta: TicketAcceso): void {
     const taFile = path.join(this.taFolder, `TA-${servicio}.json`);
-    
+
     try {
       fs.writeFileSync(taFile, JSON.stringify(ta, null, 2), 'utf8');
       console.log(`💾 TA guardado en caché: ${taFile}`);
@@ -327,7 +354,7 @@ export class AFIPWSAAService {
     const expiration = new Date(ta.expirationTime);
     const now = new Date();
     const marginMs = 60 * 60 * 1000; // 1 hora de margen
-    
+
     return (expiration.getTime() - now.getTime()) > marginMs;
   }
 
@@ -343,12 +370,14 @@ export class AFIPWSAAService {
       }
     } else {
       // Limpiar todos los TAs
-      const files = fs.readdirSync(this.taFolder);
-      files.filter(f => f.startsWith('TA-') && f.endsWith('.json'))
-        .forEach(f => {
-          fs.unlinkSync(path.join(this.taFolder, f));
-        });
-      console.log(`🗑️  Todo el cache de TAs eliminado`);
+      if (fs.existsSync(this.taFolder)) {
+        const files = fs.readdirSync(this.taFolder);
+        files.filter(f => f.startsWith('TA-') && f.endsWith('.json'))
+          .forEach(f => {
+            fs.unlinkSync(path.join(this.taFolder, f));
+          });
+        console.log(`🗑️  Todo el cache de TAs eliminado`);
+      }
     }
   }
 }
