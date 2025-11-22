@@ -25,8 +25,10 @@ import {
   Alert,
   Tooltip
 } from '@mui/material';
-import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon, Search as SearchIcon, Comment as CommentIcon } from '@mui/icons-material';
+import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon, Search as SearchIcon, Comment as CommentIcon, AttachMoney as AttachMoneyIcon, ReceiptLong as ReceiptLongIcon } from '@mui/icons-material';
 import NotasProveedorModal from '../components/NotasProveedorModal';
+import PagoProveedorModal from '../components/PagoProveedorModal';
+import CuentaCorrienteProveedorDetalle from '../components/CuentaCorrienteProveedorDetalle';
 import { proveedoresAPI } from '../services/api';
 import { Proveedor } from '../types';
 import { useSelector } from 'react-redux';
@@ -41,6 +43,8 @@ const ProveedoresPage: React.FC = () => {
   const [openDialog, setOpenDialog] = useState(false);
   const [editando, setEditando] = useState(false);
   const [openNotas, setOpenNotas] = useState(false);
+  const [openPago, setOpenPago] = useState(false);
+  const [openCuenta, setOpenCuenta] = useState(false);
   const [selectedProveedor, setSelectedProveedor] = useState<Proveedor | null>(null);
   const [busqueda, setBusqueda] = useState('');
   
@@ -204,6 +208,32 @@ const ProveedoresPage: React.FC = () => {
     }
   };
 
+  const handleOpenPago = (proveedor: Proveedor) => {
+    setSelectedProveedor(proveedor);
+    setOpenPago(true);
+  };
+
+  const handleClosePago = () => {
+    setOpenPago(false);
+    setSelectedProveedor(null);
+  };
+
+
+
+  const handlePagoSuccess = () => {
+    cargarProveedores();
+  };
+
+  const handleOpenCuenta = (proveedor: Proveedor) => {
+    setSelectedProveedor(proveedor);
+    setOpenCuenta(true);
+  };
+
+  const handleCloseCuenta = () => {
+    setOpenCuenta(false);
+    setSelectedProveedor(null);
+  };
+
   const proveedoresFiltrados = proveedores.filter(p =>
     p.razonSocial.toLowerCase().includes(busqueda.toLowerCase()) ||
     p.numeroDocumento.includes(busqueda) ||
@@ -296,6 +326,16 @@ const ProveedoresPage: React.FC = () => {
                   <Tooltip title="Editar">
                     <IconButton onClick={() => handleOpenDialog(proveedor)} size="small">
                       <EditIcon />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Registrar Pago">
+                    <IconButton onClick={() => handleOpenPago(proveedor)} size="small" color="success">
+                      <AttachMoneyIcon />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="Ver Cuenta Corriente">
+                    <IconButton onClick={() => handleOpenCuenta(proveedor)} size="small" color="primary">
+                      <ReceiptLongIcon />
                     </IconButton>
                   </Tooltip>
                   <Tooltip title="Notas">
@@ -455,6 +495,21 @@ const ProveedoresPage: React.FC = () => {
         onEliminarNota={handleEliminarNota}
         userType={userType}
       />
+      <PagoProveedorModal
+        open={openPago}
+        onClose={handleClosePago}
+        onSuccess={handlePagoSuccess}
+        proveedor={selectedProveedor as any}
+      />
+      <Dialog open={openCuenta} onClose={handleCloseCuenta} maxWidth="md" fullWidth>
+        <DialogTitle>Cuenta Corriente: {selectedProveedor?.razonSocial}</DialogTitle>
+        <DialogContent>
+          {selectedProveedor && <CuentaCorrienteProveedorDetalle proveedorId={selectedProveedor._id!} />}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseCuenta}>Cerrar</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
