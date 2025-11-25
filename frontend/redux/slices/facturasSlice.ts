@@ -47,6 +47,33 @@ export interface DatosAFIP {
   observacionesAFIP?: string[];
 }
 
+// Interfaces para NC y auditoría
+export interface NotaCreditoRef {
+  facturaId: string;
+  cae: string;
+  numeroComprobante: string;
+  importe: number;
+  tipo: 'total' | 'parcial';
+  fecha: string;
+  motivo: string;
+}
+
+export interface FacturaOriginalRef {
+  facturaId: string;
+  numeroComprobante: string;
+  cae: string;
+  importe: number;
+}
+
+export interface HistorialEstado {
+  estado: EstadoFactura;
+  fecha: string;
+  usuario: string;
+  motivo?: string;
+  ip?: string;
+  datosAdicionales?: Record<string, any>;
+}
+
 export interface Factura {
   _id: string;
   ventaId?: string; // DEPRECATED - usar ventasRelacionadas
@@ -61,6 +88,13 @@ export interface Factura {
   };
   tipoComprobante: TipoComprobante;
   estado: EstadoFactura;
+  
+  // Campos para gestión de NC
+  notasCreditoEmitidas?: NotaCreditoRef[];
+  facturaOriginal?: FacturaOriginalRef;
+  totalNotasCreditoEmitidas?: number;
+  historialEstados?: HistorialEstado[];
+  
   puntoVenta?: number; // DEPRECATED: Usar datosAFIP.puntoVenta
   numeroSecuencial?: number; // DEPRECATED: Usar datosAFIP.numeroSecuencial
   emisorCUIT: string;
@@ -218,9 +252,39 @@ export const anularFactura = createAsyncThunk(
   async ({ facturaId, motivo }: { facturaId: string; motivo: string }, { rejectWithValue }) => {
     try {
       const response = await facturasAPI.anular(facturaId, motivo);
-      return response.data.factura;
+      // El backend retorna { message, factura, notaCredito? }
+      return response;
     } catch (error: any) {
-      return rejectWithValue(error.response?.data?.error || 'Error al anular factura');
+      return rejectWithValue(
+        error.response?.data?.error || 
+        error.response?.data?.errores?.join(', ') || 
+        'Error al anular factura'
+      );
+    }
+  }
+);
+
+export const emitirNotaCredito = createAsyncThunk(
+  'facturas/emitirNotaCredito',
+  async ({ 
+    facturaId, 
+    motivo, 
+    importeParcial 
+  }: { 
+    facturaId: string; 
+    motivo: string; 
+    importeParcial?: number 
+  }, { rejectWithValue }) => {
+    try {
+      const response = await facturasAPI.emitirNotaCredito(facturaId, motivo, importeParcial);
+      // El backend retorna { message, notaCredito, facturaOriginal }
+      return response;
+    } catch (error: any) {
+      return rejectWithValue(
+        error.response?.data?.error || 
+        error.response?.data?.errores?.join(', ') || 
+        'Error al emitir nota de crédito'
+      );
     }
   }
 );
@@ -358,15 +422,34 @@ const facturasSlice = createSlice({
     });
     builder.addCase(anularFactura.fulfilled, (state, action) => {
       state.loading = false;
-      const index = state.items.findIndex(f => f._id === action.payload._id);
-      if (index !== -1) {
-        state.items[index] = action.payload;
-      }
-      if (state.currentFactura?._id === action.payload._id) {
-        state.currentFactura = action.payload;
+      // El payload contiene { message, factura, notaCredito? }
+      const factura = action.payload.factura;
+      if (factura) {
+        const index = state.items.findIndex(f => f._id === factura._id);
+        if (index !== -1) {
+          state.items[index] = factura;
+        }
+        if (state.currentFactura?._id === factura._id) {
+          state.currentFactura = factura;
+        }
       }
     });
     builder.addCase(anularFactura.rejected, (state, action) => {
+      state.loading = false;
+      state.error = action.payload as string;
+    });
+
+    // Emitir Nota de Crédito
+    builder.addCase(emitirNotaCredito.pending, (state) => {
+      state.loading = true;
+      state.error = null;
+    });
+    builder.addCase(emitirNotaCredito.fulfilled, (state) => {
+      state.loading = false;
+      // La NC se puede agregar a la lista si queremos mostrarla
+      // Por ahora solo marcamos como éxito
+    });
+    builder.addCase(emitirNotaCredito.rejected, (state, action) => {
       state.loading = false;
       state.error = action.payload as string;
     });

@@ -16,6 +16,14 @@ const router = express.Router();
 router.get('/config/puntos-venta', facturacionController.obtenerPuntosVenta);
 
 /**
+ * @route   GET /api/facturacion/notas-credito/listar
+ * @desc    Listar todas las Notas de Crédito del sistema
+ * @access  Private
+ * IMPORTANTE: Esta ruta debe estar ANTES de /:id para evitar conflictos
+ */
+router.get('/notas-credito/listar', facturacionController.listarNotasCredito);
+
+/**
  * @route   POST /api/facturacion/desde-venta
  * @desc    Crear factura desde una venta existente
  * @access  Private (admin, oper_ad)
@@ -78,5 +86,34 @@ router.post('/:id/resetear', facturacionController.resetearFacturaRechazada);
  * @access  Private (admin)
  */
 router.post('/:id/anular', facturacionController.anularFactura);
+
+/**
+ * @route   POST /api/facturacion/:id/nota-credito
+ * @desc    Emitir Nota de Crédito (total o parcial)
+ * @access  Private (admin)
+ */
+router.post('/:id/nota-credito', facturacionController.emitirNotaCredito);
+
+/**
+ * @route   GET /api/facturacion/:id/notas-credito
+ * @desc    Obtener todas las NC emitidas para una factura
+ * @access  Private
+ */
+router.get('/:id/notas-credito', facturacionController.obtenerNotasCreditoDeFactura);
+
+/**
+ * @route   GET /api/facturacion/:id/saldo-pendiente
+ * @desc    Obtener saldo pendiente de anulación de una factura
+ * @access  Private
+ */
+router.get('/:id/saldo-pendiente', facturacionController.obtenerSaldoPendienteFactura);
+
+/**
+ * @route   GET /api/facturacion/notas-credito/listar
+ * @desc    Listar todas las Notas de Crédito del sistema
+ * @access  Private
+ * IMPORTANTE: Esta ruta debe estar ANTES de /:id para evitar conflictos
+ */
+// Nota: Esta ruta se agrega al inicio del archivo para evitar conflictos
 
 export default router;

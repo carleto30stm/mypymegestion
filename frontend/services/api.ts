@@ -150,6 +150,40 @@ export const facturasAPI = {
     return response.data;
   },
 
+  // Emitir Nota de Crédito
+  emitirNotaCredito: async (id: string, motivo: string, importeParcial?: number) => {
+    const response = await api.post(`/api/facturacion/${id}/nota-credito`, { 
+      motivo, 
+      ...(importeParcial !== undefined && { importeParcial }) 
+    });
+    return response.data;
+  },
+
+  // Obtener Notas de Crédito de una factura
+  obtenerNotasCredito: async (id: string) => {
+    const response = await api.get(`/api/facturacion/${id}/notas-credito`);
+    return response.data;
+  },
+
+  // Obtener saldo pendiente de anulación
+  obtenerSaldoPendiente: async (id: string) => {
+    const response = await api.get(`/api/facturacion/${id}/saldo-pendiente`);
+    return response.data;
+  },
+
+  // Listar todas las Notas de Crédito del sistema
+  listarNotasCredito: async (params?: { 
+    page?: number; 
+    limit?: number; 
+    clienteId?: string; 
+    desde?: string; 
+    hasta?: string;
+    estado?: string;
+  }) => {
+    const response = await api.get('/api/facturacion/notas-credito/listar', { params });
+    return response.data;
+  },
+
   // Verificar CAE con AFIP
   verificarCAE: async (id: string) => {
     const response = await api.get(`/api/facturacion/${id}/verificar-cae`);

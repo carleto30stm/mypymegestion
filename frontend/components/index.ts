@@ -1,8 +1,10 @@
 
 export * from './AccountingReport'
+export { default as AnularFacturaDialog } from './AnularFacturaDialog'
 export { default as AutorizarFacturaDialog } from './AutorizarFacturaDialog'
 export * from './BankSummary'
 export * from './ChequesDisponibles'
+export { default as EmitirNotaCreditoDialog } from './EmitirNotaCreditoDialog'
 export * from './EmployeeList'
 export * from './EmployeePayroll'
 export { default as FacturaDetailDialog } from './FacturaDetailDialog'

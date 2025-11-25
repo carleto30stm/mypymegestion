@@ -4,6 +4,7 @@ import type { IFactura, TipoComprobante } from '../models/Factura.js';
 import Venta from '../models/Venta.js';
 import Cliente from '../models/Cliente.js';
 import AFIPServiceSOAP, { type DatosFactura } from '../services/afip/AFIPServiceSOAP.js';
+import { notaCreditoService } from '../services/NotaCreditoService.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -863,7 +864,7 @@ export const autorizarFactura = async (req: Request, res: Response) => {
         factura.datosAFIP.motivoRechazo = resultado.errores.join(', ');
       }
       await factura.save();
-
+      //TODO: Manejar factura rechazada mostrando mensaje de error FeDetResp Observaciones Obs.1.Msg
       res.status(400).json({
         error: 'Factura rechazada por AFIP',
         errores: resultado.errores,
@@ -1025,11 +1026,15 @@ export const resetearFacturaRechazada = async (req: Request, res: Response) => {
 
 /**
  * Anular factura
+ * Si la factura fue autorizada en AFIP, emite una Nota de Crédito
+ * REFACTORIZADO: Usa NotaCreditoService para manejo completo
  */
 export const anularFactura = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { motivo } = req.body;
+    const { motivo, emitirNC = true } = req.body;
+    const usuario = (req as any).user?.username || 'sistema';
+    const ip = req.ip || req.socket?.remoteAddress;
 
     if (!motivo) {
       return res.status(400).json({ error: 'El motivo de anulación es requerido' });
@@ -1044,15 +1049,75 @@ export const anularFactura = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'La factura ya está anulada' });
     }
 
-    factura.estado = 'anulada';
-    factura.fechaAnulacion = new Date();
-    factura.motivoAnulacion = motivo;
-    await factura.save();
+    // Verificar si ya tiene NC emitidas por el total
+    const saldoPendiente = (factura as any).getSaldoPendienteAnulacion?.() ?? factura.importeTotal;
+    if (saldoPendiente <= 0) {
+      return res.status(400).json({ 
+        error: 'Ya se emitieron Notas de Crédito por el total de esta factura' 
+      });
+    }
 
-    res.json({
-      message: 'Factura anulada exitosamente',
-      factura
-    });
+    let resultado = null;
+
+    // Si la factura está autorizada en AFIP, emitir Nota de Crédito
+    if (factura.estado === 'autorizada' && factura.datosAFIP.cae && emitirNC) {
+      console.log('\n📋 ========== ANULACIÓN CON NC (VÍA SERVICIO) ==========');
+      console.log('📋 Factura:', factura.datosAFIP.numeroComprobante);
+      console.log('📋 Motivo:', motivo);
+      console.log('📋 Usuario:', usuario);
+
+      // Usar el nuevo servicio de NC
+      resultado = await notaCreditoService.emitirNotaCredito({
+        facturaOriginalId: id as string,
+        motivo,
+        usuario,
+        ...(ip && { ip })
+      });
+
+      if (!resultado.success) {
+        console.error('❌ Error al emitir NC:', resultado.error);
+        return res.status(400).json({
+          error: resultado.error || 'Error al emitir Nota de Crédito',
+          erroresAFIP: resultado.erroresAFIP,
+          mensaje: 'La factura no se anuló porque AFIP rechazó la Nota de Crédito'
+        });
+      }
+
+      console.log('✅ Anulación completada vía servicio');
+      console.log('========== FIN ANULACIÓN ==========\n');
+
+      // La factura ya fue actualizada por el servicio, recargar
+      const facturaActualizada = await Factura.findById(id);
+
+      res.json({
+        message: 'Factura anulada exitosamente',
+        factura: facturaActualizada,
+        notaCredito: {
+          id: resultado.notaCredito?._id,
+          cae: resultado.cae,
+          numeroComprobante: resultado.numeroComprobante
+        }
+      });
+    } else {
+      // Factura no autorizada o sin CAE - anular solo en BD
+      console.log('📋 Anulando factura sin NC (no autorizada en AFIP)');
+      
+      factura.estado = 'anulada';
+      factura.fechaAnulacion = new Date();
+      factura.motivoAnulacion = motivo;
+      
+      // Registrar en historial si el método existe
+      if (typeof (factura as any).registrarCambioEstado === 'function') {
+        (factura as any).registrarCambioEstado('anulada', usuario, motivo, ip);
+      }
+      
+      await factura.save();
+
+      res.json({
+        message: 'Factura anulada exitosamente (sin NC)',
+        factura
+      });
+    }
   } catch (error: any) {
     console.error('Error al anular factura:', error);
     res.status(500).json({
@@ -1114,6 +1179,255 @@ export const obtenerPuntosVenta = async (req: Request, res: Response) => {
     console.error('Error al obtener puntos de venta:', error);
     res.status(500).json({
       error: 'Error al obtener puntos de venta',
+      detalle: error.message
+    });
+  }
+};
+
+/**
+ * Emitir Nota de Crédito manualmente
+ * Permite emitir NC sin anular la factura (para correcciones parciales)
+ * REFACTORIZADO: Usa NotaCreditoService
+ */
+export const emitirNotaCredito = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params; // ID de la factura original
+    const { motivo, importeParcial } = req.body;
+    const usuario = (req as any).user?.username || 'sistema';
+    const ip = req.ip || req.socket?.remoteAddress;
+
+    if (!motivo) {
+      return res.status(400).json({ error: 'El motivo es requerido' });
+    }
+
+    // Validar que la factura existe y puede emitir NC
+    const factura = await Factura.findById(id);
+    if (!factura) {
+      return res.status(404).json({ error: 'Factura no encontrada' });
+    }
+
+    // Validar usando el método del modelo
+    if (typeof (factura as any).puedeEmitirNC === 'function') {
+      const validacion = (factura as any).puedeEmitirNC(importeParcial);
+      if (!validacion.puede) {
+        return res.status(400).json({ error: validacion.motivo });
+      }
+    } else {
+      // Validación básica si el método no existe
+      if (factura.estado !== 'autorizada' || !factura.datosAFIP.cae) {
+        return res.status(400).json({ 
+          error: 'Solo se pueden emitir NC para facturas autorizadas en AFIP' 
+        });
+      }
+    }
+
+    console.log('\n📋 ========== EMISIÓN MANUAL NC (VÍA SERVICIO) ==========');
+    console.log('📋 Factura:', factura.datosAFIP.numeroComprobante);
+    console.log('📋 Importe:', importeParcial || 'TOTAL');
+    console.log('📋 Motivo:', motivo);
+
+    // Usar el servicio de NC
+    const resultado = await notaCreditoService.emitirNotaCredito({
+      facturaOriginalId: id as string,
+      motivo,
+      importeParcial,
+      usuario,
+      ...(ip && { ip })
+    });
+
+    if (!resultado.success) {
+      console.error('❌ Error al emitir NC:', resultado.error);
+      return res.status(400).json({
+        error: resultado.error || 'Error al emitir Nota de Crédito',
+        erroresAFIP: resultado.erroresAFIP
+      });
+    }
+
+    console.log('✅ NC emitida exitosamente');
+    console.log('========== FIN EMISIÓN NC ==========\n');
+
+    // Calcular si es parcial
+    const importeNC = importeParcial || factura.importeTotal;
+    const esParcial = importeParcial !== undefined && importeParcial < factura.importeTotal;
+
+    res.json({
+      message: 'Nota de Crédito emitida exitosamente',
+      notaCredito: {
+        id: resultado.notaCredito?._id,
+        cae: resultado.cae,
+        numeroComprobante: resultado.numeroComprobante,
+        importe: importeNC,
+        tipo: esParcial ? 'parcial' : 'total'
+      },
+      facturaOriginal: {
+        id: factura._id,
+        numeroComprobante: factura.datosAFIP.numeroComprobante,
+        saldoPendiente: (factura as any).getSaldoPendienteAnulacion?.() || 0
+      }
+    });
+  } catch (error: any) {
+    console.error('Error al emitir Nota de Crédito:', error);
+    res.status(500).json({
+      error: 'Error al emitir Nota de Crédito',
+      detalle: error.message
+    });
+  }
+};
+
+/**
+ * Obtener Notas de Crédito emitidas para una factura
+ */
+export const obtenerNotasCreditoDeFactura = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ error: 'ID de factura requerido' });
+    }
+
+    const factura = await Factura.findById(id);
+    if (!factura) {
+      return res.status(404).json({ error: 'Factura no encontrada' });
+    }
+
+    // Obtener NC usando el servicio
+    const notasCredito = await notaCreditoService.obtenerNCDeFactura(id);
+
+    // Obtener resumen de saldo
+    const resumen = await notaCreditoService.calcularSaldoPendiente(id);
+
+    res.json({
+      factura: {
+        id: factura._id,
+        numeroComprobante: factura.datosAFIP.numeroComprobante,
+        importeTotal: factura.importeTotal,
+        estado: factura.estado
+      },
+      resumen: {
+        importeOriginal: resumen.importeTotal,
+        totalNotasCredito: resumen.totalNC,
+        saldoPendiente: resumen.saldoPendiente,
+        cantidadNC: resumen.notasCredito,
+        puedeEmitirMasNC: resumen.saldoPendiente > 0
+      },
+      notasCredito: notasCredito.map(nc => ({
+        id: nc._id,
+        tipoComprobante: nc.tipoComprobante,
+        numeroComprobante: nc.datosAFIP.numeroComprobante,
+        cae: nc.datosAFIP.cae,
+        fecha: nc.fecha,
+        importeTotal: nc.importeTotal,
+        estado: nc.estado,
+        observaciones: nc.observaciones
+      })),
+      // También incluir las referencias embebidas en la factura
+      notasCreditoEmitidas: factura.notasCreditoEmitidas || []
+    });
+  } catch (error: any) {
+    console.error('Error al obtener NC de factura:', error);
+    res.status(500).json({
+      error: 'Error al obtener Notas de Crédito',
+      detalle: error.message
+    });
+  }
+};
+
+/**
+ * Obtener saldo pendiente de anulación de una factura
+ */
+export const obtenerSaldoPendienteFactura = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ error: 'ID de factura requerido' });
+    }
+
+    const resumen = await notaCreditoService.calcularSaldoPendiente(id);
+
+    res.json({
+      facturaId: id,
+      ...resumen,
+      puedeEmitirNC: resumen.saldoPendiente > 0
+    });
+  } catch (error: any) {
+    console.error('Error al obtener saldo pendiente:', error);
+    res.status(500).json({
+      error: 'Error al obtener saldo pendiente',
+      detalle: error.message
+    });
+  }
+};
+
+/**
+ * Listar todas las Notas de Crédito del sistema
+ */
+export const listarNotasCredito = async (req: Request, res: Response) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 20, 
+      clienteId, 
+      desde, 
+      hasta,
+      estado 
+    } = req.query;
+
+    const filtros: any = {
+      tipoComprobante: { $in: ['NOTA_CREDITO_A', 'NOTA_CREDITO_B', 'NOTA_CREDITO_C'] }
+    };
+
+    if (clienteId) {
+      filtros.clienteId = clienteId;
+    }
+
+    if (estado) {
+      filtros.estado = estado;
+    }
+
+    if (desde || hasta) {
+      filtros.fecha = {};
+      if (desde) filtros.fecha.$gte = new Date(desde as string);
+      if (hasta) filtros.fecha.$lte = new Date(hasta as string);
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const [notasCredito, total] = await Promise.all([
+      Factura.find(filtros)
+        .sort({ fecha: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .populate('clienteId', 'razonSocial nombre apellido numeroDocumento')
+        .populate('facturaOriginal.facturaId', 'datosAFIP.numeroComprobante')
+        .lean(),
+      Factura.countDocuments(filtros)
+    ]);
+
+    res.json({
+      data: notasCredito.map(nc => ({
+        id: nc._id,
+        tipoComprobante: nc.tipoComprobante,
+        numeroComprobante: nc.datosAFIP?.numeroComprobante,
+        cae: nc.datosAFIP?.cae,
+        fecha: nc.fecha,
+        importeTotal: nc.importeTotal,
+        estado: nc.estado,
+        cliente: nc.clienteId,
+        facturaOriginal: nc.facturaOriginal,
+        observaciones: nc.observaciones
+      })),
+      pagination: {
+        total,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(total / Number(limit))
+      }
+    });
+  } catch (error: any) {
+    console.error('Error al listar NC:', error);
+    res.status(500).json({
+      error: 'Error al listar Notas de Crédito',
       detalle: error.message
     });
   }
