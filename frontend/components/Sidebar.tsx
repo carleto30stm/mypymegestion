@@ -68,7 +68,6 @@ const Sidebar: React.FC<SidebarProps> = ({
   const location = useLocation();
   const { user } = useSelector((state: RootState) => state.auth);
   
-  // Todos los usuarios pueden crear registros (OPER puede crear, pero no editar/eliminar)
   const canCreate = true;
   // Solo usuarios no-oper pueden ver empleados
   const canViewEmployees = user?.userType !== 'oper';
@@ -237,18 +236,6 @@ const Sidebar: React.FC<SidebarProps> = ({
         
         <ListItem disablePadding>
           <ListItemButton 
-            onClick={() => navigate('/facturas')}
-            selected={location.pathname === '/facturas'}
-          >
-            <ListItemIcon>
-              <ReceiptIcon />
-            </ListItemIcon>
-            <ListItemText primary="Facturación" />
-          </ListItemButton>
-        </ListItem>
-        
-        <ListItem disablePadding>
-          <ListItemButton 
             onClick={() => navigate('/remitos')}
             selected={location.pathname === '/remitos'}
           >
@@ -270,6 +257,19 @@ const Sidebar: React.FC<SidebarProps> = ({
             <ListItemText primary="Cobranzas" />
           </ListItemButton>
         </ListItem>
+               
+        <ListItem disablePadding>
+          <ListItemButton 
+            onClick={() => navigate('/facturas')}
+            selected={location.pathname === '/facturas'}
+          >
+            <ListItemIcon>
+              <ReceiptIcon />
+            </ListItemIcon>
+            <ListItemText primary="Facturación" />
+          </ListItemButton>
+        </ListItem>
+
       </List>
       <Divider />
 

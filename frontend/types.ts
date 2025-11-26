@@ -473,7 +473,7 @@ export interface Remito {
   estado: typeof ESTADOS_REMITO[number];
   repartidor?: string;
   numeroBultos?: string;
-  vehiculo?: string;
+  medioEnvio?: string;
   horaDespacho?: string;
   horaEntrega?: string;
   nombreReceptor?: string;

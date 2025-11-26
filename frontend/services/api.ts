@@ -203,6 +203,12 @@ export const ventasAPI = {
   getSinFacturar: async () => {
     const response = await api.get('/api/ventas/sin-facturar');
     return response.data;
+  },
+
+  // Obtener ventas confirmadas pendientes de producción (con productos que tienen receta)
+  getPendientesProduccion: async () => {
+    const response = await api.get('/api/ventas/pendientes-produccion');
+    return response.data;
   }
 };
 

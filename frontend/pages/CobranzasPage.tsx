@@ -138,7 +138,7 @@ const CobranzasPage: React.FC = () => {
   const [datosRemito, setDatosRemito] = useState({
     direccionEntrega: '',
     repartidor: '',
-    vehiculo: '',
+    medioEnvio: '',
     observaciones: ''
   });
   const [generandoRemito, setGenerandoRemito] = useState(false);
@@ -392,7 +392,7 @@ const CobranzasPage: React.FC = () => {
     setDatosRemito({
       direccionEntrega: venta.direccionEntrega || cliente?.direccionEntrega || cliente?.direccion || '',
       repartidor: '',
-      vehiculo: '',
+      medioEnvio: '',
       observaciones: ''
     });
     setModalRemitoOpen(true);
@@ -409,7 +409,7 @@ const CobranzasPage: React.FC = () => {
           ventaId: ventaParaRemito._id!,
           direccionEntrega: datosRemito.direccionEntrega,
           repartidor: datosRemito.repartidor || undefined,
-          vehiculo: datosRemito.vehiculo || undefined,
+          medioEnvio: datosRemito.medioEnvio || undefined,
           observaciones: datosRemito.observaciones || undefined,
           creadoPor: user.id
         })
@@ -423,7 +423,7 @@ const CobranzasPage: React.FC = () => {
       setDatosRemito({
         direccionEntrega: '',
         repartidor: '',
-        vehiculo: '',
+        medioEnvio: '',
         observaciones: ''
       });
     } catch (err: any) {
@@ -1419,9 +1419,9 @@ const CobranzasPage: React.FC = () => {
                 <Grid item xs={12} md={6}>
                   <TextField
                     fullWidth
-                    label="Vehículo"
-                    value={datosRemito.vehiculo}
-                    onChange={(e) => setDatosRemito({ ...datosRemito, vehiculo: e.target.value })}
+                    label="Medio Envío"
+                    value={datosRemito.medioEnvio}
+                    onChange={(e) => setDatosRemito({ ...datosRemito, medioEnvio: e.target.value })}
                     placeholder="Ej: Camioneta ABC-123"
                   />
                 </Grid>

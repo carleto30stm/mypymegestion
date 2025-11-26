@@ -63,6 +63,7 @@ const ProductosPage: React.FC = () => {
   const [productoAjuste, setProductoAjuste] = useState<Producto | null>(null);
   const [ajusteData, setAjusteData] = useState({ cantidad: '', tipo: 'entrada' as 'entrada' | 'salida', motivo: '' });
   const [filtro, setFiltro] = useState<'todos' | 'activos' | 'inactivos' | 'stockBajo'>('activos');
+  const [busqueda, setBusqueda] = useState('');
 
   // Estado para formulario de producto
   const [formData, setFormData] = useState<Partial<Producto>>({
@@ -161,9 +162,20 @@ const ProductosPage: React.FC = () => {
   };
 
   const productosFiltrados = productos.filter(p => {
-    if (filtro === 'activos') return p.estado === 'activo';
-    if (filtro === 'inactivos') return p.estado === 'inactivo';
-    if (filtro === 'stockBajo') return p.stock <= p.stockMinimo && p.estado === 'activo';
+    // Filtrar por estado
+    if (filtro === 'activos' && p.estado !== 'activo') return false;
+    if (filtro === 'inactivos' && p.estado !== 'inactivo') return false;
+    if (filtro === 'stockBajo' && !(p.stock <= p.stockMinimo && p.estado === 'activo')) return false;
+    
+    // Filtrar por búsqueda
+    if (busqueda.trim()) {
+      const termino = busqueda.toLowerCase().trim();
+      const nombre = (p.nombre || '').toLowerCase();
+      const codigo = (p.codigo || '').toLowerCase();
+      const categoria = (p.categoria || '').toLowerCase();
+      return nombre.includes(termino) || codigo.includes(termino) || categoria.includes(termino);
+    }
+    
     return true;
   });
 
@@ -238,15 +250,28 @@ const ProductosPage: React.FC = () => {
 
       {/* Filtros */}
       <Paper sx={{ p: 2, mb: 2 }}>
-        <FormControl size="small" sx={{ minWidth: 200 }}>
-          <InputLabel>Filtrar por</InputLabel>
-          <Select value={filtro} onChange={(e) => setFiltro(e.target.value as any)} label="Filtrar por">
-            <MenuItem value="todos">Todos</MenuItem>
-            <MenuItem value="activos">Activos</MenuItem>
-            <MenuItem value="inactivos">Inactivos</MenuItem>
-            <MenuItem value="stockBajo">Stock Bajo</MenuItem>
-          </Select>
-        </FormControl>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+          <TextField
+            size="small"
+            label="Buscar producto"
+            placeholder="Nombre, código o categoría..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            sx={{ minWidth: 300 }}
+          />
+          <FormControl size="small" sx={{ minWidth: 200 }}>
+            <InputLabel>Filtrar por</InputLabel>
+            <Select value={filtro} onChange={(e) => setFiltro(e.target.value as any)} label="Filtrar por">
+              <MenuItem value="todos">Todos</MenuItem>
+              <MenuItem value="activos">Activos</MenuItem>
+              <MenuItem value="inactivos">Inactivos</MenuItem>
+              <MenuItem value="stockBajo">Stock Bajo</MenuItem>
+            </Select>
+          </FormControl>
+          <Typography variant="body2" color="textSecondary">
+            {productosFiltrados.length} producto(s) encontrado(s)
+          </Typography>
+        </Box>
       </Paper>
 
       {/* Tabla de productos */}

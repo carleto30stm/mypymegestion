@@ -210,7 +210,7 @@ export const actualizarVenta = async (req: ExpressRequest, res: ExpressResponse)
 
     try {
         const { id } = req.params;
-        const { clienteId, items, observaciones, aplicaIVA } = req.body;
+        const { clienteId, items, observaciones, aplicaIVA, momentoCobro, subtotal, iva, total } = req.body;
 
         // Buscar la venta existente
         const ventaExistente = await Venta.findById(id).session(session);
@@ -228,8 +228,81 @@ export const actualizarVenta = async (req: ExpressRequest, res: ExpressResponse)
             });
         }
 
-        // Validaciones básicas
-        if (!clienteId || !items || items.length === 0) {
+        // Actualización parcial: si no viene clienteId, solo actualizar campos permitidos
+        if (!clienteId) {
+            // Actualización parcial de items (cantidad, precio, descuento)
+            if (items && items.length > 0) {
+                // Validar stock para cada item
+                for (const item of items) {
+                    const producto = await Producto.findById(item.productoId).session(session);
+                    
+                    if (!producto) {
+                        await session.abortTransaction();
+                        return res.status(404).json({ 
+                            message: `Producto no encontrado` 
+                        });
+                    }
+
+                    if (producto.stock < item.cantidad) {
+                        await session.abortTransaction();
+                        return res.status(400).json({ 
+                            message: `Stock insuficiente para ${producto.nombre}. Stock disponible: ${producto.stock}` 
+                        });
+                    }
+                }
+
+                // Actualizar items manteniendo los datos originales del producto
+                const itemsActualizados = items.map((item: any) => ({
+                    productoId: item.productoId,
+                    codigoProducto: item.codigoProducto,
+                    nombreProducto: item.nombreProducto,
+                    cantidad: item.cantidad,
+                    precioUnitario: item.precioUnitario,
+                    subtotal: item.subtotal,
+                    descuento: item.descuento || 0,
+                    total: item.total,
+                    porcentajeDescuento: item.porcentajeDescuento || 0
+                }));
+
+                ventaExistente.items = itemsActualizados;
+                
+                // Recalcular totales
+                const nuevoSubtotal = subtotal ?? itemsActualizados.reduce((sum: number, item: any) => sum + item.subtotal, 0);
+                const descuentoTotal = itemsActualizados.reduce((sum: number, item: any) => sum + (item.descuento || 0), 0);
+                const nuevoIva = iva ?? (ventaExistente.aplicaIVA ? (nuevoSubtotal - descuentoTotal) * 0.21 : 0);
+                const nuevoTotal = total ?? (nuevoSubtotal - descuentoTotal + nuevoIva);
+
+                ventaExistente.subtotal = nuevoSubtotal;
+                ventaExistente.descuentoTotal = descuentoTotal;
+                ventaExistente.iva = nuevoIva;
+                ventaExistente.total = nuevoTotal;
+                
+                // Actualizar saldo pendiente (total - pagos ya realizados)
+                const pagosRealizados = (ventaExistente.total || 0) - (ventaExistente.saldoPendiente || 0);
+                ventaExistente.saldoPendiente = Math.max(0, nuevoTotal - pagosRealizados);
+            }
+
+            // Actualizar momentoCobro si viene
+            if (momentoCobro !== undefined) {
+                ventaExistente.momentoCobro = momentoCobro;
+            }
+
+            // Actualizar observaciones si viene
+            if (observaciones !== undefined) {
+                ventaExistente.observaciones = observaciones;
+            }
+
+            const ventaActualizada = await ventaExistente.save({ session });
+            await session.commitTransaction();
+
+            return res.json({
+                message: 'Venta actualizada exitosamente',
+                venta: ventaActualizada
+            });
+        }
+
+        // Actualización completa (con clienteId) - mantener lógica original
+        if (!items || items.length === 0) {
             await session.abortTransaction();
             return res.status(400).json({ 
                 message: 'Cliente e items son requeridos' 
@@ -275,9 +348,9 @@ export const actualizarVenta = async (req: ExpressRequest, res: ExpressResponse)
 
             // Calcular subtotal y total del item
             const precioUnitario = item.precioUnitario || producto.precioVenta;
-            const subtotal = precioUnitario * item.cantidad;
+            const subtotalItem = precioUnitario * item.cantidad;
             const descuento = item.descuento || 0;
-            const total = subtotal - descuento;
+            const totalItem = subtotalItem - descuento;
 
             itemsVenta.push({
                 productoId: producto._id as mongoose.Types.ObjectId,
@@ -285,13 +358,13 @@ export const actualizarVenta = async (req: ExpressRequest, res: ExpressResponse)
                 nombreProducto: producto.nombre,
                 cantidad: item.cantidad,
                 precioUnitario,
-                subtotal,
+                subtotal: subtotalItem,
                 descuento,
-                total,
+                total: totalItem,
                 porcentajeDescuento: item.porcentajeDescuento || 0
             });
 
-            subtotalVenta += subtotal;
+            subtotalVenta += subtotalItem;
         }
 
         // Calcular totales
@@ -311,6 +384,11 @@ export const actualizarVenta = async (req: ExpressRequest, res: ExpressResponse)
         ventaExistente.observaciones = observaciones;
         ventaExistente.aplicaIVA = aplicaIVA === true;
         ventaExistente.saldoPendiente = totalVenta; // Recalcular saldo pendiente
+
+        // Actualizar momentoCobro si viene
+        if (momentoCobro !== undefined) {
+            ventaExistente.momentoCobro = momentoCobro;
+        }
 
         const ventaActualizada = await ventaExistente.save({ session });
 
@@ -980,7 +1058,13 @@ export const getVentasSinFacturar = async (req: ExpressRequest, res: ExpressResp
             }
         });
         
-        // Buscar ventas confirmadas y cobradas, con IVA, sin facturar
+        // NOTA IMPORTANTE PARA ESTE PROYECTO:
+        // Solo se listan ventas con aplicaIVA: true para facturar.
+        // Las ventas exentas de IVA (aplicaIVA: false) NO se facturan porque
+        // en este proyecto no emitimos Factura tipo C (para consumidores finales exentos).
+        // Solo emitimos Facturas A y B que requieren IVA discriminado.
+        
+        // Buscar ventas confirmadas y cobradas, CON IVA, sin facturar
         const ventas = await Venta.find({
             $and: [
                 {
@@ -993,12 +1077,15 @@ export const getVentasSinFacturar = async (req: ExpressRequest, res: ExpressResp
                         } // Nuevo: cualquier estado granular válido
                     ]
                 },
-                {
-                    $or: [
-                        { requiereFacturaAFIP: true },
-                        { aplicaIVA: true } // También incluir ventas con IVA
-                    ]
-                },
+                // Solo ventas con IVA aplicado (no emitimos Factura C para exentos)
+                { aplicaIVA: true },
+                // COMENTADO: Filtro original que incluía también requiereFacturaAFIP
+                // {
+                //     $or: [
+                //         { requiereFacturaAFIP: true },
+                //         { aplicaIVA: true } // También incluir ventas con IVA
+                //     ]
+                // },
                 { 
                     $or: [
                         { estadoCobranza: 'cobrado' }, // Debe estar cobrada
@@ -1023,6 +1110,97 @@ export const getVentasSinFacturar = async (req: ExpressRequest, res: ExpressResp
     } catch (error: any) {
         res.status(500).json({ 
             message: 'Error al obtener ventas sin facturar',
+            details: error.message 
+        });
+    }
+};
+
+// @desc    Obtener ventas confirmadas pendientes de producción (para generar notas de pedido)
+// @route   GET /api/ventas/pendientes-produccion
+// @access  Private
+export const getVentasPendientesProduccion = async (req: ExpressRequest, res: ExpressResponse) => {
+    try {
+        // Importar Receta dinámicamente para evitar problemas de dependencia circular
+        const Receta = (await import('../models/Receta.js')).default;
+        
+        // Obtener todas las recetas activas para saber qué productos se pueden producir
+        const recetasActivas = await Receta.find({ estado: 'activa' }).select('productoId codigoProducto nombreProducto');
+        const productosConReceta = new Set(recetasActivas.map(r => r.productoId.toString()));
+        
+        // Buscar ventas confirmadas (no pendientes, no anuladas)
+        const ventas = await Venta.find({
+            $or: [
+                { estado: 'confirmada' },
+                { estadoGranular: { $in: ['confirmada', 'cobrada', 'entregada'] } }
+            ]
+        })
+        .populate('clienteId', 'nombre apellido razonSocial numeroDocumento telefono direccion')
+        .sort({ fecha: -1 });
+        
+        // Filtrar ventas que tienen al menos un producto con receta
+        // y agregar info de qué productos necesitan producción
+        const ventasConProduccion = ventas
+            .map(venta => {
+                const ventaObj = venta.toObject();
+                const itemsParaProducir = ventaObj.items.filter((item: any) => 
+                    productosConReceta.has(item.productoId?.toString())
+                );
+                
+                if (itemsParaProducir.length === 0) return null;
+                
+                return {
+                    ...ventaObj,
+                    itemsParaProducir,
+                    totalItemsProducir: itemsParaProducir.reduce((sum: number, item: any) => sum + item.cantidad, 0)
+                };
+            })
+            .filter(v => v !== null);
+        
+        // También devolver un resumen agrupado por producto
+        const resumenPorProducto: Record<string, {
+            productoId: string;
+            codigoProducto: string;
+            nombreProducto: string;
+            cantidadTotal: number;
+            ventas: Array<{ ventaId: string; numeroVenta: string; cantidad: number; cliente: string; fecha: string }>;
+        }> = {};
+        
+        ventasConProduccion.forEach((venta: any) => {
+            venta.itemsParaProducir.forEach((item: any) => {
+                const key = item.productoId?.toString();
+                if (!key) return;
+                
+                if (!resumenPorProducto[key]) {
+                    resumenPorProducto[key] = {
+                        productoId: key,
+                        codigoProducto: item.codigoProducto,
+                        nombreProducto: item.nombreProducto,
+                        cantidadTotal: 0,
+                        ventas: []
+                    };
+                }
+                
+                resumenPorProducto[key].cantidadTotal += item.cantidad;
+                resumenPorProducto[key].ventas.push({
+                    ventaId: venta._id.toString(),
+                    numeroVenta: venta.numeroVenta,
+                    cantidad: item.cantidad,
+                    cliente: venta.nombreCliente,
+                    fecha: venta.fecha
+                });
+            });
+        });
+        
+        res.json({
+            ventas: ventasConProduccion,
+            resumenPorProducto: Object.values(resumenPorProducto),
+            totalVentas: ventasConProduccion.length,
+            totalProductosProducir: Object.keys(resumenPorProducto).length
+        });
+    } catch (error: any) {
+        console.error('Error al obtener ventas pendientes de producción:', error);
+        res.status(500).json({ 
+            message: 'Error al obtener ventas pendientes de producción',
             details: error.message 
         });
     }

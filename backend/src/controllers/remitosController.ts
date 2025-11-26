@@ -2,6 +2,7 @@ import type { Request as ExpressRequest, Response as ExpressResponse } from 'exp
 import Remito from '../models/Remito.js';
 import Venta from '../models/Venta.js';
 import Cliente from '../models/Cliente.js';
+import Producto from '../models/Producto.js';
 import mongoose from 'mongoose';
 
 // @desc    Obtener todos los remitos
@@ -250,11 +251,41 @@ export const actualizarEstadoRemito = async (req: ExpressRequest, res: ExpressRe
       }
       remito.motivoCancelacion = motivoCancelacion;
 
+      // Restaurar stock de productos (la mercadería no salió)
+      for (const item of remito.items) {
+        const producto = await Producto.findById(item.productoId).session(session);
+        if (producto) {
+          producto.stock += item.cantidadSolicitada;
+          await producto.save({ session });
+        }
+      }
+
       // Actualizar estado de entrega en la venta
       const venta = await Venta.findById(remito.ventaId).session(session);
       if (venta) {
         venta.estadoEntrega = 'sin_remito';
         venta.set('remitoId', undefined);
+        await venta.save({ session });
+      }
+    }
+
+    // Devuelto: la mercadería regresó al depósito
+    if (estado === 'devuelto') {
+      // Restaurar stock de productos devueltos
+      for (const item of remito.items) {
+        const producto = await Producto.findById(item.productoId).session(session);
+        if (producto) {
+          // Restaurar la cantidad que se había entregado (o la solicitada si no se entregó nada)
+          const cantidadARestaurar = item.cantidadEntregada || item.cantidadSolicitada;
+          producto.stock += cantidadARestaurar;
+          await producto.save({ session });
+        }
+      }
+
+      // Actualizar estado de entrega en la venta
+      const venta = await Venta.findById(remito.ventaId).session(session);
+      if (venta) {
+        venta.estadoEntrega = 'devuelto';
         await venta.save({ session });
       }
     }
@@ -283,7 +314,7 @@ export const actualizarEstadoRemito = async (req: ExpressRequest, res: ExpressRe
 // @access  Private (admin/oper_ad/oper)
 export const actualizarRemito = async (req: ExpressRequest, res: ExpressResponse) => {
   try {
-    const { direccionEntrega, repartidor, numeroBultos, vehiculo, observaciones, modificadoPor } = req.body;
+    const { direccionEntrega, repartidor, numeroBultos, medioEnvio, observaciones, modificadoPor } = req.body;
 
     if (!modificadoPor) {
       return res.status(400).json({ message: 'El modificador es obligatorio' });
@@ -305,7 +336,7 @@ export const actualizarRemito = async (req: ExpressRequest, res: ExpressResponse
     if (direccionEntrega !== undefined) remito.direccionEntrega = direccionEntrega;
     if (repartidor !== undefined) remito.repartidor = repartidor;
     if (numeroBultos !== undefined) remito.numeroBultos = numeroBultos;
-    if (vehiculo !== undefined) remito.vehiculo = vehiculo;
+    if (medioEnvio !== undefined) remito.medioEnvio = medioEnvio;
     if (observaciones !== undefined) remito.observaciones = observaciones;
     
     remito.modificadoPor = modificadoPor;

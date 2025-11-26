@@ -73,7 +73,7 @@ const RemitosPage: React.FC = () => {
   const [direccionEntrega, setDireccionEntrega] = useState('');
   const [repartidor, setRepartidor] = useState('');
   const [numeroBultos, setNumeroBultos] = useState('');
-  const [vehiculo, setVehiculo] = useState('');
+  const [medioEnvio, setMedioEnvio] = useState('');
   const [observacionesGenerar, setObservacionesGenerar] = useState('');
 
   // Estados para cambiar estado
@@ -111,7 +111,7 @@ const RemitosPage: React.FC = () => {
     setVentaId('');
     setDireccionEntrega('');
     setRepartidor('');
-    setVehiculo('');
+    setMedioEnvio('');
     setObservacionesGenerar('');
     setShowGenerarDialog(true);
   };
@@ -125,7 +125,7 @@ const RemitosPage: React.FC = () => {
         direccionEntrega,
         repartidor: repartidor || undefined,
         numeroBultos: numeroBultos || undefined,
-        vehiculo: vehiculo || undefined,
+        medioEnvio: medioEnvio || undefined,
         observaciones: observacionesGenerar || undefined,
         modificadoPor: user.id
       })).unwrap();
@@ -148,7 +148,7 @@ const RemitosPage: React.FC = () => {
         direccionEntrega,
         repartidor: repartidor || undefined,
         numeroBultos: numeroBultos || undefined,
-        vehiculo: vehiculo || undefined,
+        medioEnvio: medioEnvio || undefined,
         observaciones: observacionesGenerar || undefined,
         creadoPor: user.id
       })).unwrap();
@@ -227,7 +227,7 @@ const RemitosPage: React.FC = () => {
     setDireccionEntrega(remito.direccionEntrega);
     setRepartidor(remito.repartidor || '');
     setNumeroBultos(remito.numeroBultos || '');
-    setVehiculo(remito.vehiculo || '');
+    setMedioEnvio(remito.medioEnvio || '');
     setObservacionesGenerar(remito.observaciones || '');
     setShowEditarDialog(true);
   };
@@ -610,9 +610,9 @@ const RemitosPage: React.FC = () => {
 
             <TextField
               fullWidth
-              label="Vehículo"
-              value={vehiculo}
-              onChange={(e) => setVehiculo(e.target.value)}
+              label="Medio Envio"
+              value={medioEnvio}
+              onChange={(e) => setMedioEnvio(e.target.value)}
               placeholder="Ej: Furgón - Patente ABC123"
               sx={{ mb: 2 }}
             />
@@ -780,10 +780,10 @@ const RemitosPage: React.FC = () => {
                       <Typography variant="body1">{remitoSeleccionado.numeroBultos}</Typography>
                     </Grid>
                   )}
-                  {remitoSeleccionado.vehiculo && (
+                  {remitoSeleccionado.medioEnvio && (
                     <Grid item xs={6}>
-                      <Typography variant="caption" color="textSecondary">Vehículo</Typography>
-                      <Typography variant="body1">{remitoSeleccionado.vehiculo}</Typography>
+                      <Typography variant="caption" color="textSecondary">Medio Envio</Typography>
+                      <Typography variant="body1">{remitoSeleccionado.medioEnvio}</Typography>
                     </Grid>
                   )}
                 </Grid>

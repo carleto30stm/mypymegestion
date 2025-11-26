@@ -24,7 +24,12 @@ import {
   Button,
   TextField,
   Tooltip,
-  CircularProgress
+  CircularProgress,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Alert
 } from '@mui/material';
 import {
   Receipt as ReceiptIcon,
@@ -137,7 +142,19 @@ const HistorialVentasPage: React.FC = () => {
       return;
     }
     
-    // Navegar a VentasPage con los datos de la venta para editar
+    // Abrir dialog de edición rápida (momentoCobro y observaciones)
+    setVentaEditar(venta);
+    setOpenEditar(true);
+  };
+
+  const handleEditarVentaCompleta = (venta: Venta) => {
+    // Solo se pueden editar ventas pendientes
+    if (venta.estado !== 'pendiente') {
+      alert('Solo se pueden editar ventas en estado pendiente');
+      return;
+    }
+    
+    // Navegar a VentasPage con los datos de la venta para editar items/cliente
     navigate('/ventas', { state: { ventaParaEditar: venta } });
   };
 
@@ -146,11 +163,15 @@ const HistorialVentasPage: React.FC = () => {
 
     setEditandoVenta(ventaEditar._id!);
     try {
-      // Por ahora solo permitir editar observaciones
-      // En una implementación completa se podría editar items, cliente, etc.
+      // Permitir editar items, momentoCobro y observaciones en ventas pendientes
       await dispatch(updateVenta({ 
         id: ventaEditar._id!, 
         ventaData: {
+          items: ventaEditar.items,
+          subtotal: ventaEditar.subtotal,
+          iva: ventaEditar.iva,
+          total: ventaEditar.total,
+          momentoCobro: ventaEditar.momentoCobro,
           observaciones: ventaEditar.observaciones
         }
       })).unwrap();
@@ -183,23 +204,9 @@ const HistorialVentasPage: React.FC = () => {
       }
     }
 
-    if (venta.momentoCobro === 'contra_entrega') {
-      // Contra entrega requiere cobro Y entrega simultáneos
-      if (venta.estadoCobranza !== 'cobrado') {
-        return { 
-          puede: false, 
-          razon: 'Venta contra entrega requiere cobro registrado. Debe registrar el cobro junto con la entrega.' 
-        };
-      }
-      if (venta.estadoEntrega !== 'entregado') {
-        return { 
-          puede: false, 
-          razon: 'Venta contra entrega requiere entrega completada. Debe marcar la entrega junto con el cobro.' 
-        };
-      }
-    }
-
-    // Ventas diferidas (a crédito) pueden confirmarse sin cobro previo
+    // Ventas contra_entrega y diferidas pueden confirmarse sin cobro previo
+    // - contra_entrega: se confirma para crear remito, el cobro se hace al entregar
+    // - diferido: genera deuda en cuenta corriente
     return { puede: true };
   };
 
@@ -240,9 +247,10 @@ const HistorialVentasPage: React.FC = () => {
               <TableCell><strong>N° Venta</strong></TableCell>
               <TableCell><strong>Fecha</strong></TableCell>
               <TableCell><strong>Cliente</strong></TableCell>
-              <TableCell align="center"><strong>Items</strong></TableCell>
+              <TableCell><strong>Productos</strong></TableCell>
+              <TableCell align="center"><strong>IVA</strong></TableCell>
               <TableCell align="right"><strong>Total</strong></TableCell>
-              <TableCell><strong>Medio Pago</strong></TableCell>
+              <TableCell><strong>M. Cobro</strong></TableCell>
               <TableCell><strong>Estado</strong></TableCell>
               <TableCell align="center"><strong>Acciones</strong></TableCell>
             </TableRow>
@@ -256,15 +264,44 @@ const HistorialVentasPage: React.FC = () => {
                   <Typography variant="body2">{venta.nombreCliente}</Typography>
                   <Typography variant="caption" color="textSecondary">{venta.documentoCliente}</Typography>
                 </TableCell>
-                <TableCell align="center">{venta.items.length}</TableCell>
+                <TableCell>
+                  <Tooltip title={venta.items.map(i => `${i.nombreProducto} (x${i.cantidad})`).join(', ')}>
+                    <Box>
+                      <Typography variant="body2" noWrap sx={{ maxWidth: 150 }}>
+                        {venta.items.map(i => i.nombreProducto).join(', ')}
+                      </Typography>
+                      <Typography variant="caption" color="textSecondary">
+                        {venta.items.length} item(s)
+                      </Typography>
+                    </Box>
+                  </Tooltip>
+                </TableCell>
+                <TableCell align="center">
+                  <Chip 
+                    label={venta.aplicaIVA ? 'Sí' : 'No'} 
+                    color={venta.aplicaIVA ? 'success' : 'default'} 
+                    size="small"
+                    sx={{ fontSize: '0.7rem' }}
+                  />
+                </TableCell>
                 <TableCell align="right">
                   <Typography fontWeight="bold">{formatCurrency(venta.total)}</Typography>
+                  {venta.aplicaIVA && (
+                    <Typography variant="caption" color="textSecondary" display="block">
+                      IVA: {formatCurrency(venta.iva || 0)}
+                    </Typography>
+                  )}
                 </TableCell>
                 <TableCell>
-                  <Chip label={venta.medioPago} size="small" />
-                  {venta.banco && (
-                    <Typography variant="caption" display="block">{venta.banco}</Typography>
-                  )}
+                  <Chip 
+                    label={
+                      venta.momentoCobro === 'anticipado' ? '📥 Antic.' :
+                      venta.momentoCobro === 'contra_entrega' ? '🚚 C/Ent.' :
+                      '💳 Diferido'
+                    } 
+                    size="small" 
+                    variant="outlined"
+                  />
                 </TableCell>
                 <TableCell>
                   {(() => {
@@ -376,21 +413,87 @@ const HistorialVentasPage: React.FC = () => {
         <DialogContent>
           {ventaDetalle && (
             <>
-              <Typography variant="body2" gutterBottom><strong>Fecha:</strong> {formatDate(ventaDetalle.fecha)}</Typography>
-              <Typography variant="body2" gutterBottom><strong>Estado:</strong> {ventaDetalle.estado}</Typography>
-              <Typography variant="body2" gutterBottom><strong>Medio de Pago:</strong> {ventaDetalle.medioPago}</Typography>
+              {/* Información General */}
+              <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+                <Typography variant="subtitle2" color="primary" gutterBottom>Información General</Typography>
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1 }}>
+                  <Typography variant="body2"><strong>Fecha:</strong> {formatDate(ventaDetalle.fecha)}</Typography>
+                  <Typography variant="body2"><strong>Vendedor:</strong> {ventaDetalle.vendedor || '-'}</Typography>
+                  <Typography variant="body2"><strong>Cliente:</strong> {ventaDetalle.nombreCliente}</Typography>
+                  <Typography variant="body2"><strong>Documento:</strong> {ventaDetalle.documentoCliente || '-'}</Typography>
+                  <Typography variant="body2">
+                    <strong>Estado:</strong>{' '}
+                    <Chip 
+                      label={ventaDetalle.estado?.toUpperCase()} 
+                      size="small" 
+                      color={
+                        ventaDetalle.estado === 'confirmada' ? 'success' :
+                        ventaDetalle.estado === 'pendiente' ? 'warning' :
+                        ventaDetalle.estado === 'anulada' ? 'error' : 'default'
+                      }
+                    />
+                  </Typography>
+                  <Typography variant="body2">
+                    <strong>Momento Cobro:</strong>{' '}
+                    {ventaDetalle.momentoCobro === 'anticipado' ? '📥 Anticipado' :
+                     ventaDetalle.momentoCobro === 'contra_entrega' ? '🚚 Contra Entrega' :
+                     '💳 Diferido'}
+                  </Typography>
+                </Box>
+              </Paper>
+
+              {/* Información Fiscal */}
+              <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+                <Typography variant="subtitle2" color="primary" gutterBottom>Información Fiscal</Typography>
+                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                  <Chip 
+                    label={ventaDetalle.aplicaIVA ? '✓ Aplica IVA 21%' : '✗ Exento de IVA'} 
+                    color={ventaDetalle.aplicaIVA ? 'success' : 'default'}
+                    variant="outlined"
+                  />
+                  {ventaDetalle.requiereFacturaAFIP && (
+                    <Chip label="Requiere Factura AFIP" color="info" variant="outlined" />
+                  )}
+                  {ventaDetalle.facturada && (
+                    <Chip label="✓ Facturada" color="success" />
+                  )}
+                </Box>
+              </Paper>
+
+              {/* Estado de Cobranza */}
+              <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+                <Typography variant="subtitle2" color="primary" gutterBottom>Estado de Cobranza</Typography>
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1 }}>
+                  <Typography variant="body2">
+                    <strong>Estado:</strong>{' '}
+                    <Chip 
+                      label={ventaDetalle.estadoCobranza || 'pendiente'} 
+                      size="small"
+                      color={ventaDetalle.estadoCobranza === 'cobrado' ? 'success' : 'warning'}
+                    />
+                  </Typography>
+                  <Typography variant="body2"><strong>Medio de Pago:</strong> {ventaDetalle.medioPago || '-'}</Typography>
+                  <Typography variant="body2"><strong>Monto Cobrado:</strong> {formatCurrency(ventaDetalle.montoCobrado || 0)}</Typography>
+                  <Typography variant="body2"><strong>Saldo Pendiente:</strong> {formatCurrency(ventaDetalle.saldoPendiente || 0)}</Typography>
+                </Box>
+              </Paper>
+
               {ventaDetalle.observaciones && (
-                <Typography variant="body2" gutterBottom><strong>Observaciones:</strong> {ventaDetalle.observaciones}</Typography>
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <strong>Observaciones:</strong> {ventaDetalle.observaciones}
+                </Alert>
               )}
               
-              <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Items</Typography>
-              <TableContainer>
+              <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>Items ({ventaDetalle.items.length})</Typography>
+              <TableContainer component={Paper} variant="outlined">
                 <Table size="small">
                   <TableHead>
                     <TableRow>
+                      <TableCell><strong>Código</strong></TableCell>
                       <TableCell><strong>Producto</strong></TableCell>
                       <TableCell align="center"><strong>Cant</strong></TableCell>
                       <TableCell align="right"><strong>P. Unit</strong></TableCell>
+                      <TableCell align="center"><strong>Dto %</strong></TableCell>
                       <TableCell align="right"><strong>Subtotal</strong></TableCell>
                     </TableRow>
                   </TableHead>
@@ -398,11 +501,16 @@ const HistorialVentasPage: React.FC = () => {
                     {ventaDetalle.items.map((item, idx) => (
                       <TableRow key={idx}>
                         <TableCell>
+                          <Typography variant="caption" color="text.secondary">{item.codigoProducto}</Typography>
+                        </TableCell>
+                        <TableCell>
                           <Typography variant="body2">{item.nombreProducto}</Typography>
-                          <Typography variant="caption">{item.codigoProducto}</Typography>
                         </TableCell>
                         <TableCell align="center">{item.cantidad}</TableCell>
                         <TableCell align="right">{formatCurrency(item.precioUnitario)}</TableCell>
+                        <TableCell align="center">
+                          {item.porcentajeDescuento ? `${item.porcentajeDescuento}%` : '-'}
+                        </TableCell>
                         <TableCell align="right">{formatCurrency(item.subtotal)}</TableCell>
                       </TableRow>
                     ))}
@@ -410,10 +518,21 @@ const HistorialVentasPage: React.FC = () => {
                 </Table>
               </TableContainer>
 
-              <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                <Typography><strong>Subtotal:</strong> {formatCurrency(ventaDetalle.subtotal)}</Typography>
-                <Typography><strong>IVA:</strong> {formatCurrency(ventaDetalle.iva)}</Typography>
-                <Typography variant="h6" color="primary"><strong>TOTAL:</strong> {formatCurrency(ventaDetalle.total)}</Typography>
+              <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                  <Typography variant="body2">Subtotal:</Typography>
+                  <Typography variant="body2">{formatCurrency(ventaDetalle.subtotal)}</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                  <Typography variant="body2">
+                    IVA {ventaDetalle.aplicaIVA ? '(21%)' : '(Exento)'}:
+                  </Typography>
+                  <Typography variant="body2">{formatCurrency(ventaDetalle.iva || 0)}</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 1, borderTop: '1px solid', borderColor: 'grey.300' }}>
+                  <Typography variant="h6">TOTAL:</Typography>
+                  <Typography variant="h6" color="primary">{formatCurrency(ventaDetalle.total)}</Typography>
+                </Box>
               </Box>
             </>
           )}
@@ -457,26 +576,225 @@ const HistorialVentasPage: React.FC = () => {
       </Dialog>
 
       {/* Dialog Editar Venta */}
-      <Dialog open={openEditar} onClose={() => setOpenEditar(false)} maxWidth="sm" fullWidth>
+      <Dialog open={openEditar} onClose={() => setOpenEditar(false)} maxWidth="md" fullWidth>
         <DialogTitle>Editar Venta - {ventaEditar?.numeroVenta}</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" gutterBottom>
-            Solo se pueden editar observaciones en ventas pendientes.
+            Puede modificar items, momento de cobro y observaciones en ventas pendientes.
           </Typography>
           {ventaEditar && (
-            <TextField
-              fullWidth
-              label="Observaciones"
-              multiline
-              rows={3}
-              value={ventaEditar.observaciones || ''}
-              onChange={(e) => setVentaEditar({
-                ...ventaEditar,
-                observaciones: e.target.value
-              })}
-              sx={{ mt: 2 }}
-              placeholder="Ingrese observaciones adicionales..."
-            />
+            <>
+              {/* Tabla de Items Editables */}
+              <Typography variant="subtitle2" sx={{ mt: 2, mb: 1 }}>Items de la Venta</Typography>
+              <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell><strong>Producto</strong></TableCell>
+                      <TableCell align="center" sx={{ width: 100 }}><strong>Cantidad</strong></TableCell>
+                      <TableCell align="right" sx={{ width: 120 }}><strong>P. Unitario</strong></TableCell>
+                      <TableCell align="center" sx={{ width: 100 }}><strong>Dto. %</strong></TableCell>
+                      <TableCell align="right" sx={{ width: 120 }}><strong>Subtotal</strong></TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {ventaEditar.items.map((item, index) => (
+                      <TableRow key={index}>
+                        <TableCell>
+                          <Typography variant="body2">{item.nombreProducto}</Typography>
+                          <Typography variant="caption" color="text.secondary">{item.codigoProducto}</Typography>
+                        </TableCell>
+                        <TableCell align="center">
+                          <TextField
+                            size="small"
+                            type="number"
+                            value={item.cantidad}
+                            onChange={(e) => {
+                              const nuevaCantidad = parseInt(e.target.value) || 0;
+                              if (nuevaCantidad < 0) return;
+                              const nuevosItems = [...ventaEditar.items];
+                              const descuento = (nuevaCantidad * item.precioUnitario) * ((item.porcentajeDescuento || 0) / 100);
+                              nuevosItems[index] = {
+                                ...item,
+                                cantidad: nuevaCantidad,
+                                subtotal: (nuevaCantidad * item.precioUnitario) - descuento,
+                                total: (nuevaCantidad * item.precioUnitario) - descuento,
+                                descuento
+                              };
+                              // Recalcular totales
+                              const nuevoSubtotal = nuevosItems.reduce((sum, i) => sum + i.subtotal, 0);
+                              const nuevoIVA = ventaEditar.aplicaIVA !== false ? nuevoSubtotal * 0.21 : 0;
+                              setVentaEditar({
+                                ...ventaEditar,
+                                items: nuevosItems,
+                                subtotal: nuevoSubtotal,
+                                iva: nuevoIVA,
+                                total: nuevoSubtotal + nuevoIVA
+                              });
+                            }}
+                            inputProps={{ min: 0, style: { textAlign: 'center' } }}
+                            sx={{ width: 80 }}
+                          />
+                        </TableCell>
+                        <TableCell align="right">
+                          <TextField
+                            size="small"
+                            type="number"
+                            value={item.precioUnitario}
+                            onChange={(e) => {
+                              const nuevoPrecio = parseFloat(e.target.value) || 0;
+                              if (nuevoPrecio < 0) return;
+                              const nuevosItems = [...ventaEditar.items];
+                              const descuento = (item.cantidad * nuevoPrecio) * ((item.porcentajeDescuento || 0) / 100);
+                              nuevosItems[index] = {
+                                ...item,
+                                precioUnitario: nuevoPrecio,
+                                subtotal: (item.cantidad * nuevoPrecio) - descuento,
+                                total: (item.cantidad * nuevoPrecio) - descuento,
+                                descuento
+                              };
+                              // Recalcular totales
+                              const nuevoSubtotal = nuevosItems.reduce((sum, i) => sum + i.subtotal, 0);
+                              const nuevoIVA = ventaEditar.aplicaIVA !== false ? nuevoSubtotal * 0.21 : 0;
+                              setVentaEditar({
+                                ...ventaEditar,
+                                items: nuevosItems,
+                                subtotal: nuevoSubtotal,
+                                iva: nuevoIVA,
+                                total: nuevoSubtotal + nuevoIVA
+                              });
+                            }}
+                            inputProps={{ min: 0, step: 0.01, style: { textAlign: 'right' } }}
+                            sx={{ width: 100 }}
+                          />
+                        </TableCell>
+                        <TableCell align="center">
+                          <TextField
+                            size="small"
+                            type="number"
+                            value={item.porcentajeDescuento || 0}
+                            onChange={(e) => {
+                              const nuevoPorcentaje = parseFloat(e.target.value) || 0;
+                              if (nuevoPorcentaje < 0 || nuevoPorcentaje > 100) return;
+                              const nuevosItems = [...ventaEditar.items];
+                              const descuento = (item.cantidad * item.precioUnitario) * (nuevoPorcentaje / 100);
+                              nuevosItems[index] = {
+                                ...item,
+                                porcentajeDescuento: nuevoPorcentaje,
+                                descuento,
+                                subtotal: (item.cantidad * item.precioUnitario) - descuento,
+                                total: (item.cantidad * item.precioUnitario) - descuento
+                              };
+                              // Recalcular totales
+                              const nuevoSubtotal = nuevosItems.reduce((sum, i) => sum + i.subtotal, 0);
+                              const nuevoIVA = ventaEditar.aplicaIVA !== false ? nuevoSubtotal * 0.21 : 0;
+                              setVentaEditar({
+                                ...ventaEditar,
+                                items: nuevosItems,
+                                subtotal: nuevoSubtotal,
+                                iva: nuevoIVA,
+                                total: nuevoSubtotal + nuevoIVA
+                              });
+                            }}
+                            inputProps={{ min: 0, max: 100, step: 0.5, style: { textAlign: 'center' } }}
+                            sx={{ width: 80 }}
+                            InputProps={{ endAdornment: <Typography variant="caption">%</Typography> }}
+                          />
+                        </TableCell>
+                        <TableCell align="right">
+                          <Typography variant="body2" fontWeight="bold">
+                            {formatCurrency(item.subtotal)}
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+
+              {/* Resumen de Totales */}
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+                <Box sx={{ textAlign: 'right' }}>
+                  <Typography variant="body2">
+                    Subtotal: <strong>{formatCurrency(ventaEditar.subtotal)}</strong>
+                  </Typography>
+                  <Typography variant="body2">
+                    IVA ({ventaEditar.aplicaIVA !== false ? '21%' : '0%'}): <strong>{formatCurrency(ventaEditar.iva)}</strong>
+                  </Typography>
+                  <Typography variant="h6" color="primary">
+                    Total: {formatCurrency(ventaEditar.total)}
+                  </Typography>
+                </Box>
+              </Box>
+
+              {/* Selector de Momento de Cobro */}
+              <FormControl fullWidth sx={{ mt: 2 }}>
+                <InputLabel>Momento de Cobro</InputLabel>
+                <Select
+                  value={ventaEditar.momentoCobro || 'diferido'}
+                  onChange={(e) => setVentaEditar({
+                    ...ventaEditar,
+                    momentoCobro: e.target.value as 'anticipado' | 'contra_entrega' | 'diferido'
+                  })}
+                  label="Momento de Cobro"
+                >
+                  <MenuItem value="anticipado">
+                    <Box>
+                      <Typography variant="body2">📥 Anticipado</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Cobrar ANTES de confirmar venta
+                      </Typography>
+                    </Box>
+                  </MenuItem>
+                  <MenuItem value="contra_entrega">
+                    <Box>
+                      <Typography variant="body2">🚚 Contra Entrega</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Cobrar AL MOMENTO de entregar
+                      </Typography>
+                    </Box>
+                  </MenuItem>
+                  <MenuItem value="diferido">
+                    <Box>
+                      <Typography variant="body2">💳 Diferido (A crédito)</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Cobrar DESPUÉS de confirmar
+                      </Typography>
+                    </Box>
+                  </MenuItem>
+                </Select>
+              </FormControl>
+              
+              {ventaEditar.momentoCobro === 'anticipado' && (
+                <Alert severity="info" sx={{ mt: 1 }}>
+                  Deberá registrar el cobro ANTES de confirmar la venta
+                </Alert>
+              )}
+              {ventaEditar.momentoCobro === 'contra_entrega' && (
+                <Alert severity="info" sx={{ mt: 1 }}>
+                  El cobro se registrará junto con la entrega del pedido
+                </Alert>
+              )}
+              {ventaEditar.momentoCobro === 'diferido' && (
+                <Alert severity="warning" sx={{ mt: 1 }}>
+                  Se generará deuda en cuenta corriente al confirmar
+                </Alert>
+              )}
+
+              <TextField
+                fullWidth
+                label="Observaciones"
+                multiline
+                rows={2}
+                value={ventaEditar.observaciones || ''}
+                onChange={(e) => setVentaEditar({
+                  ...ventaEditar,
+                  observaciones: e.target.value
+                })}
+                sx={{ mt: 2 }}
+                placeholder="Ingrese observaciones adicionales..."
+              />
+            </>
           )}
         </DialogContent>
         <DialogActions>
