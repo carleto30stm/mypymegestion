@@ -427,3 +427,41 @@ usa los archivos recientemente editados como referencia para entender mejor los 
 usa los archivos de barril index.ts para hacer las importaciones
 no harcoder valores si es posible en ves de eso usa enum que se pueda reutilizar
 los inputs de los formularios deben usar el formato de currency donde corresponda (ej: precios, montos). ./frontend/utils/formatters.ts tiene funciones útiles para esto.
+
+14) **Patrón creadoPor - Almacenar username (NO ObjectId)**
+  - **REGLA**: Al crear registros que necesiten auditoría de quién los creó, usar `creadoPor: req.user?.username`
+  - **Razón**: Guardar el nombre de usuario (string) es más legible en reportes y no requiere populate para mostrar
+  - **Patrón correcto en controllers**:
+    ```typescript
+    // ✅ CORRECTO - guardar username como string
+    const nuevoRegistro = new MiModelo({
+      ...req.body,
+      creadoPor: req.user?.username  // Ej: "admin", "operador1", "carlos"
+    });
+    ```
+  - **Patrón INCORRECTO**:
+    ```typescript
+    // ❌ INCORRECTO - NO guardar ObjectId
+    const nuevoRegistro = new MiModelo({
+      ...req.body,
+      creadoPor: req.user?.id  // Esto requiere populate y causa errores de casting
+    });
+    ```
+  - **En modelos Mongoose**: definir creadoPor como String, no como ObjectId
+    ```typescript
+    // ✅ CORRECTO
+    creadoPor: { type: String }
+    
+    // ❌ INCORRECTO
+    creadoPor: { type: Schema.Types.ObjectId, ref: 'User' }
+    ```
+  - **Referencia**: Ver `backend/src/controllers/comprasController.ts` como ejemplo de implementación correcta
+  - **Excepciones**: Si el modelo YA tiene `creadoPor` como ObjectId y hay datos existentes, verificar con `mongoose.Types.ObjectId.isValid()` antes de asignar:
+    ```typescript
+    // Para modelos legacy con creadoPor como ObjectId
+    const datosCrear = {
+      ...req.body,
+      ...(mongoose.Types.ObjectId.isValid(req.user?.id) && { creadoPor: req.user.id })
+    };
+    ```
+  - **Campos relacionados**: Aplicar mismo patrón a `usuarioAnulacion`, `modificadoPor`, `aprobadoPor`, etc.

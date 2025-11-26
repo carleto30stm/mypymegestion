@@ -33,7 +33,7 @@ export interface IMovimientoCuentaCorriente extends Document {
   saldo: number; // Saldo después de este movimiento
   
   // Metadatos
-  creadoPor: mongoose.Types.ObjectId; // Usuario que creó el movimiento
+  creadoPor?: string; // Username del usuario que creó el movimiento
   anulado: boolean;
   fechaAnulacion?: Date;
   motivoAnulacion?: string;
@@ -104,8 +104,8 @@ const movimientoCuentaCorrienteSchema = new mongoose.Schema<IMovimientoCuentaCor
     required: true
   },
   creadoPor: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+    type: String, // Username del usuario que creó el movimiento
+    trim: true
   },
   anulado: {
     type: Boolean,

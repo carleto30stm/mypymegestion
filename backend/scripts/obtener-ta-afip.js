@@ -119,7 +119,25 @@ ${signature}
     
     // Firmar con OpenSSL (formato CMS requerido por AFIP)
     // AFIP requiere: SHA256, nodetach, outform DER
-    const command = `openssl cms -sign -in "${traFile}" -signer "${path.resolve(certPath)}" -inkey "${path.resolve(keyPath)}" -nodetach -outform DER -out "${traSignedFile}"`;
+    // En Windows buscamos OpenSSL en ubicaciones comunes
+    let opensslCmd = 'openssl';
+    if (process.platform === 'win32') {
+      const possiblePaths = [
+        'C:\\Program Files\\OpenSSL-Win64\\bin\\openssl.exe',
+        'C:\\Program Files\\Git\\usr\\bin\\openssl.exe',
+        'C:\\Program Files\\Git\\mingw64\\bin\\openssl.exe',
+        'openssl',
+        'OpenSSL'
+      ];
+      for (const p of possiblePaths) {
+        try {
+          execSync(`"${p}" version`, { stdio: 'pipe' });
+          opensslCmd = `"${p}"`;
+          break;
+        } catch { /* continuar */ }
+      }
+    }
+    const command = `${opensslCmd} cms -sign -in "${traFile}" -signer "${path.resolve(certPath)}" -inkey "${path.resolve(keyPath)}" -nodetach -outform DER -out "${traSignedFile}"`;
     
     try {
       execSync(command, { stdio: 'pipe' });
@@ -201,8 +219,10 @@ async function obtenerTA(traSignedBase64, production = false) {
       throw new Error(`SOAP Fault: ${fault.faultstring || fault.faultString}`);
     }
     
-    // Extraer loginCmsReturn
-    const loginReturn = soapBody['loginCmsReturn'] || soapBody['ns1:loginCmsReturn'];
+    // Extraer loginCmsReturn - puede estar en diferentes rutas según la respuesta
+    const loginReturn = soapBody['loginCmsReturn'] || 
+                        soapBody['ns1:loginCmsReturn'] ||
+                        soapBody['loginCmsResponse']?.['loginCmsReturn'];
     
     if (!loginReturn) {
       console.error('❌ No se encontró loginCmsReturn en respuesta');

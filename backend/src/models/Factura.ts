@@ -62,6 +62,35 @@ export interface IDatosAFIP {
   observacionesAFIP?: string[];
 }
 
+// Interface para referencia a Nota de Crédito emitida
+export interface INotaCreditoRef {
+  facturaId: mongoose.Types.ObjectId;    // ID de la NC (guardada como Factura)
+  cae: string;
+  numeroComprobante: string;
+  importe: number;
+  tipo: 'total' | 'parcial';
+  fecha: Date;
+  motivo: string;
+}
+
+// Interface para referencia a factura original (solo en NC/ND)
+export interface IFacturaOriginalRef {
+  facturaId: mongoose.Types.ObjectId;
+  numeroComprobante: string;
+  cae: string;
+  importe: number;
+}
+
+// Interface para historial de estados (auditoría)
+export interface IHistorialEstado {
+  estado: EstadoFactura;
+  fecha: Date;
+  usuario: string;
+  motivo?: string;
+  ip?: string;
+  datosAdicionales?: Record<string, any>;
+}
+
 // Interface para el documento principal
 export interface IFactura extends Document {
   // Relaciones (ahora múltiples ventas)
@@ -72,6 +101,19 @@ export interface IFactura extends Document {
   // Tipo y estado
   tipoComprobante: TipoComprobante;
   estado: EstadoFactura;
+  
+  // === NUEVOS CAMPOS PARA NC ===
+  // Notas de crédito emitidas contra esta factura
+  notasCreditoEmitidas: INotaCreditoRef[];
+  
+  // Referencia a factura original (solo si este documento ES una NC o ND)
+  facturaOriginal?: IFacturaOriginalRef;
+  
+  // Totales de NC para control
+  totalNotasCreditoEmitidas: number;  // Suma de importes de NC emitidas
+  
+  // Historial de estados (auditoría)
+  historialEstados: IHistorialEstado[];
   
   // Datos del emisor (tu empresa)
   emisorCUIT: string;
@@ -210,6 +252,85 @@ const ItemFacturaSchema = new Schema({
   }
 });
 
+// Schema para referencias a NC emitidas
+const NotaCreditoRefSchema = new Schema({
+  facturaId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Factura',
+    required: true
+  },
+  cae: {
+    type: String,
+    required: true
+  },
+  numeroComprobante: {
+    type: String,
+    required: true
+  },
+  importe: {
+    type: Number,
+    required: true,
+    min: 0
+  },
+  tipo: {
+    type: String,
+    enum: ['total', 'parcial'],
+    required: true
+  },
+  fecha: {
+    type: Date,
+    required: true,
+    default: Date.now
+  },
+  motivo: {
+    type: String,
+    required: true
+  }
+}, { _id: false });
+
+// Schema para referencia a factura original (en NC/ND)
+const FacturaOriginalRefSchema = new Schema({
+  facturaId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Factura',
+    required: true
+  },
+  numeroComprobante: {
+    type: String,
+    required: true
+  },
+  cae: {
+    type: String,
+    required: true
+  },
+  importe: {
+    type: Number,
+    required: true,
+    min: 0
+  }
+}, { _id: false });
+
+// Schema para historial de estados (auditoría)
+const HistorialEstadoSchema = new Schema({
+  estado: {
+    type: String,
+    required: true,
+    enum: ['borrador', 'autorizada', 'rechazada', 'anulada', 'vencida']
+  },
+  fecha: {
+    type: Date,
+    required: true,
+    default: Date.now
+  },
+  usuario: {
+    type: String,
+    required: true
+  },
+  motivo: String,
+  ip: String,
+  datosAdicionales: Schema.Types.Mixed
+}, { _id: false });
+
 const FacturaSchema = new Schema({
   ventaId: {
     type: Schema.Types.ObjectId,
@@ -235,6 +356,32 @@ const FacturaSchema = new Schema({
     required: true,
     enum: ['borrador', 'autorizada', 'rechazada', 'anulada', 'vencida'],
     default: 'borrador'
+  },
+  
+  // === CAMPOS PARA GESTIÓN DE NC ===
+  // Notas de crédito emitidas contra esta factura
+  notasCreditoEmitidas: {
+    type: [NotaCreditoRefSchema],
+    default: []
+  },
+  
+  // Referencia a factura original (solo si ES una NC o ND)
+  facturaOriginal: {
+    type: FacturaOriginalRefSchema,
+    default: undefined
+  },
+  
+  // Total de NC emitidas (calculado)
+  totalNotasCreditoEmitidas: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  
+  // Historial de estados para auditoría
+  historialEstados: {
+    type: [HistorialEstadoSchema],
+    default: []
   },
   
   // Emisor
@@ -452,6 +599,8 @@ FacturaSchema.index({ estado: 1 });
 FacturaSchema.index({ fecha: -1 });
 FacturaSchema.index({ ventaId: 1 }); // DEPRECATED
 FacturaSchema.index({ ventasRelacionadas: 1 }); // Búsqueda por ventas relacionadas
+FacturaSchema.index({ 'facturaOriginal.facturaId': 1 }); // NC que referencian a una factura
+FacturaSchema.index({ tipoComprobante: 1, estado: 1 }); // Filtrar NC/ND por estado
 
 // Middleware para calcular totales
 FacturaSchema.pre('save', function(next) {
@@ -506,6 +655,67 @@ FacturaSchema.methods.generarNumeroComprobante = function(): string {
   const ptoVenta = String(this.datosAFIP.puntoVenta).padStart(5, '0');
   const numero = String(this.datosAFIP.numeroSecuencial).padStart(8, '0');
   return `${ptoVenta}-${numero}`;
+};
+
+// Método para calcular saldo pendiente de anulación
+FacturaSchema.methods.getSaldoPendienteAnulacion = function(): number {
+  return this.importeTotal - (this.totalNotasCreditoEmitidas || 0);
+};
+
+// Método para verificar si puede emitir NC
+FacturaSchema.methods.puedeEmitirNC = function(importe?: number): { puede: boolean; motivo?: string } {
+  if (this.estado !== 'autorizada') {
+    return { puede: false, motivo: 'Solo facturas autorizadas pueden generar NC' };
+  }
+  
+  const saldoPendiente = this.getSaldoPendienteAnulacion();
+  
+  if (saldoPendiente <= 0) {
+    return { puede: false, motivo: 'Ya se emitieron NC por el total de la factura' };
+  }
+  
+  if (importe && importe > saldoPendiente) {
+    return { 
+      puede: false, 
+      motivo: `El importe ($${importe}) excede el saldo pendiente ($${saldoPendiente})` 
+    };
+  }
+  
+  return { puede: true };
+};
+
+// Método para agregar NC a la factura
+FacturaSchema.methods.agregarNotaCredito = function(ncData: {
+  facturaId: mongoose.Types.ObjectId;
+  cae: string;
+  numeroComprobante: string;
+  importe: number;
+  tipo: 'total' | 'parcial';
+  motivo: string;
+}) {
+  this.notasCreditoEmitidas.push({
+    ...ncData,
+    fecha: new Date()
+  });
+  this.totalNotasCreditoEmitidas = (this.totalNotasCreditoEmitidas || 0) + ncData.importe;
+};
+
+// Método para registrar cambio de estado en historial
+FacturaSchema.methods.registrarCambioEstado = function(
+  nuevoEstado: EstadoFactura,
+  usuario: string,
+  motivo?: string,
+  ip?: string,
+  datosAdicionales?: Record<string, any>
+) {
+  this.historialEstados.push({
+    estado: nuevoEstado,
+    fecha: new Date(),
+    usuario,
+    motivo,
+    ip,
+    datosAdicionales
+  });
 };
 
 const Factura = mongoose.model<IFactura>('Factura', FacturaSchema);

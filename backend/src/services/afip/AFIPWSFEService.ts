@@ -149,6 +149,8 @@ export interface ComprobanteDatos {
     tipo: number;
     puntoVenta: number;
     numero: number;
+    cuit?: string;      // CUIT del emisor (requerido por AFIP para NC)
+    fecha?: Date;       // Fecha del comprobante original
   }>;
 }
 
@@ -494,7 +496,7 @@ export class AFIPWSFEService {
       xml += '</ar:Tributos>';
     }
 
-    // Comprobantes asociados
+    // Comprobantes asociados (requerido para NC/ND)
     if (datos.comprobantesAsociados && datos.comprobantesAsociados.length > 0) {
       xml += '<ar:CbtesAsoc>';
       datos.comprobantesAsociados.forEach(cbte => {
@@ -502,9 +504,22 @@ export class AFIPWSFEService {
           <ar:CbteAsoc>
             <ar:Tipo>${cbte.tipo}</ar:Tipo>
             <ar:PtoVta>${cbte.puntoVenta}</ar:PtoVta>
-            <ar:Nro>${cbte.numero}</ar:Nro>
-          </ar:CbteAsoc>
-        `;
+            <ar:Nro>${cbte.numero}</ar:Nro>`;
+        
+        // CUIT del emisor (requerido por AFIP)
+        if (cbte.cuit) {
+          xml += `
+            <ar:Cuit>${cbte.cuit.replace(/[^0-9]/g, '')}</ar:Cuit>`;
+        }
+        
+        // Fecha del comprobante original (requerido por AFIP)
+        if (cbte.fecha) {
+          xml += `
+            <ar:CbteFch>${formatearFechaAFIP(cbte.fecha)}</ar:CbteFch>`;
+        }
+        
+        xml += `
+          </ar:CbteAsoc>`;
       });
       xml += '</ar:CbtesAsoc>';
     }
@@ -634,6 +649,118 @@ export class AFIPWSFEService {
    */
   private redondear(valor: number): number {
     return Math.round(valor * 100) / 100;
+  }
+
+  /**
+   * Emite una Nota de Crédito para anular/rectificar una factura
+   * 
+   * @param datosNotaCredito - Datos de la NC (mismo formato que ComprobanteDatos)
+   * @returns Resultado con CAE de la Nota de Crédito
+   */
+  async emitirNotaCredito(datosNotaCredito: ComprobanteDatos): Promise<ResultadoCAE> {
+    console.log('\n📋 ========== EMISIÓN NOTA DE CRÉDITO ==========');
+    console.log('📋 Tipo comprobante:', datosNotaCredito.tipoComprobante);
+    console.log('📋 Comprobantes asociados:', datosNotaCredito.comprobantesAsociados);
+
+    // Validar que tenga comprobantes asociados
+    if (!datosNotaCredito.comprobantesAsociados || datosNotaCredito.comprobantesAsociados.length === 0) {
+      throw new Error('La Nota de Crédito debe tener al menos un comprobante asociado');
+    }
+
+    // Validar que el tipo de comprobante sea NC
+    const esNotaCredito = [
+      TIPO_COMPROBANTE.NOTA_CREDITO_A,
+      TIPO_COMPROBANTE.NOTA_CREDITO_B,
+      TIPO_COMPROBANTE.NOTA_CREDITO_C
+    ].includes(datosNotaCredito.tipoComprobante);
+
+    if (!esNotaCredito) {
+      throw new Error('El tipo de comprobante debe ser Nota de Crédito (3, 8 o 13)');
+    }
+
+    try {
+      const ta = await this.wsaaService.obtenerTicketAcceso('wsfe');
+
+      // Obtener próximo número
+      const ultimoNumero = await this.obtenerUltimoComprobante(
+        datosNotaCredito.puntoVenta,
+        datosNotaCredito.tipoComprobante
+      );
+      const proximoNumero = ultimoNumero + 1;
+      console.log('📊 Próximo número de NC:', proximoNumero);
+
+      // Construir request de comprobante
+      const feDetRequest = this.construirFeDetRequest(datosNotaCredito, proximoNumero);
+      console.log('📝 FeDetRequest construido para NC');
+
+      const soapRequest = this.construirSOAP('FECAESolicitar', `
+      <ar:FeCAEReq>
+        <ar:FeCabReq>
+          <ar:CantReg>1</ar:CantReg>
+          <ar:PtoVta>${datosNotaCredito.puntoVenta}</ar:PtoVta>
+          <ar:CbteTipo>${datosNotaCredito.tipoComprobante}</ar:CbteTipo>
+        </ar:FeCabReq>
+        <ar:FeDetReq>
+          ${feDetRequest}
+        </ar:FeDetReq>
+      </ar:FeCAEReq>
+    `, ta);
+
+      console.log('\n🌐 Enviando solicitud de NC a AFIP...');
+
+      const response = await this.enviarSOAP(soapRequest, 'FECAESolicitar');
+      
+      console.log('✅ Respuesta recibida de AFIP');
+      console.log('\n🌐 ========== SOAP REQUEST ==========');
+      console.log(soapRequest);
+      console.log('========== FIN SOAP REQUEST ==========\n');
+      
+      const result = await this.parsearRespuesta(response.data, 'FECAESolicitarResponse');
+      const resultadoFinal = this.procesarResultadoCAE(result, proximoNumero);
+      
+      console.log('🎯 Resultado NC:', resultadoFinal.resultado === 'A' ? '✅ APROBADA' : '❌ RECHAZADA');
+      console.log('========== FIN EMISIÓN NOTA DE CRÉDITO ==========\n');
+      console.log('\n✅ ========== SOAP RESPONSE ==========');
+      console.log('Status:', response.status);
+      console.log('Data:', response.data);
+      console.log('========== FIN SOAP RESPONSE ==========\n');
+      return resultadoFinal;
+    } catch (error: any) {
+      console.error('\n❌ ========== ERROR EN EMISIÓN NC ==========');
+      console.error('❌ Error:', error.message);
+      console.error('========== FIN ERROR ==========\n');
+      throw error;
+    }
+  }
+
+  /**
+   * Emite una Nota de Débito
+   * Similar a Nota de Crédito pero para agregar importes
+   * 
+   * @param datosNotaDebito - Datos de la ND (mismo formato que ComprobanteDatos)
+   * @returns Resultado con CAE de la Nota de Débito
+   */
+  async emitirNotaDebito(datosNotaDebito: ComprobanteDatos): Promise<ResultadoCAE> {
+    console.log('\n📋 ========== EMISIÓN NOTA DE DÉBITO ==========');
+
+    // Validar que tenga comprobantes asociados
+    if (!datosNotaDebito.comprobantesAsociados || datosNotaDebito.comprobantesAsociados.length === 0) {
+      throw new Error('La Nota de Débito debe tener al menos un comprobante asociado');
+    }
+
+    // Validar que el tipo de comprobante sea ND
+    const esNotaDebito = [
+      TIPO_COMPROBANTE.NOTA_DEBITO_A,
+      TIPO_COMPROBANTE.NOTA_DEBITO_B,
+      TIPO_COMPROBANTE.NOTA_DEBITO_C
+    ].includes(datosNotaDebito.tipoComprobante);
+
+    if (!esNotaDebito) {
+      throw new Error('El tipo de comprobante debe ser Nota de Débito (2, 7 o 12)');
+    }
+
+    // Reutilizar la lógica de solicitud CAE (es el mismo proceso)
+    return await this.solicitarCAE(datosNotaDebito);
   }
 }
 

@@ -28,13 +28,21 @@ import {
   Print as PrintIcon,
   Close as CloseIcon,
   Refresh as RefreshIcon,
+  Cancel as CancelIcon,
+  Receipt as ReceiptIcon,
 } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
 import type { AppDispatch, RootState } from '../redux/store';
 import { fetchFacturas, clearError } from '../redux/slices/facturasSlice';
 import type { Factura, TipoComprobante, EstadoFactura } from '../redux/slices/facturasSlice';
 import { fetchClientes } from '../redux/slices/clientesSlice';
-import { FacturaDetailDialog, AutorizarFacturaDialog, FacturaPDF } from '../components';
+import { 
+  FacturaDetailDialog, 
+  AutorizarFacturaDialog, 
+  FacturaPDF,
+  AnularFacturaDialog,
+  EmitirNotaCreditoDialog 
+} from '../components';
 import CrearFacturaDialog from '../components/CrearFacturaDialog';
 
 const tiposComprobante: { value: TipoComprobante; label: string }[] = [
@@ -79,6 +87,8 @@ const FacturasPage: React.FC = () => {
   const [showCrearFacturaDialog, setShowCrearFacturaDialog] = useState(false);
   const [showPDFDialog, setShowPDFDialog] = useState(false);
   const [facturaPDF, setFacturaPDF] = useState<Factura | null>(null);
+  const [showAnularDialog, setShowAnularDialog] = useState(false);
+  const [showEmitirNCDialog, setShowEmitirNCDialog] = useState(false);
 
   // Cargar facturas al montar
   useEffect(() => {
@@ -126,6 +136,21 @@ const FacturasPage: React.FC = () => {
   const handlePrint = (factura: Factura) => {
     setFacturaPDF(factura);
     setShowPDFDialog(true);
+  };
+
+  const handleAnular = (factura: Factura) => {
+    setSelectedFactura(factura);
+    setShowAnularDialog(true);
+  };
+
+  const handleEmitirNC = (factura: Factura) => {
+    setSelectedFactura(factura);
+    setShowEmitirNCDialog(true);
+  };
+
+  // Verificar si es una factura (no NC/ND)
+  const esFactura = (tipo: TipoComprobante): boolean => {
+    return tipo.startsWith('FACTURA_');
   };
 
   const getEstadoChip = (estado: EstadoFactura) => {
@@ -215,12 +240,14 @@ const FacturasPage: React.FC = () => {
     {
       field: 'acciones',
       headerName: 'Acciones',
-      width: 200,
+      width: 250,
       sortable: false,
       renderCell: (params: GridRenderCellParams) => {
         const factura = params.row as Factura;
+        const puedeEmitirNC = factura.estado === 'autorizada' && esFactura(factura.tipoComprobante);
+        
         return (
-          <Box>
+          <Box sx={{ display: 'flex', gap: 0.5 }}>
             <Tooltip title="Ver detalle">
               <IconButton
                 size="small"
@@ -253,6 +280,30 @@ const FacturasPage: React.FC = () => {
                   <PrintIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
+            )}
+
+            {puedeEmitirNC && (
+              <>
+                <Tooltip title="Anular factura (emite NC total)">
+                  <IconButton
+                    size="small"
+                    onClick={() => handleAnular(factura)}
+                    color="error"
+                  >
+                    <CancelIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+
+                <Tooltip title="Emitir Nota de Crédito">
+                  <IconButton
+                    size="small"
+                    onClick={() => handleEmitirNC(factura)}
+                    color="warning"
+                  >
+                    <ReceiptIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </>
             )}
           </Box>
         );
@@ -460,6 +511,40 @@ const FacturasPage: React.FC = () => {
             setFacturaPDF(null);
           }}
           factura={facturaPDF}
+        />
+      )}
+
+      {/* Dialog de Anulación */}
+      {selectedFactura && (
+        <AnularFacturaDialog
+          open={showAnularDialog}
+          factura={selectedFactura}
+          onClose={() => {
+            setShowAnularDialog(false);
+            setSelectedFactura(null);
+          }}
+          onSuccess={() => {
+            setShowAnularDialog(false);
+            setSelectedFactura(null);
+            handleSearch();
+          }}
+        />
+      )}
+
+      {/* Dialog de Emisión de Nota de Crédito */}
+      {selectedFactura && (
+        <EmitirNotaCreditoDialog
+          open={showEmitirNCDialog}
+          factura={selectedFactura}
+          onClose={() => {
+            setShowEmitirNCDialog(false);
+            setSelectedFactura(null);
+          }}
+          onSuccess={() => {
+            setShowEmitirNCDialog(false);
+            setSelectedFactura(null);
+            handleSearch();
+          }}
         />
       )}
     </Box>

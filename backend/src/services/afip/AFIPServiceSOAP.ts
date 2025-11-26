@@ -74,6 +74,8 @@ export interface DatosFactura {
     tipo: string;
     puntoVenta: number;
     numero: number;
+    cuit?: string;    // CUIT del emisor (requerido por AFIP para NC)
+    fecha?: Date;     // Fecha del comprobante original
   }>;
 }
 
@@ -167,7 +169,7 @@ export class AFIPServiceSOAP {
   }
 
   /**
-   * Consulta el estado del servidor AFIP
+   * Obtiene el estado del servidor AFIP
    */
   async consultarEstadoServidor(): Promise<{
     appServer: string;
@@ -175,6 +177,159 @@ export class AFIPServiceSOAP {
     authServer: string;
   }> {
     return await this.wsfeService.consultarEstadoServidor();
+  }
+
+  /**
+   * Emite una Nota de Crédito para anular/rectificar una factura
+   * 
+   * @param facturaOriginal - Datos de la factura a anular
+   * @param motivo - Motivo de la anulación (opcional, para logs)
+   * @returns Resultado con CAE de la Nota de Crédito
+   */
+  async emitirNotaCredito(
+    facturaOriginal: DatosFactura,
+    motivo?: string
+  ): Promise<RespuestaCAE> {
+    console.log('\n📋 ========== EMITIR NOTA DE CRÉDITO ==========');
+    if (motivo) {
+      console.log('📋 Motivo:', motivo);
+    }
+
+    // Determinar tipo de NC según tipo de comprobante recibido
+    // Si ya es NC, usarlo directamente. Si es factura, derivar el tipo de NC.
+    let tipoNC: string;
+    const tipoRecibido = facturaOriginal.tipoComprobante.toUpperCase();
+    
+    // Si ya es una NC, usar directamente
+    if (tipoRecibido.includes('NOTA_CREDITO') || tipoRecibido.includes('_NC')) {
+      tipoNC = tipoRecibido.includes('_A') || tipoRecibido === 'NOTA_CREDITO_A' ? 'NOTA_CREDITO_A' :
+               tipoRecibido.includes('_B') || tipoRecibido === 'NOTA_CREDITO_B' ? 'NOTA_CREDITO_B' :
+               tipoRecibido.includes('_C') || tipoRecibido === 'NOTA_CREDITO_C' ? 'NOTA_CREDITO_C' :
+               'NOTA_CREDITO_B';
+      console.log('📋 Tipo NC recibido directamente:', tipoNC);
+    } else {
+      // Derivar NC desde tipo de factura
+      switch (tipoRecibido) {
+        case 'A':
+        case 'FACTURA_A':
+          tipoNC = 'NOTA_CREDITO_A';
+          break;
+        case 'B':
+        case 'FACTURA_B':
+          tipoNC = 'NOTA_CREDITO_B';
+          break;
+        case 'C':
+        case 'FACTURA_C':
+          tipoNC = 'NOTA_CREDITO_C';
+          break;
+        default:
+          throw new Error(`Tipo de comprobante no soportado para NC: ${facturaOriginal.tipoComprobante}`);
+      }
+      console.log('📋 Tipo NC derivado de factura:', tipoNC);
+    }
+
+    console.log('📋 Tipo NC a emitir:', tipoNC);
+
+    // Crear datos de la NC (mismos importes que la factura original, para anulación total)
+    const datosNC: DatosFactura = {
+      ...facturaOriginal,
+      tipoComprobante: tipoNC,
+      fecha: new Date(), // Fecha actual para la NC
+      // Agregar comprobante asociado (la factura original)
+      comprobantesAsociados: facturaOriginal.comprobantesAsociados || []
+    };
+
+    console.log('📋 Comprobantes asociados en NC:', datosNC.comprobantesAsociados);
+
+    // Validar que tenga comprobante asociado
+    if (!datosNC.comprobantesAsociados || datosNC.comprobantesAsociados.length === 0) {
+      throw new Error('La factura original debe tener número de comprobante para emitir NC');
+    }
+
+    // Convertir a formato SOAP y emitir
+    const comprobanteSOAP = this.convertirFacturaAComprobante(datosNC);
+    const resultado = await this.wsfeService.emitirNotaCredito(comprobanteSOAP);
+
+    console.log('========== FIN EMITIR NOTA DE CRÉDITO ==========\n');
+
+    return {
+      cae: resultado.cae,
+      fechaVencimientoCAE: resultado.fechaVencimientoCAE,
+      numeroComprobante: resultado.numeroComprobante,
+      aprobado: resultado.resultado === 'A',
+      ...(resultado.observaciones && { observaciones: resultado.observaciones }),
+      ...(resultado.errores && { errores: resultado.errores })
+    };
+  }
+
+  /**
+   * Emite una Nota de Débito
+   * 
+   * @param facturaOriginal - Datos de la factura de referencia
+   * @param nuevoImporte - Nuevo importe a agregar
+   * @param motivo - Motivo del débito
+   * @returns Resultado con CAE de la Nota de Débito
+   */
+  async emitirNotaDebito(
+    facturaOriginal: DatosFactura,
+    nuevoImporte: number,
+    motivo?: string
+  ): Promise<RespuestaCAE> {
+    console.log('\n📋 ========== EMITIR NOTA DE DÉBITO ==========');
+    if (motivo) {
+      console.log('📋 Motivo:', motivo);
+    }
+
+    // Determinar tipo de ND según tipo de factura original
+    let tipoND: string;
+    switch (facturaOriginal.tipoComprobante) {
+      case 'A':
+      case 'FACTURA_A':
+        tipoND = 'NOTA_DEBITO_A';
+        break;
+      case 'B':
+      case 'FACTURA_B':
+        tipoND = 'NOTA_DEBITO_B';
+        break;
+      case 'C':
+      case 'FACTURA_C':
+        tipoND = 'NOTA_DEBITO_C';
+        break;
+      default:
+        throw new Error(`Tipo de comprobante no soportado para ND: ${facturaOriginal.tipoComprobante}`);
+    }
+
+    // Crear datos de la ND
+    const datosND: DatosFactura = {
+      ...facturaOriginal,
+      tipoComprobante: tipoND,
+      fecha: new Date(),
+      importes: {
+        ...facturaOriginal.importes,
+        total: nuevoImporte
+      },
+      comprobantesAsociados: facturaOriginal.comprobantesAsociados || []
+    };
+
+    // Validar que tenga comprobante asociado
+    if (!datosND.comprobantesAsociados || datosND.comprobantesAsociados.length === 0) {
+      throw new Error('La factura original debe tener número de comprobante para emitir ND');
+    }
+
+    // Convertir a formato SOAP y emitir
+    const comprobanteSOAP = this.convertirFacturaAComprobante(datosND);
+    const resultado = await this.wsfeService.emitirNotaDebito(comprobanteSOAP);
+
+    console.log('========== FIN EMITIR NOTA DE DÉBITO ==========\n');
+
+    return {
+      cae: resultado.cae,
+      fechaVencimientoCAE: resultado.fechaVencimientoCAE,
+      numeroComprobante: resultado.numeroComprobante,
+      aprobado: resultado.resultado === 'A',
+      ...(resultado.observaciones && { observaciones: resultado.observaciones }),
+      ...(resultado.errores && { errores: resultado.errores })
+    };
   }
 
   /**
@@ -465,7 +620,9 @@ export class AFIPServiceSOAP {
         comprobantesAsociados: factura.comprobantesAsociados.map(c => ({
           tipo: AFIPServiceSOAP.convertirTipoComprobante(c.tipo),
           puntoVenta: c.puntoVenta,
-          numero: c.numero
+          numero: c.numero,
+          ...(c.cuit && { cuit: c.cuit }),
+          ...(c.fecha && { fecha: c.fecha })
         }))
       })
     };
@@ -488,16 +645,41 @@ export class AFIPServiceSOAP {
    */
   static convertirTipoComprobante(tipo: string): number {
     switch (tipo.toUpperCase()) {
-      case 'A': return TIPO_COMPROBANTE.FACTURA_A;
-      case 'B': return TIPO_COMPROBANTE.FACTURA_B;
-      case 'C': return TIPO_COMPROBANTE.FACTURA_C;
-      case 'A_ND': return TIPO_COMPROBANTE.NOTA_DEBITO_A;
-      case 'B_ND': return TIPO_COMPROBANTE.NOTA_DEBITO_B;
-      case 'C_ND': return TIPO_COMPROBANTE.NOTA_DEBITO_C;
-      case 'A_NC': return TIPO_COMPROBANTE.NOTA_CREDITO_A;
-      case 'B_NC': return TIPO_COMPROBANTE.NOTA_CREDITO_B;
-      case 'C_NC': return TIPO_COMPROBANTE.NOTA_CREDITO_C;
-      default: throw new Error(`Tipo de comprobante no reconocido: ${tipo}`);
+      // Facturas
+      case 'A': 
+      case 'FACTURA_A':
+        return TIPO_COMPROBANTE.FACTURA_A;
+      case 'B': 
+      case 'FACTURA_B':
+        return TIPO_COMPROBANTE.FACTURA_B;
+      case 'C': 
+      case 'FACTURA_C':
+        return TIPO_COMPROBANTE.FACTURA_C;
+      
+      // Notas de Débito
+      case 'A_ND':
+      case 'NOTA_DEBITO_A':
+        return TIPO_COMPROBANTE.NOTA_DEBITO_A;
+      case 'B_ND':
+      case 'NOTA_DEBITO_B':
+        return TIPO_COMPROBANTE.NOTA_DEBITO_B;
+      case 'C_ND':
+      case 'NOTA_DEBITO_C':
+        return TIPO_COMPROBANTE.NOTA_DEBITO_C;
+      
+      // Notas de Crédito
+      case 'A_NC':
+      case 'NOTA_CREDITO_A':
+        return TIPO_COMPROBANTE.NOTA_CREDITO_A;
+      case 'B_NC':
+      case 'NOTA_CREDITO_B':
+        return TIPO_COMPROBANTE.NOTA_CREDITO_B;
+      case 'C_NC':
+      case 'NOTA_CREDITO_C':
+        return TIPO_COMPROBANTE.NOTA_CREDITO_C;
+      
+      default: 
+        throw new Error(`Tipo de comprobante no reconocido: ${tipo}`);
     }
   }
 
@@ -505,7 +687,22 @@ export class AFIPServiceSOAP {
    * Convierte tipo de documento de string a código AFIP
    */
   static convertirTipoDocumento(tipo: string): number {
-    switch (tipo.toUpperCase()) {
+    const tipoUpper = tipo.toUpperCase().trim();
+    
+    // Si ya es un código numérico, devolverlo directamente
+    if (/^\d+$/.test(tipoUpper)) {
+      const codigo = parseInt(tipoUpper, 10);
+      // Validar que sea un código válido de AFIP
+      const codigosValidos = [80, 86, 87, 89, 90, 91, 92, 93, 94, 95, 96, 99, 30];
+      if (codigosValidos.includes(codigo)) {
+        return codigo;
+      }
+      console.warn(`⚠️ Código de documento ${codigo} no reconocido, usando DNI (96)`);
+      return TIPO_DOCUMENTO.DNI;
+    }
+    
+    // Si es un nombre, convertirlo
+    switch (tipoUpper) {
       case 'CUIT': return TIPO_DOCUMENTO.CUIT;
       case 'CUIL': return TIPO_DOCUMENTO.CUIL;
       case 'DNI': return TIPO_DOCUMENTO.DNI;
@@ -514,7 +711,9 @@ export class AFIPServiceSOAP {
       case 'LC': return TIPO_DOCUMENTO.LC;
       case 'PASAPORTE': return TIPO_DOCUMENTO.PASAPORTE;
       case 'CI': return TIPO_DOCUMENTO.CI_EXTRANJERA;
-      default: return TIPO_DOCUMENTO.DNI;
+      default: 
+        console.warn(`⚠️ Tipo de documento "${tipo}" no reconocido, usando DNI (96)`);
+        return TIPO_DOCUMENTO.DNI;
     }
   }
 
