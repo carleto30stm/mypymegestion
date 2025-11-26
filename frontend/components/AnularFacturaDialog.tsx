@@ -295,6 +295,16 @@ const AnularFacturaDialog: React.FC<AnularFacturaDialogProps> = ({
                         {notaCreditoEmitida.cae}
                       </Typography>
                     </Box>
+                    {notaCreditoEmitida.fechaVencimientoCAE && (
+                      <Box sx={{ gridColumn: '1 / -1' }}>
+                        <Typography variant="caption" color="text.secondary">
+                          Vencimiento CAE
+                        </Typography>
+                        <Typography variant="body2" fontWeight="500">
+                          {new Date(notaCreditoEmitida.fechaVencimientoCAE).toLocaleDateString('es-AR')}
+                        </Typography>
+                      </Box>
+                    )}
                   </Box>
                 </Paper>
               )}

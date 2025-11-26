@@ -260,6 +260,17 @@ const EmitirNotaCreditoDialog: React.FC<EmitirNotaCreditoDialogProps> = ({
               </Box>
               <Box>
                 <Typography variant="caption" color="text.secondary">
+                  Vto. CAE
+                </Typography>
+                <Typography variant="body2">
+                  {factura.datosAFIP?.fechaVencimientoCAE 
+                    ? new Date(factura.datosAFIP.fechaVencimientoCAE).toLocaleDateString('es-AR')
+                    : '-'
+                  }
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="caption" color="text.secondary">
                   IVA
                 </Typography>
                 <Typography variant="body2">
@@ -312,7 +323,7 @@ const EmitirNotaCreditoDialog: React.FC<EmitirNotaCreditoDialogProps> = ({
                           {formatCurrency(notaCreditoEmitida.importe || getImporteNC())}
                         </Typography>
                       </Box>
-                      <Box sx={{ gridColumn: '1 / -1' }}>
+                      <Box>
                         <Typography variant="caption" color="text.secondary">
                           CAE Nota de Crédito
                         </Typography>
@@ -320,6 +331,16 @@ const EmitirNotaCreditoDialog: React.FC<EmitirNotaCreditoDialogProps> = ({
                           {notaCreditoEmitida.cae}
                         </Typography>
                       </Box>
+                      {notaCreditoEmitida.fechaVencimientoCAE && (
+                        <Box>
+                          <Typography variant="caption" color="text.secondary">
+                            Vencimiento CAE
+                          </Typography>
+                          <Typography variant="body2" fontWeight="500">
+                            {new Date(notaCreditoEmitida.fechaVencimientoCAE).toLocaleDateString('es-AR')}
+                          </Typography>
+                        </Box>
+                      )}
                     </Box>
                   </Box>
                 )}

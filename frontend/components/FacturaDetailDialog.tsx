@@ -48,8 +48,8 @@ const FacturaDetailDialog: React.FC<FacturaDetailDialogProps> = ({
   const cliente = clientes.find((c) => c._id === factura.clienteId._id);
 
   const handleCopyCAE = () => {
-    if (factura.datosAFIP?.CAE) {
-      navigator.clipboard.writeText(factura.datosAFIP.CAE);
+    if (factura.datosAFIP?.cae) {
+      navigator.clipboard.writeText(factura.datosAFIP.cae);
       alert('CAE copiado al portapapeles');
     }
   };
@@ -264,7 +264,7 @@ const FacturaDetailDialog: React.FC<FacturaDetailDialogProps> = ({
                     CAE:
                   </Typography>
                   <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                    {factura.datosAFIP.CAE}
+                    {factura.datosAFIP.cae}
                   </Typography>
                   <IconButton size="small" onClick={handleCopyCAE}>
                     <ContentCopyIcon fontSize="small" />
@@ -277,7 +277,7 @@ const FacturaDetailDialog: React.FC<FacturaDetailDialogProps> = ({
                   Fecha Vto. CAE:
                 </Typography>
                 <Typography variant="body1">
-                  {factura.datosAFIP.CAEVencimiento ? new Date(factura.datosAFIP.CAEVencimiento).toLocaleDateString('es-AR') : 'N/A'}
+                  {factura.datosAFIP.fechaVencimientoCAE ? new Date(factura.datosAFIP.fechaVencimientoCAE).toLocaleDateString('es-AR') : 'N/A'}
                 </Typography>
               </Grid>
 

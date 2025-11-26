@@ -43,6 +43,7 @@ export interface ResultadoNC {
   success: boolean;
   notaCredito?: IFactura;
   cae?: string;
+  fechaVencimientoCAE?: Date | string;
   numeroComprobante?: string;
   error?: string;
   erroresAFIP?: string[];
@@ -188,6 +189,7 @@ export class NotaCreditoService {
         success: true,
         notaCredito,
         cae: resultadoAFIP.cae,
+        fechaVencimientoCAE: resultadoAFIP.fechaVencimientoCAE,
         numeroComprobante: String(resultadoAFIP.numeroComprobante)
       };
       

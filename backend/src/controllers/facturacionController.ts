@@ -1095,6 +1095,7 @@ export const anularFactura = async (req: Request, res: Response) => {
         notaCredito: {
           id: resultado.notaCredito?._id,
           cae: resultado.cae,
+          fechaVencimientoCAE: resultado.fechaVencimientoCAE,
           numeroComprobante: resultado.numeroComprobante
         }
       });
@@ -1255,6 +1256,7 @@ export const emitirNotaCredito = async (req: Request, res: Response) => {
       notaCredito: {
         id: resultado.notaCredito?._id,
         cae: resultado.cae,
+        fechaVencimientoCAE: resultado.fechaVencimientoCAE,
         numeroComprobante: resultado.numeroComprobante,
         importe: importeNC,
         tipo: esParcial ? 'parcial' : 'total'
