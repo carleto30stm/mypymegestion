@@ -334,6 +334,35 @@ const VentasPage: React.FC = () => {
                         <Typography variant="body2">{item.nombreProducto}</Typography>
                         <Typography variant="caption" color="textSecondary">{item.codigoProducto}</Typography>
                       </TableCell>
+                      <TableCell align="right">
+                        <TextField
+                          size="small"
+                          value={item.precioUnitario}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            const precio = parseCurrency(value);
+                            if (!isNaN(precio) && precio >= 0) {
+                              setCarrito(carrito.map(i =>
+                                i.productoId === item.productoId
+                                  ? {
+                                      ...i,
+                                      precioUnitario: precio,
+                                      subtotal: (precio * i.cantidad) * (1 - ((i.porcentajeDescuento || 0) / 100)),
+                                      total: (precio * i.cantidad) * (1 - ((i.porcentajeDescuento || 0) / 100)),
+                                      descuento: (precio * i.cantidad) * ((i.porcentajeDescuento || 0) / 100)
+                                    }
+                                  : i
+                              ));
+                            }
+                          }}
+                          variant="outlined"
+                          sx={{ width: '100px' }}
+                          inputProps={{
+                            style: { textAlign: 'right', fontSize: '0.875rem' }
+                          }}
+                          type="text"
+                        />
+                      </TableCell>
                       <TableCell align="right">{formatCurrency(item.precioUnitario)}</TableCell>
                       <TableCell align="center">{item.cantidad}</TableCell>
                       <TableCell align="right">
@@ -420,26 +449,46 @@ const VentasPage: React.FC = () => {
 
           <Paper sx={{ p: 2 }}>
             <Typography variant="h6" gutterBottom>Datos de la Venta</Typography>
-            <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel>Cliente *</InputLabel>
-              <Select value={clienteId} onChange={(e) => setClienteId(e.target.value)} label="Cliente *">
-                {clientesActivos.map((c) => (
-                  <MenuItem key={c._id} value={c._id}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                      <Typography sx={{ flex: 1 }}>
-                        {c.razonSocial || `${c.apellido} ${c.nombre}`}
-                      </Typography>
-                      {c.requiereFacturaAFIP && (
-                        <Chip label="AFIP" color="info" size="small" sx={{ fontSize: '0.65rem', height: 18 }} />
-                      )}
-                      {!c.aplicaIVA && (
-                        <Chip label="Sin IVA" color="warning" size="small" sx={{ fontSize: '0.65rem', height: 18 }} />
-                      )}
-                    </Box>
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <Autocomplete
+              fullWidth
+              sx={{ mb: 2 }}
+              options={clientesActivos}
+              getOptionLabel={(c) => c.razonSocial || `${c.apellido || ''} ${c.nombre}`.trim()}
+              value={clientesActivos.find(c => c._id === clienteId) || null}
+              onChange={(_, value) => setClienteId(value?._id || '')}
+              filterOptions={(options, { inputValue }) => {
+                const term = inputValue.toLowerCase().trim();
+                if (!term) return options;
+                return options.filter(c => {
+                  const nombre = (c.razonSocial || `${c.apellido || ''} ${c.nombre}`.trim()).toLowerCase();
+                  const documento = (c.numeroDocumento || '').toLowerCase();
+                  return nombre.includes(term) || documento.includes(term);
+                });
+              }}
+              renderInput={(params) => (
+                <TextField 
+                  {...params} 
+                  label="Cliente *" 
+                  placeholder="Buscar por nombre o documento..."
+                />
+              )}
+              renderOption={(props, c) => (
+                <li {...props} key={c._id}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                    <Typography sx={{ flex: 1 }}>
+                      {c.razonSocial || `${c.apellido} ${c.nombre}`}
+                    </Typography>
+                    {c.requiereFacturaAFIP && (
+                      <Chip label="AFIP" color="info" size="small" sx={{ fontSize: '0.65rem', height: 18 }} />
+                    )}
+                    {!c.aplicaIVA && (
+                      <Chip label="Sin IVA" color="warning" size="small" sx={{ fontSize: '0.65rem', height: 18 }} />
+                    )}
+                  </Box>
+                </li>
+              )}
+              isOptionEqualToValue={(option, value) => option._id === value._id}
+            />
 
             {/* Control de IVA para esta venta específica */}
             <Box sx={{ mb: 2, p: 1.5, bgcolor: 'background.default', borderRadius: 1, border: '1px solid', borderColor: aplicaIVAVenta ? 'success.main' : 'warning.main' }}>

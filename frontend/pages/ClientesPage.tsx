@@ -60,6 +60,7 @@ const ClientesPage: React.FC = () => {
   const [openForm, setOpenForm] = useState(false);
   const [clienteEdit, setClienteEdit] = useState<Cliente | null>(null);
   const [filtro, setFiltro] = useState<'todos' | 'activos' | 'morosos'>('activos');
+  const [busqueda, setBusqueda] = useState('');
   const [openNotas, setOpenNotas] = useState(false);
   const [clienteNotas, setClienteNotas] = useState<Cliente | null>(null);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
@@ -275,8 +276,18 @@ const ClientesPage: React.FC = () => {
   };
 
   const clientesFiltrados = clientes.filter(c => {
-    if (filtro === 'activos') return c.estado === 'activo';
-    if (filtro === 'morosos') return c.estado === 'moroso';
+    // Filtrar por estado
+    if (filtro === 'activos' && c.estado !== 'activo') return false;
+    if (filtro === 'morosos' && c.estado !== 'moroso') return false;
+    
+    // Filtrar por búsqueda de nombre
+    if (busqueda.trim()) {
+      const terminoBusqueda = busqueda.toLowerCase().trim();
+      const nombreCompleto = (c.razonSocial || `${c.apellido || ''} ${c.nombre}`.trim()).toLowerCase();
+      const documento = (c.numeroDocumento || '').toLowerCase();
+      return nombreCompleto.includes(terminoBusqueda) || documento.includes(terminoBusqueda);
+    }
+    
     return true;
   });
 
@@ -301,14 +312,27 @@ const ClientesPage: React.FC = () => {
       </Box>
 
       <Paper sx={{ p: 2, mb: 2 }}>
-        <FormControl size="small" sx={{ minWidth: 200 }}>
-          <InputLabel>Filtrar por</InputLabel>
-          <Select value={filtro} onChange={(e) => setFiltro(e.target.value as any)} label="Filtrar por">
-            <MenuItem value="todos">Todos</MenuItem>
-            <MenuItem value="activos">Activos</MenuItem>
-            <MenuItem value="morosos">Morosos</MenuItem>
-          </Select>
-        </FormControl>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+          <TextField
+            size="small"
+            label="Buscar cliente"
+            placeholder="Nombre, razón social o documento..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            sx={{ minWidth: 300 }}
+          />
+          <FormControl size="small" sx={{ minWidth: 200 }}>
+            <InputLabel>Filtrar por</InputLabel>
+            <Select value={filtro} onChange={(e) => setFiltro(e.target.value as any)} label="Filtrar por">
+              <MenuItem value="todos">Todos</MenuItem>
+              <MenuItem value="activos">Activos</MenuItem>
+              <MenuItem value="morosos">Morosos</MenuItem>
+            </Select>
+          </FormControl>
+          <Typography variant="body2" color="textSecondary">
+            {clientesFiltrados.length} cliente(s) encontrado(s)
+          </Typography>
+        </Box>
       </Paper>
 
       <TableContainer component={Paper}>

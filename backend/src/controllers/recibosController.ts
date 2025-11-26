@@ -193,9 +193,13 @@ export const crearRecibo = async (req: ExpressRequest, res: ExpressResponse) => 
         venta.montoCobrado += montoCobrado;
         venta.saldoPendiente = ventaRel.saldoRestante;
         
-        // Actualizar estado de cobranza
+        // Actualizar estado de cobranza y estadoGranular
         if (venta.saldoPendiente === 0) {
           venta.estadoCobranza = 'cobrado';
+          // Actualizar estadoGranular a 'cobrada' si la venta está confirmada
+          if (venta.estado === 'confirmada' || venta.estadoGranular === 'confirmada') {
+            venta.estadoGranular = 'cobrada';
+          }
         } else if (venta.montoCobrado > 0) {
           venta.estadoCobranza = 'parcialmente_cobrado';
         }

@@ -45,7 +45,7 @@ export const generarRemitoDesdeVenta = createAsyncThunk(
     ventaId: string;
     direccionEntrega?: string;
     repartidor?: string;
-    vehiculo?: string;
+    medioEnvio?: string;
     numeroBultos?: string;
     observaciones?: string;
     creadoPor: string;
@@ -92,7 +92,7 @@ export const actualizarRemito = createAsyncThunk(
     direccionEntrega?: string;
     repartidor?: string;
     numeroBultos?: string;
-    vehiculo?: string;
+    medioEnvio?: string;
     observaciones?: string;
     modificadoPor: string;
   }) => {

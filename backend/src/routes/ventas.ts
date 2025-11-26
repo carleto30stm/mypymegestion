@@ -10,7 +10,8 @@ import {
   getEstadisticasVentas,
   getEstadisticasProductos,
   confirmarVenta,
-  getVentasSinFacturar
+  getVentasSinFacturar,
+  getVentasPendientesProduccion
 } from '../controllers/ventasController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
@@ -28,6 +29,8 @@ router.get('/estadisticas', protect, getEstadisticasVentas); // Estadísticas de
 router.get('/estadisticas-productos', protect, getEstadisticasProductos); // Métricas detalladas por producto
 
 router.get('/sin-facturar', protect, getVentasSinFacturar); // Ventas confirmadas que requieren factura y no están facturadas
+
+router.get('/pendientes-produccion', protect, getVentasPendientesProduccion); // Ventas confirmadas con productos que tienen receta
 
 router.route('/:id')
   .get(protect, getVentaById)

@@ -18,7 +18,8 @@ import {
   Card,
   CardContent,
   Grid,
-  Divider
+  Divider,
+  Tooltip
 } from '@mui/material';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import { useDispatch, useSelector } from 'react-redux';
@@ -186,31 +187,86 @@ const CrearFacturaDialog: React.FC<CrearFacturaDialogProps> = ({ open, onClose, 
     },
     {
       field: 'numeroVenta',
-      headerName: 'Número',
-      width: 130
+      headerName: 'Nº Venta',
+      width: 100
     },
     {
       field: 'fecha',
       headerName: 'Fecha',
-      width: 110,
+      width: 100,
       valueGetter: (value: string) => formatDate(value)
     },
     {
       field: 'cliente',
       headerName: 'Cliente',
-      width: 250,
+      width: 180,
       valueGetter: (_value: any, row: Venta) => row.nombreCliente || 'Cliente desconocido'
     },
     {
+      field: 'productos',
+      headerName: 'Productos',
+      width: 280,
+      renderCell: (params: GridRenderCellParams) => {
+        const venta = params.row as Venta;
+        const productos = venta.items?.map(item => 
+          `${item.nombreProducto} (x${item.cantidad})`
+        ).join(', ') || '-';
+        return (
+          <Tooltip title={productos}>
+            <Typography variant="body2" noWrap sx={{ maxWidth: 270 }}>
+              {productos}
+            </Typography>
+          </Tooltip>
+        );
+      }
+    },
+    {
       field: 'items',
-      headerName: 'Items',
-      width: 80,
+      headerName: 'Cant.',
+      width: 60,
+      align: 'center',
+      headerAlign: 'center',
       valueGetter: (_value: any, row: Venta) => row.items?.length || 0
+    },
+    {
+      field: 'aplicaIVA',
+      headerName: 'IVA',
+      width: 70,
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: (params: GridRenderCellParams) => {
+        const venta = params.row as Venta;
+        return (
+          <Chip 
+            label={venta.aplicaIVA ? 'Sí' : 'No'} 
+            color={venta.aplicaIVA ? 'success' : 'default'} 
+            size="small" 
+            sx={{ fontSize: '0.7rem' }}
+          />
+        );
+      }
+    },
+    {
+      field: 'subtotal',
+      headerName: 'Subtotal',
+      width: 100,
+      align: 'right',
+      headerAlign: 'right',
+      valueFormatter: (value: number) => formatCurrency(value || 0)
+    },
+    {
+      field: 'ivaAmount',
+      headerName: 'IVA $',
+      width: 90,
+      align: 'right',
+      headerAlign: 'right',
+      valueGetter: (_value: any, row: Venta) => row.iva || 0,
+      valueFormatter: (value: number) => formatCurrency(value || 0)
     },
     {
       field: 'total',
       headerName: 'Total',
-      width: 120,
+      width: 110,
       align: 'right',
       headerAlign: 'right',
       valueFormatter: (value: number) => formatCurrency(value || 0)

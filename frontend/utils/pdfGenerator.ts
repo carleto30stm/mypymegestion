@@ -267,8 +267,8 @@ export const generarPDFRemito = (remito: Remito): void => {
     doc.text(`Repartidor: ${remito.repartidor}`, 14, yPos);
     yPos += 5;
   }
-  if (remito.vehiculo) {
-    doc.text(`Vehículo: ${remito.vehiculo}`, 14, yPos);
+  if (remito.medioEnvio) {
+    doc.text(`Medio de Envío: ${remito.medioEnvio}`, 14, yPos);
     yPos += 5;
   }
   if (remito.horaDespacho) {
@@ -457,9 +457,9 @@ if (cliente && typeof cliente === 'object') {
   }
 }
 
-// Agregar envío por si hay vehículo
-if (remito.vehiculo) {
-  clienteContent.push(`Envío por: ${remito.vehiculo}`);
+// Agregar envío por si hay medio de envío
+if (remito.medioEnvio) {
+  clienteContent.push(`Medio de Envío: ${remito.medioEnvio}`);
 }
 
 // Distribuir contenido horizontalmente aprovechando el ancho disponible
