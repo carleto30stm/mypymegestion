@@ -44,6 +44,11 @@ export const crearOrden = async (data: Partial<OrdenProcesamiento>) => {
     return response.data;
 };
 
+export const actualizarOrden = async (id: string, data: Partial<OrdenProcesamiento>) => {
+    const response = await api.put(`/api/ordenes-procesamiento/${id}`, data);
+    return response.data;
+};
+
 export const enviarOrden = async (id: string) => {
     const response = await api.post(`/api/ordenes-procesamiento/${id}/enviar`);
     return response.data;

@@ -214,3 +214,37 @@ export const obtenerOrdenPorId = async (req: Request, res: Response) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+// Actualizar orden en borrador
+export const actualizarOrden = async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { proveedorId, itemsSalida, observaciones } = req.body;
+
+        const orden = await OrdenProcesamiento.findById(id);
+        if (!orden) {
+            return res.status(404).json({ message: 'Orden no encontrada' });
+        }
+
+        // Solo permitir edición en borrador
+        if (orden.estado !== 'borrador') {
+            return res.status(400).json({ 
+                message: 'Solo se pueden editar órdenes en estado borrador' 
+            });
+        }
+
+        // Actualizar campos
+        if (proveedorId) orden.proveedorId = proveedorId;
+        if (itemsSalida) orden.itemsSalida = itemsSalida;
+        if (observaciones !== undefined) orden.observaciones = observaciones;
+
+        await orden.save();
+
+        const ordenActualizada = await OrdenProcesamiento.findById(id)
+            .populate('proveedorId', 'razonSocial');
+
+        res.json(ordenActualizada);
+    } catch (error: any) {
+        res.status(400).json({ message: error.message });
+    }
+};

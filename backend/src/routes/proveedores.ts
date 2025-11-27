@@ -13,6 +13,7 @@ import {
   registrarPagoProveedor,
   getMovimientosProveedor
 } from '../controllers/proveedoresController.js';
+import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
@@ -29,7 +30,7 @@ router.post('/:id/notas', agregarNota);
 router.delete('/:id/notas/:notaId', eliminarNota);
 router.get('/:id/movimientos', getMovimientosProveedor);
 
-// Registrar pago
-router.post('/:id/pagar', registrarPagoProveedor);
+// Registrar pago - REQUIERE AUTENTICACIÓN
+router.post('/:id/pagar', protect, registrarPagoProveedor);
 
 export default router;

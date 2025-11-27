@@ -314,6 +314,10 @@ export const registrarPagoProveedor = async (req: Request, res: Response): Promi
     const userId = (req as any).user?._id;
     const username = (req as any).user?.username;
 
+    if (!username) {
+      throw new Error('Usuario no autenticado');
+    }
+
     const proveedor = await Proveedor.findById(id).session(session);
     if (!proveedor) {
       throw new Error('Proveedor no encontrado');
@@ -357,7 +361,7 @@ export const registrarPagoProveedor = async (req: Request, res: Response): Promi
       debe: monto, // Pagos van al Debe (disminuyen deuda)
       haber: 0,
       saldo: proveedor.saldoCuenta,
-      creadoPor: userId
+      creadoPor: username // Usar username (string) en vez de userId (ObjectId)
     }], { session });
 
     await session.commitTransaction();
