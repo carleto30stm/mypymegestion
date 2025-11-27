@@ -29,7 +29,7 @@ export interface IMovimientoCuentaCorrienteProveedor extends Document {
     haber: number; // Facturas, ND, Servicios (Aumenta deuda)
     saldo: number; // Saldo acumulado
 
-    creadoPor: mongoose.Types.ObjectId;
+    creadoPor: string; // Username del usuario que creó el movimiento
     anulado: boolean;
     fechaCreacion: Date;
 }
@@ -80,8 +80,7 @@ const MovimientoCuentaCorrienteProveedorSchema = new Schema<IMovimientoCuentaCor
         required: true
     },
     creadoPor: {
-        type: Schema.Types.ObjectId,
-        ref: 'User',
+        type: String,
         required: true
     },
     anulado: {

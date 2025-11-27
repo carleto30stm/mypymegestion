@@ -20,11 +20,13 @@ import {
   Dialog,
   DialogContent,
   DialogTitle,
-  DialogActions
+  DialogActions,
+  Snackbar,
+  Alert
 } from '@mui/material';
-import { Add as AddIcon, Visibility as VisibilityIcon, LocalShipping as ShippingIcon } from '@mui/icons-material';
+import { Add as AddIcon, Visibility as VisibilityIcon, LocalShipping as ShippingIcon, Edit as EditIcon, Send as SendIcon } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { getOrdenes, OrdenProcesamiento } from '../services/ordenProcesamientoService';
+import { getOrdenes, enviarOrden, OrdenProcesamiento } from '../services/ordenProcesamientoService';
 import OrdenProcesamientoForm from './OrdenProcesamientoForm';
 import { formatDate } from '../utils/formatters';
 
@@ -34,6 +36,11 @@ const OrdenProcesamientoList: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [openModal, setOpenModal] = useState(false);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
 
   useEffect(() => {
     fetchOrdenes();
@@ -63,6 +70,28 @@ const OrdenProcesamientoList: React.FC = () => {
   const handleSuccess = () => {
     handleCloseModal();
     fetchOrdenes();
+  };
+
+  const handleEnviarOrden = async (ordenId: string) => {
+    if (!confirm('¿Está seguro de enviar esta orden a procesamiento? Se descontará el stock.')) {
+      return;
+    }
+
+    try {
+      await enviarOrden(ordenId);
+      setSnackbar({ 
+        open: true, 
+        message: 'Orden enviada a procesamiento correctamente. Stock actualizado.', 
+        severity: 'success' 
+      });
+      fetchOrdenes();
+    } catch (error: any) {
+      setSnackbar({ 
+        open: true, 
+        message: error.response?.data?.message || 'Error al enviar la orden', 
+        severity: 'error' 
+      });
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -135,15 +164,35 @@ const OrdenProcesamientoList: React.FC = () => {
                   </Typography>
                 </TableCell>
                 <TableCell>
-                  <Tooltip title="Ver Detalle / Editar">
+                  <Tooltip title="Ver Detalle">
                     <IconButton onClick={() => handleOpenModal(orden._id)}>
                       <VisibilityIcon />
                     </IconButton>
                   </Tooltip>
+                  {['borrador', 'pendiente'].includes(orden.estado) && (
+                    <>
+                      <Tooltip title="Editar Items">
+                        <IconButton 
+                          color="primary"
+                          onClick={() => handleOpenModal(orden._id)}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Enviar a Procesar">
+                        <IconButton 
+                          color="warning"
+                          onClick={() => handleEnviarOrden(orden._id)}
+                        >
+                          <SendIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </>
+                  )}
                   {orden.estado === 'en_proceso' && (
                     <Tooltip title="Recibir">
                       <IconButton 
-                        color="primary"
+                        color="success"
                         onClick={() => navigate(`/ordenes-procesamiento/${orden._id}/recibir`)}
                       >
                         <ShippingIcon />
@@ -178,6 +227,20 @@ const OrdenProcesamientoList: React.FC = () => {
           />
         </DialogContent>
       </Dialog>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 };

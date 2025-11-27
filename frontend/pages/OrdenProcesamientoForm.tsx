@@ -16,11 +16,13 @@ import {
   TableHead,
   TableRow,
   Paper,
-  TableContainer
+  TableContainer,
+  Snackbar,
+  Alert
 } from '@mui/material';
 import { Delete as DeleteIcon, Add as AddIcon, ArrowBack as ArrowBackIcon } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
-import { crearOrden, enviarOrden, getOrdenById } from '../services/ordenProcesamientoService';
+import { crearOrden, actualizarOrden, enviarOrden, getOrdenById } from '../services/ordenProcesamientoService';
 import api from '../services/api'; // Direct use for other entities if specific service doesn't exist
 import { formatNumberInput, getNumericValue } from '../utils/formatters';
 
@@ -52,6 +54,11 @@ const OrdenProcesamientoForm: React.FC<OrdenProcesamientoFormProps> = ({ orderId
   const [observaciones, setObservaciones] = useState('');
   const [items, setItems] = useState<MaterialSelection[]>([]);
   const [estado, setEstado] = useState<string>('borrador');
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
   
   // Selection state
   const [selectedMaterialId, setSelectedMaterialId] = useState('');
@@ -148,18 +155,46 @@ const OrdenProcesamientoForm: React.FC<OrdenProcesamientoFormProps> = ({ orderId
         }))
       };
 
-      const nuevaOrden = await crearOrden(ordenData);
+      let ordenId: string;
+      
+      // Si estamos editando una orden existente, actualizar; si no, crear nueva
+      if (activeId) {
+        const ordenActualizada = await actualizarOrden(activeId, ordenData);
+        ordenId = ordenActualizada._id;
+      } else {
+        const nuevaOrden = await crearOrden(ordenData);
+        ordenId = nuevaOrden._id;
+      }
 
+      // Si se seleccionó "Guardar y Enviar", enviar la orden
       if (enviarAhora) {
-        await enviarOrden(nuevaOrden._id);
+        try {
+          await enviarOrden(ordenId);
+          setSnackbar({ 
+            open: true, 
+            message: 'Orden enviada a procesamiento correctamente. Stock actualizado.', 
+            severity: 'success' 
+          });
+        } catch (enviarError: any) {
+          setSnackbar({ 
+            open: true, 
+            message: enviarError.response?.data?.message || 'Error al enviar la orden a procesamiento', 
+            severity: 'error' 
+          });
+          return; // No cerrar el formulario si hubo error al enviar
+        }
       }
 
       if (onSuccess) onSuccess();
       if (onClose) onClose();
       else navigate('/ordenes-procesamiento');
     } catch (error: any) {
-      console.error('Error creating order:', error);
-      alert(error.response?.data?.message || 'Error al crear la orden');
+      console.error('Error saving order:', error);
+      setSnackbar({ 
+        open: true, 
+        message: error.response?.data?.message || 'Error al guardar la orden', 
+        severity: 'error' 
+      });
     }
   };
 
@@ -292,28 +327,33 @@ const OrdenProcesamientoForm: React.FC<OrdenProcesamientoFormProps> = ({ orderId
 
             <Grid item xs={12} sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
               {isEditable && (
-                <>
-                <Button 
-                  variant="outlined" 
-                  onClick={() => handleSubmit(false)}
-                  disabled={items.length === 0 || !proveedorId}
-                >
-                  Guardar Borrador
-                </Button>
                 <Button 
                   variant="contained" 
                   color="primary"
-                  onClick={() => handleSubmit(true)}
+                  onClick={() => handleSubmit(false)}
                   disabled={items.length === 0 || !proveedorId}
                 >
-                  Guardar y Enviar
+                  Guardar
                 </Button>
-                </>
               )}
             </Grid>
           </Grid>
         </CardContent>
       </Card>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 };

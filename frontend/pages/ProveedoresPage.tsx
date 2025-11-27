@@ -31,12 +31,14 @@ import {
 } from '@mui/material';
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon, Search as SearchIcon, Comment as CommentIcon, AttachMoney as AttachMoneyIcon, ReceiptLong as ReceiptLongIcon } from '@mui/icons-material';
 import NotasProveedorModal from '../components/NotasProveedorModal';
-import PagoProveedorModal from '../components/PagoProveedorModal';
+import FormaPagoModal from '../components/FormaPagoModal';
 import CuentaCorrienteProveedorDetalle from '../components/CuentaCorrienteProveedorDetalle';
 import { proveedoresAPI } from '../services/api';
-import { Proveedor } from '../types';
+import { Proveedor, FormaPago } from '../types';
 import { useSelector } from 'react-redux';
 import { RootState } from '../redux/store';
+import api from '../services/api';
+import { formatCurrency } from '../utils/formatters';
 
 const ProveedoresPage: React.FC = () => {
   const { user } = useSelector((state: RootState) => state.auth);
@@ -229,7 +231,40 @@ const ProveedoresPage: React.FC = () => {
     setSelectedProveedor(null);
   };
 
+  const handleConfirmarPago = async (formasPago: FormaPago[], observacionesGenerales?: string) => {
+    if (!selectedProveedor) return;
 
+    setLoading(true);
+    try {
+      // Procesar cada forma de pago
+      for (const fp of formasPago) {
+        await api.post(`/api/proveedores/${selectedProveedor._id}/pagar`, {
+          monto: fp.monto,
+          medioPago: fp.medioPago,
+          banco: fp.banco || 'EFECTIVO',
+          rubro: 'PROOVMANO.DE.OBRA',
+          subRubro: 'GALVANO CADENAS',
+          observaciones: observacionesGenerales || fp.observaciones || `Pago a ${selectedProveedor.razonSocial}`,
+          numeroCheque: fp.datosCheque?.numeroCheque,
+          datosCheque: fp.datosCheque,
+          datosTransferencia: fp.datosTransferencia,
+          datosTarjeta: fp.datosTarjeta
+        });
+      }
+
+      const totalPagado = formasPago.reduce((sum, fp) => sum + (fp.monto || 0), 0);
+      
+      setSuccess(`Pago de ${formatCurrency(totalPagado)} registrado exitosamente`);
+      await cargarProveedores();
+      handleClosePago();
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      console.error('Error registering payment:', err);
+      setError(err.response?.data?.message || 'Error al registrar el pago');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handlePagoSuccess = () => {
     cargarProveedores();
@@ -782,11 +817,13 @@ const ProveedoresPage: React.FC = () => {
         onEliminarNota={handleEliminarNota}
         userType={userType}
       />
-      <PagoProveedorModal
+      <FormaPagoModal
         open={openPago}
         onClose={handleClosePago}
-        onSuccess={handlePagoSuccess}
-        proveedor={selectedProveedor as any}
+        montoTotal={selectedProveedor?.saldoCuenta || 0}
+        onConfirm={handleConfirmarPago}
+        permitirPagoParcial={true}
+        observacionesIniciales={selectedProveedor ? `Pago a ${selectedProveedor.razonSocial}` : ''}
       />
       <Dialog open={openCuenta} onClose={handleCloseCuenta} maxWidth="md" fullWidth>
         <DialogTitle>Cuenta Corriente: {selectedProveedor?.razonSocial}</DialogTitle>

@@ -4,7 +4,8 @@ import {
     enviarOrden,
     recibirOrden,
     obtenerOrdenes,
-    obtenerOrdenPorId
+    obtenerOrdenPorId,
+    actualizarOrden
 } from '../controllers/ordenProcesamientoController.js';
 import { protect } from '../middleware/authMiddleware.js'; // Asumiendo que existe este middleware
 
@@ -17,7 +18,8 @@ router.route('/')
     .get(obtenerOrdenes);
 
 router.route('/:id')
-    .get(obtenerOrdenPorId);
+    .get(obtenerOrdenPorId)
+    .put(actualizarOrden);
 
 router.route('/:id/enviar')
     .post(enviarOrden);
