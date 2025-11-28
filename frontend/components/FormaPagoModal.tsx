@@ -407,10 +407,19 @@ const FormaPagoModal: React.FC<FormaPagoModalProps> = ({
                 <TextField
                   fullWidth
                   size="small"
+                  type="number"
                   label="Monto *"
-                  value={formatCurrency(fp.monto || 0)}
-                  onChange={(e) => handleChangeMonto(index, e.target.value)}
-                  placeholder="0,00"
+                  value={fp.monto || ''}
+                  onChange={(e) => {
+                    const nuevasFormas = [...formasPago];
+                    nuevasFormas[index].monto = parseFloat(e.target.value) || 0;
+                    setFormasPago(nuevasFormas);
+                  }}
+                  placeholder="0.000"
+                  inputProps={{
+                    step: '0.001',
+                    min: '0'
+                  }}
                 />
               </Grid>
 

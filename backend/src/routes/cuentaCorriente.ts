@@ -13,7 +13,7 @@ import { protect } from '../middleware/authMiddleware.js';
 const router = express.Router();
 
 // Todas las rutas requieren autenticación
-// router.use(protect);
+router.use(protect);
 
 // Rutas de consulta (todos los roles autenticados)
 router.get('/:clienteId/movimientos', getMovimientos);

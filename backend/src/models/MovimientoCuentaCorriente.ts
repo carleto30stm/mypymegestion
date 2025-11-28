@@ -7,7 +7,8 @@ export const TIPOS_MOVIMIENTO = [
   'nota_credito',
   'nota_debito',
   'ajuste_cargo',
-  'ajuste_descuento'
+  'ajuste_descuento',
+  'devolucion_efectivo' // Devolución de dinero al cliente con egreso de caja
 ] as const;
 
 export type TipoMovimiento = typeof TIPOS_MOVIMIENTO[number];

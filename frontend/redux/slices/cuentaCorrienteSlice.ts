@@ -71,10 +71,11 @@ export const crearAjuste = createAsyncThunk(
   async (
     ajuste: {
       clienteId: string;
-      tipo: 'ajuste_cargo' | 'ajuste_descuento';
+      tipo: 'ajuste_cargo' | 'ajuste_descuento' | 'devolucion_efectivo';
       monto: number;
       concepto: string;
       observaciones?: string;
+      formasPago?: any[]; // Requerido para devolucion_efectivo
     },
     { rejectWithValue }
   ) => {
