@@ -14,6 +14,8 @@ export interface IEmployee extends mongoose.Document {
   direccion?: string;
   fechaNacimiento?: string;
   observaciones?: string;
+  categoria?: mongoose.Types.ObjectId;
+  antiguedad?: number;
   fechaCreacion: Date;
   fechaActualizacion: Date;
 }
@@ -68,7 +70,7 @@ const employeeSchema = new mongoose.Schema<IEmployee>({
     trim: true,
     lowercase: true,
     validate: {
-      validator: function(v: string) {
+      validator: function (v: string) {
         return !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
       },
       message: 'Email inválido'
@@ -93,6 +95,14 @@ const employeeSchema = new mongoose.Schema<IEmployee>({
     trim: true,
     maxlength: [500, 'Las observaciones no pueden exceder 500 caracteres']
   },
+  categoria: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Category'
+  },
+  antiguedad: {
+    type: Number,
+    default: 0
+  },
   fechaCreacion: {
     type: Date,
     default: Date.now
@@ -102,9 +112,9 @@ const employeeSchema = new mongoose.Schema<IEmployee>({
     default: Date.now
   }
 }, {
-  timestamps: { 
-    createdAt: 'fechaCreacion', 
-    updatedAt: 'fechaActualizacion' 
+  timestamps: {
+    createdAt: 'fechaCreacion',
+    updatedAt: 'fechaActualizacion'
   }
 });
 
