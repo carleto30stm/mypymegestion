@@ -70,11 +70,12 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
   const [openAjusteModal, setOpenAjusteModal] = useState(false);
   const [openPagoModal, setOpenPagoModal] = useState(false);
   const [openPreviewVentas, setOpenPreviewVentas] = useState(false);
+  const [openDevolucionModal, setOpenDevolucionModal] = useState(false); // Modal para FormaPagoModal de devolución
   const [observacionesPago, setObservacionesPago] = useState('');
   const [incluirIntereses, setIncluirIntereses] = useState<boolean>(false);
   
   const [ajusteForm, setAjusteForm] = useState({
-    tipo: 'ajuste_cargo' as 'ajuste_cargo' | 'ajuste_descuento',
+    tipo: 'ajuste_cargo' as 'ajuste_cargo' | 'ajuste_descuento' | 'devolucion_efectivo',
     monto: '',
     concepto: '',
     observaciones: ''
@@ -97,6 +98,14 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
       return;
     }
 
+    // Si es devolución de efectivo, abrir FormaPagoModal
+    if (ajusteForm.tipo === 'devolucion_efectivo') {
+      setOpenAjusteModal(false);
+      setOpenDevolucionModal(true);
+      return;
+    }
+
+    // Para ajustes normales (cargo/descuento), crear directamente
     await dispatch(crearAjuste({
       clienteId: cliente._id,
       tipo: ajusteForm.tipo,
@@ -113,6 +122,36 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
     // Limpiar y cerrar modal
     setAjusteForm({ tipo: 'ajuste_cargo', monto: '', concepto: '', observaciones: '' });
     setOpenAjusteModal(false);
+  };
+
+  const handleConfirmarDevolucion = async (formasPago: FormaPago[]) => {
+    if (!cliente?._id || !ajusteForm.concepto || !ajusteForm.monto) {
+      return;
+    }
+
+    try {
+      await dispatch(crearAjuste({
+        clienteId: cliente._id,
+        tipo: 'devolucion_efectivo',
+        monto: parseFloat(ajusteForm.monto),
+        concepto: ajusteForm.concepto,
+        observaciones: ajusteForm.observaciones,
+        formasPago: formasPago
+      })).unwrap();
+
+      // Refrescar datos
+      dispatch(fetchMovimientos({ clienteId: cliente._id, incluirAnulados: false }));
+      dispatch(fetchResumen(cliente._id));
+      dispatch(fetchAntiguedad(cliente._id));
+
+      // Limpiar y cerrar modal
+      setAjusteForm({ tipo: 'ajuste_cargo', monto: '', concepto: '', observaciones: '' });
+      setOpenDevolucionModal(false);
+
+      alert('✅ Devolución registrada exitosamente!\n\n💸 Se ha registrado el egreso en caja\n📊 Se actualizó la cuenta corriente del cliente');
+    } catch (error: any) {
+      alert('❌ Error al registrar devolución: ' + (error || 'Error desconocido'));
+    }
   };
 
   const handleRegistrarPago = async (formasPago: FormaPago[], observacionesGenerales?: string) => {
@@ -611,7 +650,8 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
                 <Alert severity="info" sx={{ mb: 2 }}>
                   <Typography variant="caption">
                     <strong>Ajuste Cargo:</strong> Aumenta la deuda del cliente (ej: intereses, recargos)<br />
-                    <strong>Ajuste Descuento:</strong> Reduce la deuda SIN ingreso de dinero (ej: condonación, nota de crédito)
+                    <strong>Ajuste Descuento:</strong> Reduce la deuda SIN ingreso de dinero (ej: condonación, descuento comercial)<br />
+                    <strong>Devolución Efectivo:</strong> Devuelve dinero al cliente (genera egreso en caja)
                   </Typography>
                 </Alert>
               </Grid>
@@ -625,7 +665,8 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
                     onChange={(e) => setAjusteForm({ ...ajusteForm, tipo: e.target.value as any })}
                   >
                     <MenuItem value="ajuste_cargo">Cargo (Aumenta Deuda)</MenuItem>
-                    <MenuItem value="ajuste_descuento">Descuento (Reduce Deuda)</MenuItem>
+                    <MenuItem value="ajuste_descuento">Descuento (Reduce Deuda SIN $)</MenuItem>
+                    <MenuItem value="devolucion_efectivo">Devolución Efectivo (Reduce Deuda CON $)</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>
@@ -638,6 +679,11 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
                   value={ajusteForm.monto}
                   onChange={(e) => setAjusteForm({ ...ajusteForm, monto: e.target.value })}
                   required
+                  inputProps={{
+                    step: '0.001',
+                    min: '0'
+                  }}
+                  placeholder="0.000"
                 />
               </Grid>
 
@@ -695,6 +741,21 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
           onConfirm={handleRegistrarPago}
           permitirPagoParcial={true}
           observacionesIniciales={observacionesPago}
+        />
+      )}
+
+      {/* Modal de Devolución Efectivo (usando FormaPagoModal para registrar egreso) */}
+      {ajusteForm.monto && !isNaN(parseFloat(ajusteForm.monto)) && (
+        <FormaPagoModal
+          open={openDevolucionModal}
+          onClose={() => {
+            setOpenDevolucionModal(false);
+            setAjusteForm({ tipo: 'ajuste_cargo', monto: '', concepto: '', observaciones: '' });
+          }}
+          montoTotal={parseFloat(ajusteForm.monto)}
+          cliente={cliente || undefined}
+          onConfirm={handleConfirmarDevolucion}
+          permitirPagoParcial={false}
         />
       )}
 

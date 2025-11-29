@@ -28,12 +28,8 @@ export const getGastos = async (req: ExpressRequest, res: ExpressResponse) => {
                 fechaHasta.setHours(23, 59, 59, 999);
                 query.fecha.$lte = fechaHasta;
             }
-        } else {
-            // Por defecto: últimos 3 meses para mejorar performance
-            const tresMesesAtras = new Date();
-            tresMesesAtras.setMonth(tresMesesAtras.getMonth() - 3);
-            query.fecha = { $gte: tresMesesAtras };
         }
+        // Si no hay filtros de fecha, traer TODOS los registros (para filtro "Total")
         
         // Aplicar límite si se especifica (por defecto sin límite para mantener compatibilidad)
         let queryBuilder = Gasto.find(query).sort({ fecha: -1 });
@@ -67,8 +63,11 @@ export const getGastos = async (req: ExpressRequest, res: ExpressResponse) => {
 export const createGasto = async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         // Agregar el usuario que crea el gasto desde la sesión
+        // Si no se envía `fecha`, asignar la fecha actual (today)
+        const fechaParsed = req.body?.fecha ? new Date(req.body.fecha as string) : new Date();
         const datosGasto = {
             ...req.body,
+            fecha: fechaParsed,
             creadoPor: req.user?.username // Guardar username en lugar de id
         };
         

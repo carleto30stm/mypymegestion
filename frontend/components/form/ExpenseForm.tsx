@@ -312,16 +312,17 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Para transferencias solo validar fecha y detalle
+    // La fecha ya no la ingresa el usuario: el sistema usará hoy por defecto cuando sea necesario
     if (formData.tipoOperacion === 'transferencia') {
-      if (!formData.fecha || !formData.detalleGastos) {
-        alert("Fecha y Detalle son campos requeridos.");
+      // Para transferencias validar solo detalle (las cuentas y monto se validan después)
+      if (!formData.detalleGastos) {
+        alert("Detalle es requerido.");
         return;
       }
     } else {
-      // Para entrada y salida validar todos los campos
-      if (!formData.rubro || !formData.detalleGastos || !formData.fecha || !formData.medioDePago) {
-        alert("Rubro, fecha, medio de pago y Detalle son campos requeridos.");
+      // Para entrada y salida validar campos esenciales (fecha se asignará automáticamente si falta)
+      if (!formData.rubro || !formData.detalleGastos || !formData.medioDePago) {
+        alert("Rubro, medio de pago y detalle son campos requeridos.");
         return;
       }
     }
@@ -369,7 +370,8 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
 
     // Construir payload según el tipo de operación
     const payload: any = {
-      fecha: formData.fecha,
+      // Si no se pasó fecha, usar la fecha de hoy (formato YYYY-MM-DD)
+      fecha: formData.fecha || new Date().toISOString().split('T')[0],
       detalleGastos: formData.detalleGastos,
       tipoOperacion: formData.tipoOperacion,
       comentario: formData.comentario,
@@ -488,19 +490,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
           </FormControl>
         </Grid>
 
-        {/* Fecha */}
-        <Grid item xs={12} sm={6}>
-          <TextField
-            name="fecha"
-            label="Fecha"
-            type="date"
-            value={formData.fecha}
-            onChange={handleInputChange}
-            fullWidth
-            required
-            InputLabelProps={{ shrink: true }}
-          />
-        </Grid>
+        {/* Fecha: eliminada del formulario. El sistema usará la fecha actual al crear registros */}
 
         {/* Campos que NO se muestran para transferencias */}
         {formData.tipoOperacion !== 'transferencia' && (

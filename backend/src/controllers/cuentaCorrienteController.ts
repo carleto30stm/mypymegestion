@@ -2,6 +2,7 @@ import type { Request as ExpressRequest, Response as ExpressResponse } from 'exp
 import MovimientoCuentaCorriente from '../models/MovimientoCuentaCorriente.js';
 import Cliente from '../models/Cliente.js';
 import InteresPunitorio from '../models/InteresPunitorio.js';
+import Gasto from '../models/Gasto.js';
 import mongoose from 'mongoose';
 import { PDFGenerator } from '../utils/pdfGenerator.js';
 
@@ -266,8 +267,9 @@ export const crearAjuste = async (req: ExpressRequest, res: ExpressResponse) => 
   session.startTransaction();
 
   try {
-    const { clienteId, tipo, monto, concepto, observaciones } = req.body;
+    const { clienteId, tipo, monto, concepto, observaciones, formasPago } = req.body;
     const userId = req.user?._id;
+    const username = req.user?.username;
     const userType = req.user?.userType;
 
     // Validar permisos
@@ -286,10 +288,10 @@ export const crearAjuste = async (req: ExpressRequest, res: ExpressResponse) => 
       });
     }
 
-    if (!['ajuste_cargo', 'ajuste_descuento'].includes(tipo)) {
+    if (!['ajuste_cargo', 'ajuste_descuento', 'devolucion_efectivo'].includes(tipo)) {
       await session.abortTransaction();
       return res.status(400).json({ 
-        message: 'Tipo debe ser "ajuste_cargo" o "ajuste_descuento"' 
+        message: 'Tipo debe ser "ajuste_cargo", "ajuste_descuento" o "devolucion_efectivo"' 
       });
     }
 
@@ -298,6 +300,24 @@ export const crearAjuste = async (req: ExpressRequest, res: ExpressResponse) => 
       return res.status(400).json({ 
         message: 'El monto debe ser mayor a cero' 
       });
+    }
+
+    // Validar formas de pago si es devolución
+    if (tipo === 'devolucion_efectivo') {
+      if (!formasPago || !Array.isArray(formasPago) || formasPago.length === 0) {
+        await session.abortTransaction();
+        return res.status(400).json({ 
+          message: 'Las formas de pago son requeridas para devoluciones de efectivo' 
+        });
+      }
+
+      const totalFormasPago = formasPago.reduce((sum: number, fp: any) => sum + (fp.monto || 0), 0);
+      if (Math.abs(totalFormasPago - monto) > 0.01) {
+        await session.abortTransaction();
+        return res.status(400).json({ 
+          message: `El total de formas de pago ($${totalFormasPago}) debe ser igual al monto de devolución ($${monto})` 
+        });
+      }
     }
 
     // Validar cliente
@@ -317,21 +337,23 @@ export const crearAjuste = async (req: ExpressRequest, res: ExpressResponse) => 
 
     // Calcular nuevo saldo
     const debe = tipo === 'ajuste_cargo' ? monto : 0;
-    const haber = tipo === 'ajuste_descuento' ? monto : 0;
+    const haber = (tipo === 'ajuste_descuento' || tipo === 'devolucion_efectivo') ? monto : 0;
     const nuevoSaldo = saldoAnterior + debe - haber;
 
     // Generar número de documento
     const countAjustes = await MovimientoCuentaCorriente.countDocuments({
-      tipo: { $in: ['ajuste_cargo', 'ajuste_descuento'] }
+      tipo: { $in: ['ajuste_cargo', 'ajuste_descuento', 'devolucion_efectivo'] }
     }).session(session);
-    const numeroAjuste = `AJ-${String(countAjustes + 1).padStart(6, '0')}`;
+    const numeroAjuste = tipo === 'devolucion_efectivo' 
+      ? `DEV-${String(countAjustes + 1).padStart(6, '0')}`
+      : `AJ-${String(countAjustes + 1).padStart(6, '0')}`;
 
-    // Crear movimiento
+    // Crear movimiento en cuenta corriente
     const nuevoMovimiento = await MovimientoCuentaCorriente.create([{
       clienteId,
       fecha: new Date(),
       tipo,
-      documentoTipo: 'AJUSTE',
+      documentoTipo: tipo === 'devolucion_efectivo' ? 'DEVOLUCION' : 'AJUSTE',
       documentoNumero: numeroAjuste,
       concepto,
       observaciones,
@@ -341,6 +363,78 @@ export const crearAjuste = async (req: ExpressRequest, res: ExpressResponse) => 
       creadoPor: userId,
       anulado: false
     }], { session });
+
+    // Si es devolución de efectivo, registrar EGRESO en Gastos
+    if (tipo === 'devolucion_efectivo' && formasPago) {
+      const nombreCliente = cliente.razonSocial || `${cliente.apellido || ''} ${cliente.nombre}`.trim();
+      
+      // Crear un gasto por cada forma de pago
+      for (const formaPago of formasPago) {
+        // Mapear medioPago del frontend al formato backend
+        let medioPagoBackend = 'EFECTIVO';
+        switch (formaPago.medioPago) {
+          case 'efectivo':
+            medioPagoBackend = 'EFECTIVO';
+            break;
+          case 'transferencia':
+            medioPagoBackend = 'TRANSFERENCIA';
+            break;
+          case 'cheque_tercero':
+            medioPagoBackend = 'CHEQUE TERCERO';
+            break;
+          case 'cheque_propio':
+            medioPagoBackend = 'CHEQUE PROPIO';
+            break;
+          case 'tarjeta_debito':
+            medioPagoBackend = 'TARJETA DÉBITO';
+            break;
+          case 'tarjeta_credito':
+            medioPagoBackend = 'TARJETA CRÉDITO';
+            break;
+          default:
+            medioPagoBackend = 'EFECTIVO';
+        }
+        
+        const gastoData: any = {
+          fecha: new Date(),
+          rubro: 'DEVOLUCION',
+          subRubro: 'DEVOLUCION A CLIENTE',
+          detalleGastos: `Devolución a ${nombreCliente} - ${concepto}`,
+          medioDePago: medioPagoBackend,
+          tipoOperacion: 'salida',
+          salida: formaPago.monto,
+          entrada: 0,
+          proveedorId: null,
+          documentoRelacionado: {
+            tipo: 'cuenta_corriente',
+            numero: numeroAjuste,
+            id: nuevoMovimiento[0]?._id
+          },
+          observaciones: observaciones || `${formaPago.detalle || ''}`,
+          creadoPor: username,
+          modificadoPor: username
+        };
+
+        // Agregar banco si es requerido (no para CHEQUE TERCERO)
+        if (medioPagoBackend !== 'CHEQUE TERCERO') {
+          // Si es efectivo, usar 'EFECTIVO' (caja de efectivo)
+          // Si viene banco en formaPago, usarlo
+          // Sino, usar 'EFECTIVO' por defecto
+          if (medioPagoBackend === 'EFECTIVO') {
+            gastoData.banco = 'EFECTIVO';
+          } else {
+            gastoData.banco = formaPago.banco || 'EFECTIVO';
+          }
+        }
+
+        // Agregar datos específicos de cheque si aplica
+        if (medioPagoBackend.includes('CHEQUE') && formaPago.numeroCheque) {
+          gastoData.numeroCheque = formaPago.numeroCheque;
+        }
+
+        await Gasto.create([gastoData], { session });
+      }
+    }
 
     // Actualizar saldo del cliente
     cliente.saldoCuenta = nuevoSaldo;
@@ -360,7 +454,9 @@ export const crearAjuste = async (req: ExpressRequest, res: ExpressResponse) => 
 
     res.status(201).json({
       success: true,
-      message: 'Ajuste creado exitosamente',
+      message: tipo === 'devolucion_efectivo' 
+        ? 'Devolución registrada exitosamente. Se ha creado el egreso en caja.'
+        : 'Ajuste creado exitosamente',
       data: {
         movimiento: nuevoMovimiento[0],
         saldoAnterior,
