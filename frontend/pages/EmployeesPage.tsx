@@ -24,11 +24,13 @@ import {
   People as PeopleIcon,
   AccountBalance as PayrollIcon,
   Person as PersonIcon,
-  ArrowBack as BackIcon
+  ArrowBack as BackIcon,
+  Work as WorkIcon
 } from '@mui/icons-material';
 import EmployeeList from '../components/EmployeeList';
 import EmployeeForm from '../components/form/EmployeeForm';
 import EmployeePayrollComponent from '../components/EmployeePayroll';
+import ParitariasComponent from '../components/ParitariasComponent';
 import Modal from '../components/modal/Modal';
 import { Employee } from '../types';
 
@@ -209,6 +211,12 @@ const EmployeesPage: React.FC = () => {
             id="employee-tab-1"
             aria-controls="employee-tabpanel-1"
           />
+          <Tab 
+            icon={<WorkIcon />} 
+            label="Paritarias / Categorías" 
+            id="employee-tab-2"
+            aria-controls="employee-tabpanel-2"
+          />
         </Tabs>
 
         {/* Panel 1: Lista de Empleados */}
@@ -257,6 +265,11 @@ const EmployeesPage: React.FC = () => {
             filterType={payrollFilterType}
             selectedMonth={selectedMonth}
           />
+        </TabPanel>
+
+        {/* Panel 3: Paritarias y Categorías */}
+        <TabPanel value={tabValue} index={2}>
+          <ParitariasComponent />
         </TabPanel>
       </Paper>
 

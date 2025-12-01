@@ -78,6 +78,8 @@ export interface Employee {
   direccion?: string;
   fechaNacimiento?: string;
   observaciones?: string;
+  categoria: string;
+  antiguedad: number;
 }
 
 // Interface para el cálculo de sueldos
