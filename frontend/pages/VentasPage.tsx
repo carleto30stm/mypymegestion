@@ -363,7 +363,6 @@ const VentasPage: React.FC = () => {
                           type="text"
                         />
                       </TableCell>
-                      <TableCell align="right">{formatCurrency(item.precioUnitario)}</TableCell>
                       <TableCell align="center">{item.cantidad}</TableCell>
                       <TableCell align="right">
                         <TextField
