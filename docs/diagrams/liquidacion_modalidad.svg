@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1200" height="900" viewBox="0 0 1200 900" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <style>
+    .title { font: bold 20px/1.2 'Helvetica Neue', Arial, sans-serif; fill: #10316B; }
+    .subtitle { font: 14px/1.2 'Helvetica Neue', Arial, sans-serif; fill: #10316B; }
+    .box { fill: #f6f9ff; stroke: #2c5aa0; stroke-width: 2; rx: 8; }
+    .box-formal { fill: #fff8e6; stroke: #c57a17; }
+    .box-informal { fill: #f0fff4; stroke: #199a58; }
+    .text { font: 13px/1.2 'Helvetica Neue', Arial, sans-serif; fill: #222; }
+    .small { font: 11px/1.2 'Helvetica Neue', Arial, sans-serif; fill: #666; }
+    .arrow { stroke: #666; stroke-width: 2; marker-end: url(#arrow); }
+    .section { fill: none; stroke: #ddd; stroke-width: 1; stroke-dasharray: 4 6; }
+  </style>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#666" />
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="48" y="40" class="title">Sistema de liquidación — Modalidad de contratación (Argentina)</text>
+  <text x="48" y="64" class="subtitle">Decisión por empleado: Informal (pago en mano) vs Formal (con aportes y contribuciones)</text>
+
+  <!-- Left: Informal -->
+  <g transform="translate(48,110)">
+    <rect x="0" y="0" width="420" height="140" class="box box-informal"></rect>
+    <text x="18" y="26" class="text" font-weight="700">💵 Informal — Pago en mano</text>
+
+    <text x="18" y="56" class="small">• Sin aportes al trabajador</text>
+    <text x="18" y="76" class="small">• Sin contribuciones patronales</text>
+    <text x="18" y="96" class="small">• Pago: Sueldo BRUTO (todo al empleado)</text>
+    <text x="18" y="116" class="small">• Gasto generado: 1 gasto → Rubro SUELDOS (confirmado)</text>
+  </g>
+
+  <!-- Right: Formal -->
+  <g transform="translate(720,110)">
+    <rect x="0" y="0" width="420" height="160" class="box box-formal"></rect>
+    <text x="18" y="26" class="text" font-weight="700">📋 Formal — Con aportes y contribuciones</text>
+
+    <text x="18" y="56" class="small">• Aportes del empleado (retenciones):</text>
+    <text x="36" y="76" class="small">– Jubilación 11%</text>
+    <text x="36" y="96" class="small">– Obra Social 3%</text>
+    <text x="36" y="116" class="small">– PAMI 3%  (Ley)</text>
+    <text x="36" y="136" class="small">– Sindicato 2% (si aplica)</text>
+  </g>
+
+  <!-- Middle: Flow decision -->
+  <g transform="translate(520,220)">
+    <rect x="-210" y="-48" width="420" height="100" class="box"></rect>
+    <text x="-160" y="-18" class="text" font-weight="700">Proceso de Liquidación</text>
+    <text x="-160" y="8" class="small">• Calcular Sueldo Bruto + Horas extra + Incentivos</text>
+    <text x="-160" y="24" class="small">• Restar Adelantos, Descuentos</text>
+  </g>
+
+  <!-- Decision arrow up to both boxes -->
+  <line x1="468" y1="200" x2="468" y2="120" class="arrow" />
+  <line x1="732" y1="200" x2="732" y2="120" class="arrow" />
+
+  <!-- Lines from decision to outcomes -->
+  <path d="M468 260 L468 300" class="arrow" />
+  <path d="M732 260 L732 300" class="arrow" />
+
+  <!-- From Informal to single gasto -->
+  <g transform="translate(128,280)">
+    <rect x="0" y="0" width="320" height="92" class="box"></rect>
+    <text x="18" y="24" class="text" font-weight="700">Gasto SUELDOS (Informal)</text>
+    <text x="18" y="44" class="small">• Monto = Sueldo BRUTO +/- Incentivos - Descuentos</text>
+    <text x="18" y="64" class="small">• Impacto en caja: pago inmediato (confirmado)</text>
+  </g>
+
+  <!-- From Formal to 2 gastos (neto + AFIP) -->
+  <g transform="translate(720,300)">
+    <rect x="0" y="0" width="420" height="120" class="box"></rect>
+    <text x="18" y="24" class="text" font-weight="700">1) Gasto SUELDOS — Neto al empleado</text>
+    <text x="18" y="46" class="small">• Monto = Bruto - Aportes del empleado - Descuentos</text>
+    <text x="18" y="68" class="text" font-weight="700">2) Gasto IMPUESTOS (AFIP) — Cargas sociales</text>
+    <text x="18" y="90" class="small">• Monto = Aportes del empleado + Contribuciones patronales</text>
+  </g>
+
+  <!-- Connection arrows -->
+  <line x1="260" y1="250" x2="260" y2="280" class="arrow" />
+  <line x1="880" y1="250" x2="880" y2="300" class="arrow" />
+
+  <!-- Section: Aportes & contribuciones detail -->
+  <g transform="translate(48,420)">
+    <rect x="0" y="0" width="1090" height="180" class="section"></rect>
+    <text x="12" y="20" class="text" font-weight="700">Detalle: Aportes y Contribuciones (ejemplo montos)</text>
+
+    <g transform="translate(14,36)">
+      <rect x="0" y="0" width="330" height="124" class="box"></rect>
+      <text x="12" y="22" class="text" font-weight="700">Aportes del empleado (se descuentan)</text>
+      <text x="12" y="44" class="small">• Jubilación: 11%</text>
+      <text x="12" y="64" class="small">• Obra Social: 3%</text>
+      <text x="12" y="84" class="small">• PAMI: 3%</text>
+      <text x="12" y="104" class="small">• Sindicato: 2% (si aplica)</text>
+    </g>
+
+    <g transform="translate(380,36)">
+      <rect x="0" y="0" width="330" height="124" class="box"></rect>
+      <text x="12" y="22" class="text" font-weight="700">Contribuciones patronales</text>
+      <text x="12" y="44" class="small">• Jubilación: 10.17%</text>
+      <text x="12" y="64" class="small">• Obra Social: 6%</text>
+      <text x="12" y="84" class="small">• PAMI: 1.5%</text>
+      <text x="12" y="104" class="small">• ART: 2.5%</text>
+    </g>
+
+    <g transform="translate(740,36)">
+      <rect x="0" y="0" width="330" height="124" class="box"></rect>
+      <text x="12" y="22" class="text" font-weight="700">Resumen ejemplo (Sueldo base $100k)</text>
+      <text x="12" y="44" class="small">• Base imponible (ej): $105,000</text>
+      <text x="12" y="64" class="small">• Aportes empleado (≈19%): -$19,950</text>
+      <text x="12" y="84" class="small">• Neto al empleado: ≈ $85,050</text>
+      <text x="12" y="104" class="small">• Contribuciones patronales (≈20.17%): $21,179</text>
+    </g>
+  </g>
+
+  <!-- Footer / small notes -->
+  <text x="48" y="680" class="small">Notas: Los porcentajes son ejemplos; valores reales pueden variar según sindicato, ART, y convenios.</text>
+  <text x="48" y="700" class="small">Subir este archivo a Confluence (Insert > Files and images) o pegarlo como imagen en una página con bloque de código si prefieres ASCII.</text>
+
+</svg>

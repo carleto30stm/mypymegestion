@@ -255,6 +255,21 @@ export const registrarAdelanto = async (req: Request, res: Response) => {
   }
 };
 
+// Constantes de aportes y contribuciones (Argentina)
+const APORTES_EMPLEADO = {
+  JUBILACION: 11, // 11%
+  OBRA_SOCIAL: 3, // 3%
+  PAMI: 3, // 3%
+  SINDICATO: 2, // 2%
+};
+
+const CONTRIBUCIONES_EMPLEADOR = {
+  JUBILACION: 10.17, // 10.17%
+  OBRA_SOCIAL: 6, // 6%
+  PAMI: 1.5, // 1.5%
+  ART: 2.5, // Variable según ART
+};
+
 // Liquidar (pagar) a un empleado
 export const liquidarEmpleado = async (req: Request, res: Response) => {
   try {
@@ -282,18 +297,51 @@ export const liquidarEmpleado = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'Liquidación no encontrada' });
     }
 
+    // Obtener datos del empleado para ver su modalidad
+    const empleado = await Employee.findById(empleadoId);
+    if (!empleado) {
+      return res.status(404).json({ message: 'Empleado no encontrado' });
+    }
+
+    const esEmpleadoFormal = empleado.modalidadContratacion === 'formal';
+
     // Validar campos obligatorios
     const medioFinal = medioDePago || 'EFECTIVO';
     const bancoFinal = banco || 'EFECTIVO';
 
     // Calcular el monto del sueldo base según el tipo de período
     const sueldoBasePeriodo = periodo.tipo === 'quincenal' ? liquidacion.sueldoBase / 2 : liquidacion.sueldoBase;
-    const montoSueldoBase = sueldoBasePeriodo - liquidacion.adelantos;
+    
+    // Base imponible para aportes
+    const baseImponible = sueldoBasePeriodo + liquidacion.totalHorasExtra;
+    
+    // Calcular aportes del empleado (solo formales)
+    let totalAportesEmpleado = 0;
+    if (esEmpleadoFormal) {
+      const aporteJubilacion = baseImponible * (APORTES_EMPLEADO.JUBILACION / 100);
+      const aporteObraSocial = baseImponible * (APORTES_EMPLEADO.OBRA_SOCIAL / 100);
+      const aportePami = baseImponible * (APORTES_EMPLEADO.PAMI / 100);
+      const aporteSindicato = empleado.sindicato ? baseImponible * (APORTES_EMPLEADO.SINDICATO / 100) : 0;
+      totalAportesEmpleado = aporteJubilacion + aporteObraSocial + aportePami + aporteSindicato;
+    }
+
+    // Calcular contribuciones patronales (solo formales)
+    let totalContribucionesPatronales = 0;
+    if (esEmpleadoFormal) {
+      const contribJubilacion = baseImponible * (CONTRIBUCIONES_EMPLEADOR.JUBILACION / 100);
+      const contribObraSocial = baseImponible * (CONTRIBUCIONES_EMPLEADOR.OBRA_SOCIAL / 100);
+      const contribPami = baseImponible * (CONTRIBUCIONES_EMPLEADOR.PAMI / 100);
+      const contribART = baseImponible * (CONTRIBUCIONES_EMPLEADOR.ART / 100);
+      totalContribucionesPatronales = contribJubilacion + contribObraSocial + contribPami + contribART;
+    }
+
+    // Monto neto a pagar al empleado (bruto - adelantos - aportes)
+    const montoNetoPagar = sueldoBasePeriodo + liquidacion.totalHorasExtra - liquidacion.adelantos - totalAportesEmpleado;
     
     const gastosSueldoCreados = [];
     
-    // Solo crear gasto de sueldo base si hay monto pendiente
-    if (montoSueldoBase > 0) {
+    // Solo crear gasto de sueldo si hay monto pendiente
+    if (montoNetoPagar > 0) {
       const gastoSueldo = new Gasto({
         rubro: 'SUELDOS',
         subRubro: `${liquidacion.empleadoApellido}, ${liquidacion.empleadoNombre}`,
@@ -302,9 +350,11 @@ export const liquidarEmpleado = async (req: Request, res: Response) => {
         banco: bancoFinal,
         tipoOperacion: 'salida',
         clientes: `${liquidacion.empleadoApellido}, ${liquidacion.empleadoNombre}`,
-        detalleGastos: `Liquidación sueldo base - ${periodo.nombre}`,
+        detalleGastos: esEmpleadoFormal 
+          ? `Liquidación sueldo NETO (formal) - ${periodo.nombre}`
+          : `Liquidación sueldo - ${periodo.nombre}`,
         comentario: observaciones || `Liquidación período: ${periodo.nombre}`,
-        salida: montoSueldoBase,
+        salida: montoNetoPagar,
         entrada: 0,
         fecha: new Date(),
         estado: 'activo',
@@ -316,15 +366,41 @@ export const liquidarEmpleado = async (req: Request, res: Response) => {
       liquidacion.gastosRelacionados.push(gastoSueldo._id as any);
     }
 
+    // Si es empleado formal, crear gasto de AFIP (aportes + contribuciones)
+    if (esEmpleadoFormal && (totalAportesEmpleado + totalContribucionesPatronales) > 0) {
+      const totalAFIP = totalAportesEmpleado + totalContribucionesPatronales;
+      const gastoAFIP = new Gasto({
+        rubro: 'IMPUESTOS',
+        subRubro: 'AFIP - Cargas Sociales',
+        concepto: 'impuesto',
+        medioDePago: 'TRANSFERENCIA', // AFIP se paga por transferencia
+        banco: bancoFinal,
+        tipoOperacion: 'salida',
+        clientes: 'AFIP',
+        detalleGastos: `Cargas sociales ${liquidacion.empleadoApellido}, ${liquidacion.empleadoNombre} - ${periodo.nombre}`,
+        comentario: `Aportes empleado: $${totalAportesEmpleado.toFixed(2)} | Contribuciones patronales: $${totalContribucionesPatronales.toFixed(2)}`,
+        salida: totalAFIP,
+        entrada: 0,
+        fecha: new Date(),
+        estado: 'activo',
+        confirmado: false, // Pendiente de pago a AFIP (vencimiento mensual)
+        fechaStandBy: new Date(new Date().setDate(15)) // Vence el 15 del mes siguiente
+      });
+      
+      await gastoAFIP.save();
+      gastosSueldoCreados.push(gastoAFIP);
+      liquidacion.gastosRelacionados.push(gastoAFIP._id as any);
+    }
+
     // Confirmar todos los gastos relacionados (horas extra que estaban en standby)
     for (const gastoId of liquidacion.gastosRelacionados) {
       const gasto = await Gasto.findById(gastoId);
-      if (gasto && !gasto.confirmado) {
+      if (gasto && !gasto.confirmado && gasto.rubro !== 'IMPUESTOS') {
         gasto.confirmado = true;
-        gasto.medioDePago = medioFinal; // Actualizar con el medio de pago real
-        gasto.banco = bancoFinal; // Actualizar con el banco real
-        gasto.fechaStandBy = null; // Quitar standby - ahora impacta en flujo de caja
-        gasto.fecha = new Date(); // Actualizar fecha al momento de liquidación
+        gasto.medioDePago = medioFinal;
+        gasto.banco = bancoFinal;
+        gasto.fechaStandBy = null;
+        gasto.fecha = new Date();
         await gasto.save();
       }
     }
@@ -339,7 +415,17 @@ export const liquidarEmpleado = async (req: Request, res: Response) => {
     }
 
     await periodo.save();
-    res.json({ periodo, gastosCreados: gastosSueldoCreados });
+    
+    res.json({ 
+      periodo, 
+      gastosCreados: gastosSueldoCreados,
+      modalidadEmpleado: empleado.modalidadContratacion || 'informal',
+      aportes: esEmpleadoFormal ? {
+        totalAportesEmpleado,
+        totalContribucionesPatronales,
+        totalAFIP: totalAportesEmpleado + totalContribucionesPatronales
+      } : null
+    });
   } catch (error) {
     console.error('Error al liquidar empleado:', error);
     res.status(500).json({ message: 'Error al liquidar empleado' });

@@ -1,5 +1,16 @@
 import mongoose from 'mongoose';
 
+export interface IObraSocial {
+  nombre: string;
+  numero?: string;
+}
+
+export interface IAdicionales {
+  presentismo: boolean;
+  zonaPeligrosa: boolean;
+  otrosAdicionales?: { concepto: string; monto: number }[];
+}
+
 export interface IEmployee extends mongoose.Document {
   nombre: string;
   apellido: string;
@@ -9,6 +20,7 @@ export interface IEmployee extends mongoose.Document {
   sueldoBase: number;
   hora: number;
   estado: 'activo' | 'inactivo';
+  modalidadContratacion: 'formal' | 'informal'; // Nueva: formal = con aportes, informal = en mano
   email?: string;
   telefono?: string;
   direccion?: string;
@@ -16,6 +28,15 @@ export interface IEmployee extends mongoose.Document {
   observaciones?: string;
   categoria?: mongoose.Types.ObjectId;
   antiguedad?: number;
+  // Campos argentinos
+  cuit?: string;
+  legajo?: string;
+  cbu?: string;
+  obraSocial?: IObraSocial;
+  sindicato?: string;
+  convenioId?: mongoose.Types.ObjectId;
+  categoriaConvenio?: string;
+  adicionales?: IAdicionales;
   fechaCreacion: Date;
   fechaActualizacion: Date;
 }
@@ -65,6 +86,11 @@ const employeeSchema = new mongoose.Schema<IEmployee>({
     enum: ['activo', 'inactivo'],
     default: 'activo'
   },
+  modalidadContratacion: {
+    type: String,
+    enum: ['formal', 'informal'],
+    default: 'informal' // Por defecto informal (pago en mano)
+  },
   email: {
     type: String,
     trim: true,
@@ -102,6 +128,81 @@ const employeeSchema = new mongoose.Schema<IEmployee>({
   antiguedad: {
     type: Number,
     default: 0
+  },
+  // Campos argentinos
+  cuit: {
+    type: String,
+    trim: true,
+    maxlength: [13, 'El CUIT no puede exceder 13 caracteres'],
+    validate: {
+      validator: function (v: string) {
+        // Formato CUIT: XX-XXXXXXXX-X o sin guiones
+        return !v || /^(\d{2}-\d{8}-\d{1}|\d{11})$/.test(v);
+      },
+      message: 'CUIT inválido. Formato: XX-XXXXXXXX-X'
+    }
+  },
+  legajo: {
+    type: String,
+    trim: true,
+    maxlength: [20, 'El legajo no puede exceder 20 caracteres']
+  },
+  cbu: {
+    type: String,
+    trim: true,
+    maxlength: [22, 'El CBU no puede exceder 22 caracteres'],
+    validate: {
+      validator: function (v: string) {
+        return !v || /^\d{22}$/.test(v);
+      },
+      message: 'CBU inválido. Debe tener 22 dígitos'
+    }
+  },
+  obraSocial: {
+    nombre: {
+      type: String,
+      trim: true,
+      maxlength: [100, 'El nombre de la obra social no puede exceder 100 caracteres']
+    },
+    numero: {
+      type: String,
+      trim: true,
+      maxlength: [20, 'El número de afiliado no puede exceder 20 caracteres']
+    }
+  },
+  sindicato: {
+    type: String,
+    trim: true,
+    maxlength: [100, 'El sindicato no puede exceder 100 caracteres']
+  },
+  convenioId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Convenio'
+  },
+  categoriaConvenio: {
+    type: String,
+    trim: true,
+    maxlength: [50, 'La categoría del convenio no puede exceder 50 caracteres']
+  },
+  adicionales: {
+    presentismo: {
+      type: Boolean,
+      default: true
+    },
+    zonaPeligrosa: {
+      type: Boolean,
+      default: false
+    },
+    otrosAdicionales: [{
+      concepto: {
+        type: String,
+        trim: true
+      },
+      monto: {
+        type: Number,
+        default: 0
+      }
+    }]
   },
   fechaCreacion: {
     type: Date,

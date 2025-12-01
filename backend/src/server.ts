@@ -25,6 +25,8 @@ import cuentaCorrienteRoutes from './routes/cuentaCorriente.js';
 import interesesRoutes from './routes/intereses.js';
 import migrationChequesRoutes from './routes/migration-cheques.js';
 import categoriesRoutes from './routes/categories.js';
+import descuentosEmpleadoRoutes from './routes/descuentosEmpleado.js';
+import incentivosEmpleadoRoutes from './routes/incentivosEmpleado.js';
 import { iniciarCalculoInteresesDiario } from './jobs/calcularInteresesPunitorios.js';
 
 dotenv.config();
@@ -104,6 +106,8 @@ const start = async () => {
     app.use('/api/intereses', interesesRoutes);
     app.use('/api/migration', migrationChequesRoutes); // Endpoint temporal para migración de cheques
     app.use('/api/categories', categoriesRoutes);
+    app.use('/api/descuentos-empleado', descuentosEmpleadoRoutes);
+    app.use('/api/incentivos-empleado', incentivosEmpleadoRoutes);
 
     const env = process.env.NODE_ENV || 'development';
     app.listen(PORT, () => {

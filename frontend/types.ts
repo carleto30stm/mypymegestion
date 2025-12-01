@@ -62,6 +62,19 @@ export interface User {
   userType: 'admin' | 'oper' | 'oper_ad';
 }
 
+// Interface para obra social del empleado
+export interface ObraSocial {
+  nombre: string;
+  numero?: string;
+}
+
+// Interface para adicionales del empleado
+export interface AdicionalesEmpleado {
+  presentismo: boolean;
+  zonaPeligrosa: boolean;
+  otrosAdicionales?: { concepto: string; monto: number }[];
+}
+
 // Interface para empleados
 export interface Employee {
   _id?: string;
@@ -73,6 +86,7 @@ export interface Employee {
   sueldoBase: number;
   hora: number;
   estado: 'activo' | 'inactivo';
+  modalidadContratacion?: 'formal' | 'informal'; // formal = con aportes, informal = en mano
   email?: string;
   telefono?: string;
   direccion?: string;
@@ -80,6 +94,78 @@ export interface Employee {
   observaciones?: string;
   categoria: string;
   antiguedad: number;
+  // Campos argentinos
+  cuit?: string;
+  legajo?: string;
+  cbu?: string;
+  obraSocial?: ObraSocial;
+  sindicato?: string;
+  convenioId?: string;
+  categoriaConvenio?: string;
+  adicionales?: AdicionalesEmpleado;
+}
+
+// Tipos de descuento disponibles
+export const TIPOS_DESCUENTO = {
+  sancion: 'Sanción disciplinaria',
+  faltante_caja: 'Faltante de caja',
+  rotura: 'Rotura de mercadería/equipo',
+  ausencia_injustificada: 'Ausencia injustificada',
+  llegada_tarde: 'Llegadas tarde',
+  mala_operacion: 'Mala operación',
+  otro: 'Otro'
+} as const;
+
+export type TipoDescuento = keyof typeof TIPOS_DESCUENTO;
+
+// Tipos de incentivo disponibles
+export const TIPOS_INCENTIVO = {
+  productividad: 'Premio por productividad',
+  ventas: 'Bono por ventas',
+  presentismo_perfecto: 'Presentismo perfecto',
+  antiguedad_especial: 'Adicional por antigüedad especial',
+  premio: 'Premio/Reconocimiento',
+  comision: 'Comisión',
+  reconocimiento: 'Reconocimiento especial',
+  otro: 'Otro'
+} as const;
+
+export type TipoIncentivo = keyof typeof TIPOS_INCENTIVO;
+
+// Interface para descuentos de empleados
+export interface DescuentoEmpleado {
+  _id?: string;
+  empleadoId: string | { _id: string; nombre: string; apellido: string; documento: string; sueldoBase?: number };
+  tipo: TipoDescuento;
+  motivo: string;
+  monto: number;
+  esPorcentaje: boolean;
+  fecha: string;
+  periodoAplicacion: string; // YYYY-MM
+  estado: 'pendiente' | 'aplicado' | 'anulado';
+  observaciones?: string;
+  montoCalculado?: number; // Monto real si esPorcentaje es true
+  creadoPor?: string;
+  fechaCreacion?: string;
+  fechaActualizacion?: string;
+}
+
+// Interface para incentivos de empleados
+export interface IncentivoEmpleado {
+  _id?: string;
+  empleadoId: string | { _id: string; nombre: string; apellido: string; documento: string; sueldoBase?: number };
+  tipo: TipoIncentivo;
+  motivo: string;
+  monto: number;
+  esPorcentaje: boolean;
+  fecha: string;
+  periodoAplicacion: string; // YYYY-MM
+  estado: 'pendiente' | 'pagado' | 'anulado';
+  observaciones?: string;
+  montoCalculado?: number; // Monto real si esPorcentaje es true
+  creadoPor?: string;
+  fechaCreacion?: string;
+  fechaActualizacion?: string;
 }
 
 // Interface para el cálculo de sueldos
@@ -114,6 +200,28 @@ export interface HoraExtra {
   gastoRelacionadoId?: string; // ID del gasto cuando se paga
 }
 
+// Constantes para liquidación argentina
+export const APORTES_EMPLEADO = {
+  JUBILACION: 11, // 11%
+  OBRA_SOCIAL: 3, // 3%
+  PAMI: 3, // 3% (Ley 19.032)
+  SINDICATO: 2, // 2% (variable según sindicato)
+} as const;
+
+export const CONTRIBUCIONES_EMPLEADOR = {
+  JUBILACION: 10.17, // 10.17%
+  OBRA_SOCIAL: 6, // 6%
+  PAMI: 1.5, // 1.5%
+  ART: 2.5, // Variable según ART
+  SEGURO_VIDA: 0.03, // 0.03%
+} as const;
+
+export const ADICIONALES_LEGALES = {
+  PRESENTISMO: 8.33, // 8.33% del básico
+  ANTIGUEDAD: 1, // 1% por año de antigüedad
+  ZONA_DESFAVORABLE: 0, // Variable según zona
+} as const;
+
 // Interfaces para liquidación de sueldos
 export interface HoraExtraResumen {
   horaExtraId: string;
@@ -124,18 +232,88 @@ export interface HoraExtraResumen {
   descripcion?: string;
 }
 
+// Detalle de conceptos remunerativos
+export interface ConceptoRemunerativo {
+  codigo: string;
+  descripcion: string;
+  cantidad?: number;
+  porcentaje?: number;
+  base?: number;
+  monto: number;
+  tipo: 'remunerativo' | 'no_remunerativo';
+}
+
+// Detalle de retenciones/aportes
+export interface RetencionAporte {
+  codigo: string;
+  descripcion: string;
+  porcentaje: number;
+  base: number;
+  monto: number;
+}
+
 export interface LiquidacionEmpleado {
   empleadoId: string;
   empleadoNombre: string;
   empleadoApellido: string;
+  empleadoDocumento?: string;
+  empleadoCuit?: string;
+  empleadoLegajo?: string;
+  empleadoPuesto?: string;
+  empleadoFechaIngreso?: string;
+  empleadoCategoria?: string;
+  empleadoObraSocial?: string;
+  empleadoSindicato?: string;
+  empleadoAntiguedad?: number;
+  empleadoModalidad?: 'formal' | 'informal'; // formal = con aportes, informal = en mano
+  
+  // Haberes - Conceptos remunerativos
   sueldoBase: number;
   horasExtra: HoraExtraResumen[];
   totalHorasExtra: number;
-  adelantos: number;
+  adicionalAntiguedad: number;
+  adicionalPresentismo: number;
+  adicionalZona: number;
+  otrosAdicionales: number;
   aguinaldos: number;
   bonus: number;
+  incentivos: number;
+  totalRemunerativo: number;
+  
+  // Conceptos no remunerativos
+  viaticos: number;
+  otrosNoRemunerativos: number;
+  totalNoRemunerativo: number;
+  
+  // Total bruto
+  totalBruto: number;
+  
+  // Deducciones del empleado
+  adelantos: number;
   descuentos: number;
+  
+  // Aportes del empleado (retenciones)
+  aporteJubilacion: number;
+  aporteObraSocial: number;
+  aportePami: number;
+  aporteSindicato: number;
+  totalAportes: number;
+  
+  // Total deducciones
+  totalDeducciones: number;
+  
+  // Neto a cobrar
   totalAPagar: number;
+  
+  // Contribuciones patronales (informativo)
+  contribJubilacion?: number;
+  contribObraSocial?: number;
+  contribPami?: number;
+  contribArt?: number;
+  contribSeguroVida?: number;
+  totalContribuciones?: number;
+  costoTotal?: number; // Costo total para la empresa
+  
   estado: 'pendiente' | 'pagado' | 'cancelado';
   gastosRelacionados: string[];
   reciboGenerado?: string;
@@ -143,6 +321,9 @@ export interface LiquidacionEmpleado {
   observaciones?: string;
   medioDePago?: typeof MEDIOS_PAGO_GASTOS[number];
   banco?: typeof BANCOS[number];
+  // Detalle de descuentos e incentivos
+  descuentosDetalle?: DescuentoEmpleado[];
+  incentivosDetalle?: IncentivoEmpleado[];
 }
 
 export interface LiquidacionPeriodo {

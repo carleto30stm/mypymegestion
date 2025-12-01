@@ -1,8 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { jsPDF } from 'jspdf';
-import { Button, Dialog, DialogTitle, DialogContent, DialogActions, Box, Typography } from '@mui/material';
+import { Button, Dialog, DialogTitle, DialogContent, DialogActions, Box, Typography, Divider, Grid, FormControlLabel, Switch } from '@mui/material';
 import { Print as PrintIcon, PictureAsPdf as PdfIcon } from '@mui/icons-material';
-import { LiquidacionEmpleado, LiquidacionPeriodo } from '../types';
+import { 
+  LiquidacionEmpleado, 
+  LiquidacionPeriodo, 
+  DescuentoEmpleado, 
+  IncentivoEmpleado, 
+  TIPOS_DESCUENTO, 
+  TIPOS_INCENTIVO,
+  APORTES_EMPLEADO
+} from '../types';
 import { formatCurrency, formatDateForDisplay } from '../utils/formatters';
 
 interface ReciboSueldoProps {
@@ -10,231 +18,399 @@ interface ReciboSueldoProps {
   periodo: LiquidacionPeriodo;
   open: boolean;
   onClose: () => void;
+  descuentosDetalle?: DescuentoEmpleado[];
+  incentivosDetalle?: IncentivoEmpleado[];
+  incluirAportes?: boolean; // Si incluir aportes legales
 }
 
-const ReciboSueldo: React.FC<ReciboSueldoProps> = ({ liquidacion, periodo, open, onClose }) => {
+const ReciboSueldo: React.FC<ReciboSueldoProps> = ({ 
+  liquidacion, 
+  periodo, 
+  open, 
+  onClose, 
+  descuentosDetalle = [], 
+  incentivosDetalle = [],
+  incluirAportes: incluirAportesInitial 
+}) => {
   
+  // Usar la modalidad del empleado para determinar si incluir aportes
+  // Si empleadoModalidad === 'formal', incluir aportes automáticamente
+  const esEmpleadoFormal = liquidacion.empleadoModalidad === 'formal';
+  
+  // Estado para controlar si se incluyen aportes (inicializado según modalidad)
+  const [incluirAportes, setIncluirAportes] = useState(
+    incluirAportesInitial !== undefined ? incluirAportesInitial : esEmpleadoFormal
+  );
+
+  // Calcular totales de descuentos e incentivos
+  const totalDescuentosPersonalizados = descuentosDetalle.reduce((sum, d) => sum + (d.montoCalculado || d.monto), 0);
+  const totalIncentivos = incentivosDetalle.reduce((sum, i) => sum + (i.montoCalculado || i.monto), 0);
+
+  // Calcular aportes si están habilitados
+  const baseImponible = liquidacion.sueldoBase + 
+    liquidacion.totalHorasExtra + 
+    (liquidacion.adicionalAntiguedad || 0) + 
+    (liquidacion.adicionalPresentismo || 0) +
+    totalIncentivos;
+
+  const aportes = incluirAportes ? {
+    jubilacion: liquidacion.aporteJubilacion || (baseImponible * APORTES_EMPLEADO.JUBILACION / 100),
+    obraSocial: liquidacion.aporteObraSocial || (baseImponible * APORTES_EMPLEADO.OBRA_SOCIAL / 100),
+    pami: liquidacion.aportePami || (baseImponible * APORTES_EMPLEADO.PAMI / 100),
+    sindicato: liquidacion.aporteSindicato || 0,
+  } : { jubilacion: 0, obraSocial: 0, pami: 0, sindicato: 0 };
+
+  const totalAportes = aportes.jubilacion + aportes.obraSocial + aportes.pami + aportes.sindicato;
+
   const generarPDF = () => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
-    let yPos = 20;
+    const marginLeft = 12;
+    const marginRight = pageWidth - 12;
+    const colMid = pageWidth / 2;
+    let yPos = 12;
 
-    // Configurar fuente
+    // ============ ENCABEZADO ============
+    doc.setFillColor(240, 240, 240);
+    doc.rect(marginLeft, yPos - 4, pageWidth - 24, 22, 'F');
+    
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(18);
+    doc.setFontSize(14);
+    doc.text('RECIBO DE HABERES', colMid, yPos + 4, { align: 'center' });
     
-    // Título
-    doc.text('RECIBO DE SUELDO', pageWidth / 2, yPos, { align: 'center' });
-    yPos += 10;
-    
-    doc.setFontSize(10);
+    doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Período: ${periodo.nombre}`, pageWidth / 2, yPos, { align: 'center' });
-    yPos += 5;
+    doc.text(`Período: ${periodo.nombre}`, colMid, yPos + 10, { align: 'center' });
     doc.text(
-      `${formatDateForDisplay(periodo.fechaInicio)} - ${formatDateForDisplay(periodo.fechaFin)}`,
-      pageWidth / 2,
-      yPos,
+      `${formatDateForDisplay(periodo.fechaInicio)} al ${formatDateForDisplay(periodo.fechaFin)}`,
+      colMid,
+      yPos + 14,
       { align: 'center' }
     );
-    yPos += 15;
+    yPos += 24;
 
-    // Línea separadora
-    doc.setLineWidth(0.5);
-    doc.line(15, yPos, pageWidth - 15, yPos);
-    yPos += 10;
+    // ============ DATOS DEL EMPLEADO ============
+    doc.setLineWidth(0.3);
+    doc.line(marginLeft, yPos, marginRight, yPos);
+    yPos += 6;
 
-    // Datos del empleado
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.text('DATOS DEL EMPLEADO', 15, yPos);
-    yPos += 8;
-    
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.text(`Apellido y Nombre:`, 15, yPos);
-    doc.text(`${liquidacion.empleadoApellido}, ${liquidacion.empleadoNombre}`, 70, yPos);
-    yPos += 6;
-    
-    if (liquidacion.fechaPago) {
-      doc.text(`Fecha de Pago:`, 15, yPos);
-      doc.text(formatDateForDisplay(liquidacion.fechaPago), 70, yPos);
-      yPos += 6;
-    }
-    
-    doc.text(`Medio de Pago:`, 15, yPos);
-    doc.text(liquidacion.medioDePago || 'EFECTIVO', 70, yPos);
-    yPos += 6;
-    
-    if (liquidacion.banco && liquidacion.banco !== 'EFECTIVO') {
-      doc.text(`Banco:`, 15, yPos);
-      doc.text(liquidacion.banco, 70, yPos);
-      yPos += 6;
-    }
-    
+    doc.setFontSize(9);
+    doc.text('DATOS DEL TRABAJADOR', marginLeft, yPos);
     yPos += 5;
 
-    // Línea separadora
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+
+    // Columna izquierda
+    doc.text(`Apellido y Nombre: ${liquidacion.empleadoApellido}, ${liquidacion.empleadoNombre}`, marginLeft, yPos);
+    yPos += 4;
+    
+    if (liquidacion.empleadoDocumento || liquidacion.empleadoCuit) {
+      doc.text(`DNI/CUIT: ${liquidacion.empleadoCuit || liquidacion.empleadoDocumento || '-'}`, marginLeft, yPos);
+      doc.text(`Legajo: ${liquidacion.empleadoLegajo || '-'}`, colMid + 10, yPos - 4);
+    }
+    yPos += 4;
+    
+    if (liquidacion.empleadoPuesto) {
+      doc.text(`Puesto: ${liquidacion.empleadoPuesto}`, marginLeft, yPos);
+    }
+    if (liquidacion.empleadoCategoria) {
+      doc.text(`Categoría: ${liquidacion.empleadoCategoria}`, colMid + 10, yPos);
+    }
+    yPos += 4;
+
+    if (liquidacion.empleadoFechaIngreso) {
+      doc.text(`Fecha Ingreso: ${formatDateForDisplay(liquidacion.empleadoFechaIngreso)}`, marginLeft, yPos);
+    }
+    if (liquidacion.empleadoAntiguedad !== undefined) {
+      doc.text(`Antigüedad: ${liquidacion.empleadoAntiguedad} años`, colMid + 10, yPos);
+    }
+    yPos += 4;
+
+    if (liquidacion.empleadoObraSocial) {
+      doc.text(`Obra Social: ${liquidacion.empleadoObraSocial}`, marginLeft, yPos);
+    }
+    if (liquidacion.empleadoSindicato) {
+      doc.text(`Sindicato: ${liquidacion.empleadoSindicato}`, colMid + 10, yPos);
+    }
+    yPos += 6;
+
+    // ============ TABLA DE CONCEPTOS ============
     doc.setLineWidth(0.5);
-    doc.line(15, yPos, pageWidth - 15, yPos);
-    yPos += 10;
+    doc.line(marginLeft, yPos, marginRight, yPos);
+    yPos += 1;
 
-    // Detalle de conceptos
+    // Encabezado de tabla
+    doc.setFillColor(220, 220, 220);
+    doc.rect(marginLeft, yPos, pageWidth - 24, 6, 'F');
+    yPos += 4;
+    
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.text('DETALLE DE LIQUIDACIÓN', 15, yPos);
-    yPos += 10;
+    doc.setFontSize(8);
+    doc.text('CONCEPTO', marginLeft + 2, yPos);
+    doc.text('CANT.', 95, yPos, { align: 'center' });
+    doc.text('HABERES', 130, yPos, { align: 'right' });
+    doc.text('DEDUCCIONES', marginRight - 2, yPos, { align: 'right' });
+    yPos += 4;
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-
-    // Cabecera de tabla
-    doc.setFont('helvetica', 'bold');
-    doc.text('Concepto', 15, yPos);
-    doc.text('Cantidad', 110, yPos);
-    doc.text('Importe', 160, yPos, { align: 'right' });
-    yPos += 2;
     doc.setLineWidth(0.3);
-    doc.line(15, yPos, pageWidth - 15, yPos);
-    yPos += 6;
+    doc.line(marginLeft, yPos, marginRight, yPos);
+    yPos += 4;
 
     doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
 
-    // Sueldo base
-    doc.text('Sueldo Base', 15, yPos);
-    doc.text('1', 110, yPos);
-    doc.text(`$ ${formatCurrency(liquidacion.sueldoBase)}`, 160, yPos, { align: 'right' });
-    yPos += 6;
+    let totalHaberes = 0;
+    let totalDeducciones = 0;
+
+    // -------- HABERES --------
+    // Sueldo básico
+    doc.text('Sueldo Básico', marginLeft + 2, yPos);
+    doc.text('30', 95, yPos, { align: 'center' });
+    doc.text(formatCurrency(liquidacion.sueldoBase), 130, yPos, { align: 'right' });
+    totalHaberes += liquidacion.sueldoBase;
+    yPos += 4;
+
+    // Adicional por antigüedad
+    if (liquidacion.adicionalAntiguedad && liquidacion.adicionalAntiguedad > 0) {
+      doc.text('Adicional Antigüedad', marginLeft + 2, yPos);
+      doc.text(`${liquidacion.empleadoAntiguedad || 0} años`, 95, yPos, { align: 'center' });
+      doc.text(formatCurrency(liquidacion.adicionalAntiguedad), 130, yPos, { align: 'right' });
+      totalHaberes += liquidacion.adicionalAntiguedad;
+      yPos += 4;
+    }
+
+    // Adicional presentismo
+    if (liquidacion.adicionalPresentismo && liquidacion.adicionalPresentismo > 0) {
+      doc.text('Presentismo', marginLeft + 2, yPos);
+      doc.text('8.33%', 95, yPos, { align: 'center' });
+      doc.text(formatCurrency(liquidacion.adicionalPresentismo), 130, yPos, { align: 'right' });
+      totalHaberes += liquidacion.adicionalPresentismo;
+      yPos += 4;
+    }
 
     // Horas extra
     if (liquidacion.horasExtra && liquidacion.horasExtra.length > 0) {
       const totalHorasQty = liquidacion.horasExtra.reduce((sum, he) => sum + he.cantidadHoras, 0);
-      doc.text('Horas Extra', 15, yPos);
-      doc.text(`${totalHorasQty} hs`, 110, yPos);
-      doc.text(`$ ${formatCurrency(liquidacion.totalHorasExtra)}`, 160, yPos, { align: 'right' });
-      yPos += 6;
+      doc.text('Horas Extra 50%', marginLeft + 2, yPos);
+      doc.text(`${totalHorasQty} hs`, 95, yPos, { align: 'center' });
+      doc.text(formatCurrency(liquidacion.totalHorasExtra), 130, yPos, { align: 'right' });
+      totalHaberes += liquidacion.totalHorasExtra;
+      yPos += 4;
     }
 
-    // Aguinaldos
+    // SAC (Aguinaldo)
     if (liquidacion.aguinaldos > 0) {
-      doc.text('Aguinaldos', 15, yPos);
-      doc.text('1', 110, yPos);
-      doc.text(`$ ${formatCurrency(liquidacion.aguinaldos)}`, 160, yPos, { align: 'right' });
-      yPos += 6;
+      doc.text('S.A.C. (Aguinaldo)', marginLeft + 2, yPos);
+      doc.text('-', 95, yPos, { align: 'center' });
+      doc.text(formatCurrency(liquidacion.aguinaldos), 130, yPos, { align: 'right' });
+      totalHaberes += liquidacion.aguinaldos;
+      yPos += 4;
     }
 
-    // Bonus
+    // Bonus/Premios
     if (liquidacion.bonus > 0) {
-      doc.text('Bonus/Premios', 15, yPos);
-      doc.text('1', 110, yPos);
-      doc.text(`$ ${formatCurrency(liquidacion.bonus)}`, 160, yPos, { align: 'right' });
-      yPos += 6;
+      doc.text('Premios/Bonus', marginLeft + 2, yPos);
+      doc.text('-', 95, yPos, { align: 'center' });
+      doc.text(formatCurrency(liquidacion.bonus), 130, yPos, { align: 'right' });
+      totalHaberes += liquidacion.bonus;
+      yPos += 4;
     }
 
-    yPos += 2;
-    doc.setLineWidth(0.3);
-    doc.line(15, yPos, pageWidth - 15, yPos);
-    yPos += 6;
+    // Incentivos detallados
+    incentivosDetalle.forEach(incentivo => {
+      const tipoLabel = TIPOS_INCENTIVO[incentivo.tipo as keyof typeof TIPOS_INCENTIVO] || incentivo.tipo;
+      const monto = incentivo.montoCalculado || incentivo.monto;
+      doc.text(`Incentivo: ${tipoLabel}`, marginLeft + 2, yPos);
+      doc.text(incentivo.esPorcentaje ? `${incentivo.monto}%` : '-', 95, yPos, { align: 'center' });
+      doc.text(formatCurrency(monto), 130, yPos, { align: 'right' });
+      totalHaberes += monto;
+      yPos += 4;
+    });
 
-    // Subtotal haberes
-    const subtotalHaberes = 
-      liquidacion.sueldoBase +
-      liquidacion.totalHorasExtra +
-      liquidacion.aguinaldos +
-      liquidacion.bonus;
-    
-    doc.setFont('helvetica', 'bold');
-    doc.text('SUBTOTAL HABERES', 15, yPos);
-    doc.text(`$ ${formatCurrency(subtotalHaberes)}`, 160, yPos, { align: 'right' });
-    yPos += 10;
+    // Viáticos (no remunerativo)
+    if (liquidacion.viaticos && liquidacion.viaticos > 0) {
+      doc.text('Viáticos (No Rem.)', marginLeft + 2, yPos);
+      doc.text('-', 95, yPos, { align: 'center' });
+      doc.text(formatCurrency(liquidacion.viaticos), 130, yPos, { align: 'right' });
+      totalHaberes += liquidacion.viaticos;
+      yPos += 4;
+    }
 
-    // Deducciones
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
-    doc.text('DEDUCCIONES', 15, yPos);
-    yPos += 6;
+    // Otros adicionales
+    if (liquidacion.otrosAdicionales && liquidacion.otrosAdicionales > 0) {
+      doc.text('Otros Adicionales', marginLeft + 2, yPos);
+      doc.text('-', 95, yPos, { align: 'center' });
+      doc.text(formatCurrency(liquidacion.otrosAdicionales), 130, yPos, { align: 'right' });
+      totalHaberes += liquidacion.otrosAdicionales;
+      yPos += 4;
+    }
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
+    // -------- DEDUCCIONES --------
+    // Aportes jubilatorios
+    if (incluirAportes && aportes.jubilacion > 0) {
+      doc.text('Jubilación (11%)', marginLeft + 2, yPos);
+      doc.text(formatCurrency(aportes.jubilacion), marginRight - 2, yPos, { align: 'right' });
+      totalDeducciones += aportes.jubilacion;
+      yPos += 4;
+    }
+
+    // Obra Social
+    if (incluirAportes && aportes.obraSocial > 0) {
+      doc.text('Obra Social (3%)', marginLeft + 2, yPos);
+      doc.text(formatCurrency(aportes.obraSocial), marginRight - 2, yPos, { align: 'right' });
+      totalDeducciones += aportes.obraSocial;
+      yPos += 4;
+    }
+
+    // PAMI
+    if (incluirAportes && aportes.pami > 0) {
+      doc.text('Ley 19.032 PAMI (3%)', marginLeft + 2, yPos);
+      doc.text(formatCurrency(aportes.pami), marginRight - 2, yPos, { align: 'right' });
+      totalDeducciones += aportes.pami;
+      yPos += 4;
+    }
+
+    // Sindicato
+    if (incluirAportes && aportes.sindicato > 0) {
+      doc.text('Cuota Sindical (2%)', marginLeft + 2, yPos);
+      doc.text(formatCurrency(aportes.sindicato), marginRight - 2, yPos, { align: 'right' });
+      totalDeducciones += aportes.sindicato;
+      yPos += 4;
+    }
 
     // Adelantos
     if (liquidacion.adelantos > 0) {
-      doc.text('Adelantos', 15, yPos);
-      doc.text('-', 110, yPos);
-      doc.text(`$ ${formatCurrency(liquidacion.adelantos)}`, 160, yPos, { align: 'right' });
-      yPos += 6;
+      doc.text('Adelantos', marginLeft + 2, yPos);
+      doc.text(formatCurrency(liquidacion.adelantos), marginRight - 2, yPos, { align: 'right' });
+      totalDeducciones += liquidacion.adelantos;
+      yPos += 4;
     }
 
-    // Descuentos
-    if (liquidacion.descuentos > 0) {
-      doc.text('Descuentos', 15, yPos);
-      doc.text('-', 110, yPos);
-      doc.text(`$ ${formatCurrency(liquidacion.descuentos)}`, 160, yPos, { align: 'right' });
-      yPos += 6;
+    // Descuentos personalizados
+    descuentosDetalle.forEach(descuento => {
+      const tipoLabel = TIPOS_DESCUENTO[descuento.tipo as keyof typeof TIPOS_DESCUENTO] || descuento.tipo;
+      const monto = descuento.montoCalculado || descuento.monto;
+      doc.text(`Desc: ${tipoLabel}`, marginLeft + 2, yPos);
+      doc.text(formatCurrency(monto), marginRight - 2, yPos, { align: 'right' });
+      totalDeducciones += monto;
+      yPos += 4;
+    });
+
+    // Descuentos legacy (si no hay detalle)
+    if (descuentosDetalle.length === 0 && liquidacion.descuentos > 0) {
+      doc.text('Otros Descuentos', marginLeft + 2, yPos);
+      doc.text(formatCurrency(liquidacion.descuentos), marginRight - 2, yPos, { align: 'right' });
+      totalDeducciones += liquidacion.descuentos;
+      yPos += 4;
     }
 
     yPos += 2;
-    doc.setLineWidth(0.3);
-    doc.line(15, yPos, pageWidth - 15, yPos);
-    yPos += 6;
 
-    // Total deducciones
-    const totalDeducciones = liquidacion.adelantos + liquidacion.descuentos;
-    doc.setFont('helvetica', 'bold');
-    doc.text('TOTAL DEDUCCIONES', 15, yPos);
-    doc.text(`$ ${formatCurrency(totalDeducciones)}`, 160, yPos, { align: 'right' });
-    yPos += 10;
-
-    // Línea doble para total neto
+    // ============ TOTALES ============
     doc.setLineWidth(0.5);
-    doc.line(15, yPos, pageWidth - 15, yPos);
-    yPos += 1;
-    doc.line(15, yPos, pageWidth - 15, yPos);
-    yPos += 8;
+    doc.line(marginLeft, yPos, marginRight, yPos);
+    yPos += 5;
 
-    // TOTAL NETO
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.text('TOTAL NETO A COBRAR', 15, yPos);
-    doc.text(`$ ${formatCurrency(liquidacion.totalAPagar)}`, 160, yPos, { align: 'right' });
-    yPos += 10;
-
-    doc.setLineWidth(0.5);
-    doc.line(15, yPos, pageWidth - 15, yPos);
-    yPos += 10;
-
-    // Observaciones
-    if (liquidacion.observaciones) {
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10);
-      doc.text('Observaciones:', 15, yPos);
-      yPos += 6;
-      
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
-      const observacionesLines = doc.splitTextToSize(liquidacion.observaciones, pageWidth - 30);
-      doc.text(observacionesLines, 15, yPos);
-      yPos += (observacionesLines.length * 4) + 5;
-    }
-
-    // Footer - Firmas
-    yPos = doc.internal.pageSize.getHeight() - 40;
-    doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     
-    doc.line(25, yPos, 85, yPos);
-    doc.line(125, yPos, 185, yPos);
-    yPos += 5;
+    // Fila de totales
+    doc.text('TOTALES', marginLeft + 2, yPos);
+    doc.text(formatCurrency(totalHaberes), 130, yPos, { align: 'right' });
+    doc.text(formatCurrency(totalDeducciones), marginRight - 2, yPos, { align: 'right' });
+    yPos += 6;
+
+    // Línea doble
+    doc.setLineWidth(0.3);
+    doc.line(marginLeft, yPos, marginRight, yPos);
+    yPos += 1;
+    doc.line(marginLeft, yPos, marginRight, yPos);
+    yPos += 6;
+
+    // NETO A COBRAR
+    doc.setFillColor(230, 245, 230);
+    doc.rect(marginLeft, yPos - 4, pageWidth - 24, 10, 'F');
     
-    doc.text('Firma del Empleado', 55, yPos, { align: 'center' });
-    doc.text('Firma del Empleador', 155, yPos, { align: 'center' });
-    
-    yPos += 10;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    const netoACobrar = totalHaberes - totalDeducciones;
+    doc.text('NETO A COBRAR:', marginLeft + 5, yPos + 2);
+    doc.text(`$ ${formatCurrency(netoACobrar > 0 ? netoACobrar : liquidacion.totalAPagar)}`, marginRight - 5, yPos + 2, { align: 'right' });
+    yPos += 12;
+
+    // ============ FORMA DE PAGO ============
+    doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
+    
+    if (liquidacion.fechaPago) {
+      doc.text(`Fecha de Pago: ${formatDateForDisplay(liquidacion.fechaPago)}`, marginLeft, yPos);
+    }
+    doc.text(`Medio de Pago: ${liquidacion.medioDePago || 'EFECTIVO'}`, colMid, yPos);
+    yPos += 4;
+    
+    if (liquidacion.banco && liquidacion.banco !== 'EFECTIVO') {
+      doc.text(`Banco: ${liquidacion.banco}`, marginLeft, yPos);
+      yPos += 4;
+    }
+
+    // ============ OBSERVACIONES ============
+    if (liquidacion.observaciones) {
+      yPos += 2;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.text('Observaciones:', marginLeft, yPos);
+      yPos += 4;
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      const observacionesLines = doc.splitTextToSize(liquidacion.observaciones, pageWidth - 30);
+      doc.text(observacionesLines, marginLeft, yPos);
+      yPos += (observacionesLines.length * 3) + 2;
+    }
+
+    // ============ CONTRIBUCIONES PATRONALES (opcional) ============
+    if (incluirAportes && liquidacion.costoTotal) {
+      yPos += 4;
+      doc.setLineWidth(0.2);
+      doc.setDrawColor(180, 180, 180);
+      doc.line(marginLeft, yPos, marginRight, yPos);
+      yPos += 4;
+      
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(7);
+      doc.setTextColor(100, 100, 100);
+      doc.text('Información adicional - Contribuciones Patronales:', marginLeft, yPos);
+      yPos += 3;
+      doc.text(`Costo Total Empresa: $ ${formatCurrency(liquidacion.costoTotal)}`, marginLeft, yPos);
+      doc.setTextColor(0, 0, 0);
+    }
+
+    // ============ FIRMAS ============
+    yPos = doc.internal.pageSize.getHeight() - 35;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setDrawColor(0, 0, 0);
+    
+    doc.setLineWidth(0.3);
+    doc.line(20, yPos, 80, yPos);
+    doc.line(130, yPos, 190, yPos);
+    yPos += 4;
+    
+    doc.text('Firma del Trabajador', 50, yPos, { align: 'center' });
+    doc.text('Firma y Sello del Empleador', 160, yPos, { align: 'center' });
+    yPos += 4;
+    doc.setFontSize(7);
+    doc.text(`DNI: ${liquidacion.empleadoDocumento || '________________'}`, 50, yPos, { align: 'center' });
+    
+    // Footer
+    yPos = doc.internal.pageSize.getHeight() - 10;
+    doc.setFontSize(6);
     doc.setTextColor(128, 128, 128);
     doc.text(
-      `Recibo generado el ${new Date().toLocaleDateString('es-ES')}`,
-      pageWidth / 2,
+      `Recibo generado el ${new Date().toLocaleDateString('es-AR')} - Este documento es válido como comprobante de pago`,
+      colMid,
       yPos,
       { align: 'center' }
     );
@@ -253,7 +429,6 @@ const ReciboSueldo: React.FC<ReciboSueldoProps> = ({ liquidacion, periodo, open,
     const pdfBlob = doc.output('blob');
     const pdfUrl = URL.createObjectURL(pdfBlob);
     
-    // Abrir en nueva ventana para imprimir
     const printWindow = window.open(pdfUrl, '_blank');
     if (printWindow) {
       printWindow.onload = () => {
@@ -269,31 +444,125 @@ const ReciboSueldo: React.FC<ReciboSueldoProps> = ({ liquidacion, periodo, open,
     window.open(pdfUrl, '_blank');
   };
 
+  // Calcular neto para mostrar en el dialog
+  const netoMostrar = incluirAportes 
+    ? (liquidacion.sueldoBase + liquidacion.totalHorasExtra + (liquidacion.adicionalAntiguedad || 0) + 
+       (liquidacion.adicionalPresentismo || 0) + liquidacion.aguinaldos + liquidacion.bonus + 
+       totalIncentivos - totalAportes - liquidacion.adelantos - totalDescuentosPersonalizados)
+    : liquidacion.totalAPagar;
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Recibo de Sueldo</DialogTitle>
+      <DialogTitle sx={{ bgcolor: 'primary.main', color: 'white' }}>
+        Recibo de Haberes
+      </DialogTitle>
       <DialogContent>
         <Box sx={{ py: 2 }}>
           <Typography variant="h6" gutterBottom>
             {liquidacion.empleadoApellido}, {liquidacion.empleadoNombre}
           </Typography>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            Período: {periodo.nombre}
-          </Typography>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            {formatDateForDisplay(periodo.fechaInicio)} - {formatDateForDisplay(periodo.fechaFin)}
-          </Typography>
           
-          <Box sx={{ mt: 3, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-            <Typography variant="h5" color="primary.main" fontWeight="bold">
-              Total: $ {formatCurrency(liquidacion.totalAPagar)}
+          <Grid container spacing={1} sx={{ mb: 2 }}>
+            <Grid item xs={6}>
+              <Typography variant="body2" color="text.secondary">
+                Período: {periodo.nombre}
+              </Typography>
+            </Grid>
+            <Grid item xs={6}>
+              <Typography variant="body2" color="text.secondary">
+                {formatDateForDisplay(periodo.fechaInicio)} - {formatDateForDisplay(periodo.fechaFin)}
+              </Typography>
+            </Grid>
+            {liquidacion.empleadoLegajo && (
+              <Grid item xs={6}>
+                <Typography variant="body2" color="text.secondary">
+                  Legajo: {liquidacion.empleadoLegajo}
+                </Typography>
+              </Grid>
+            )}
+          </Grid>
+
+          <Divider sx={{ my: 2 }} />
+
+          {/* Resumen de conceptos */}
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+              Resumen de Haberes
+            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+              <Typography variant="body2">Sueldo Básico:</Typography>
+              <Typography variant="body2">$ {formatCurrency(liquidacion.sueldoBase)}</Typography>
+            </Box>
+            {liquidacion.totalHorasExtra > 0 && (
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="body2">Horas Extra:</Typography>
+                <Typography variant="body2">$ {formatCurrency(liquidacion.totalHorasExtra)}</Typography>
+              </Box>
+            )}
+            {totalIncentivos > 0 && (
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="body2" color="success.main">Incentivos:</Typography>
+                <Typography variant="body2" color="success.main">$ {formatCurrency(totalIncentivos)}</Typography>
+              </Box>
+            )}
+          </Box>
+
+          {incluirAportes && totalAportes > 0 && (
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Aportes Legales
+              </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="body2" color="error.main">Total Aportes (17%):</Typography>
+                <Typography variant="body2" color="error.main">-$ {formatCurrency(totalAportes)}</Typography>
+              </Box>
+            </Box>
+          )}
+
+          {(liquidacion.adelantos > 0 || totalDescuentosPersonalizados > 0) && (
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Otras Deducciones
+              </Typography>
+              {liquidacion.adelantos > 0 && (
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" color="warning.main">Adelantos:</Typography>
+                  <Typography variant="body2" color="warning.main">-$ {formatCurrency(liquidacion.adelantos)}</Typography>
+                </Box>
+              )}
+              {totalDescuentosPersonalizados > 0 && (
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" color="error.main">Descuentos:</Typography>
+                  <Typography variant="body2" color="error.main">-$ {formatCurrency(totalDescuentosPersonalizados)}</Typography>
+                </Box>
+              )}
+            </Box>
+          )}
+
+          <Divider sx={{ my: 2 }} />
+          
+          <Box sx={{ p: 2, bgcolor: 'success.light', borderRadius: 1 }}>
+            <Typography variant="h5" color="success.dark" fontWeight="bold" textAlign="center">
+              NETO: $ {formatCurrency(netoMostrar > 0 ? netoMostrar : liquidacion.totalAPagar)}
             </Typography>
           </Box>
 
-          <Box sx={{ mt: 3, display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Typography variant="caption" color="text.secondary">
-              Selecciona una opción para visualizar o imprimir el recibo:
+              {esEmpleadoFormal 
+                ? '📋 Empleado formal - Aportes habilitados por defecto'
+                : '💵 Empleado informal - Sin aportes por defecto'}
             </Typography>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={incluirAportes}
+                  onChange={(e) => setIncluirAportes(e.target.checked)}
+                  size="small"
+                />
+              }
+              label={<Typography variant="caption">Incluir aportes legales</Typography>}
+            />
           </Box>
         </Box>
       </DialogContent>

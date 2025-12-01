@@ -13,13 +13,18 @@ import {
   TableRow,
   Box,
   Chip,
-  Alert
+  Alert,
+  Tooltip
 } from '@mui/material';
 import {
-  AccountBalance as PayrollIcon
+  AccountBalance as PayrollIcon,
+  TrendingDown as DescuentoIcon,
+  TrendingUp as IncentivoIcon
 } from '@mui/icons-material';
 import { formatCurrency } from '../utils/formatters';
 import { fetchGastos } from '../redux/slices';
+import { fetchDescuentos } from '../redux/slices/descuentosEmpleadoSlice';
+import { fetchIncentivos } from '../redux/slices/incentivosEmpleadoSlice';
 
 interface EmployeePayrollProps {
   filterType: 'total' | 'month';
@@ -29,10 +34,20 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
   const dispatch = useDispatch<AppDispatch>();
   const { items: employees } = useSelector((state: RootState) => state.employees);
   const { items: gastos } = useSelector((state: RootState) => state.gastos);
+  const { items: descuentos } = useSelector((state: RootState) => state.descuentosEmpleado);
+  const { items: incentivos } = useSelector((state: RootState) => state.incentivosEmpleado);
 
  useEffect(() => {
   dispatch(fetchGastos({todosPeriodos: true}));
-  }, []);
+  // Cargar descuentos e incentivos del período seleccionado
+  if (filterType === 'month') {
+    dispatch(fetchDescuentos({ periodoAplicacion: selectedMonth }));
+    dispatch(fetchIncentivos({ periodoAplicacion: selectedMonth }));
+  } else {
+    dispatch(fetchDescuentos({}));
+    dispatch(fetchIncentivos({}));
+  }
+  }, [dispatch, filterType, selectedMonth]);
   // Obtener fecha de hoy para filtros StandBy
   const today = new Date().toISOString().split('T')[0];
 
@@ -113,7 +128,24 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
         // Calcular saldo pendiente solo con adelantos y sueldos regulares
         // Horas extra, aguinaldos y bonus NO afectan el sueldo base
         const pagosContraBasicos = sueldos + adelantos;
-        const saldoPendiente = employee.sueldoBase - pagosContraBasicos;
+        
+        // Calcular descuentos e incentivos del empleado
+        const descuentosEmpleado = descuentos
+          .filter(d => {
+            const empId = typeof d.empleadoId === 'string' ? d.empleadoId : d.empleadoId._id;
+            return empId === employee._id && d.estado !== 'anulado';
+          })
+          .reduce((sum, d) => sum + (d.montoCalculado || d.monto), 0);
+        
+        const incentivosEmpleado = incentivos
+          .filter(i => {
+            const empId = typeof i.empleadoId === 'string' ? i.empleadoId : i.empleadoId._id;
+            return empId === employee._id && i.estado !== 'anulado';
+          })
+          .reduce((sum, i) => sum + (i.montoCalculado || i.monto), 0);
+        
+        // Saldo pendiente ahora incluye descuentos (restan) e incentivos (suman)
+        const saldoPendiente = employee.sueldoBase - pagosContraBasicos - descuentosEmpleado + incentivosEmpleado;
 
         return {
           employeeId: employee._id || '',
@@ -126,10 +158,12 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
           sueldos,
           aguinaldos,
           bonus,
+          descuentos: descuentosEmpleado,
+          incentivos: incentivosEmpleado,
           saldoPendiente
         };
       });
-  }, [employees, sueldosActivos]);
+  }, [employees, sueldosActivos, descuentos, incentivos]);
 
   // Calcular totales generales
   const totales = payrollData.reduce((acc, emp) => ({
@@ -140,6 +174,8 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
     sueldos: acc.sueldos + emp.sueldos,
     aguinaldos: acc.aguinaldos + emp.aguinaldos,
     bonus: acc.bonus + emp.bonus,
+    descuentos: acc.descuentos + (emp.descuentos || 0),
+    incentivos: acc.incentivos + (emp.incentivos || 0),
     saldoPendiente: acc.saldoPendiente + emp.saldoPendiente
   }), { 
     sueldoBase: 0, 
@@ -149,6 +185,8 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
     sueldos: 0,
     aguinaldos: 0,
     bonus: 0,
+    descuentos: 0,
+    incentivos: 0,
     saldoPendiente: 0 
   });
 
@@ -180,13 +218,15 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
       <Alert severity="info" sx={{ mb: 2 }}>
         <Typography variant="body2">
           <strong>Información:</strong> Los datos se calculan automáticamente desde los registros de gastos 
-          en el rubro "SUELDOS". El saldo pendiente se calcula solo con sueldos regulares y adelantos. 
-          Las horas extra, aguinaldos y bonus son pagos adicionales que NO afectan el sueldo base.
+          en el rubro "SUELDOS". El saldo pendiente incluye: Sueldo Base - Pagos + Incentivos - Descuentos.
+          Las horas extra, aguinaldos y bonus son pagos adicionales.
         </Typography>
       </Alert>
 
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Empleados activos: {payrollData.length} | Registros de sueldos: {sueldosActivos.length}
+        Empleados activos: {payrollData.length} | Registros de sueldos: {sueldosActivos.length} | 
+        Descuentos: {descuentos.filter(d => d.estado !== 'anulado').length} | 
+        Incentivos: {incentivos.filter(i => i.estado !== 'anulado').length}
       </Typography>
 
       <TableContainer>
@@ -200,6 +240,22 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
               <TableCell align="right"><strong>Horas Extra</strong></TableCell>
               <TableCell align="right"><strong>Aguinaldos</strong></TableCell>
               <TableCell align="right"><strong>Bonus</strong></TableCell>
+              <TableCell align="right">
+                <Tooltip title="Descuentos por sanciones, faltantes, etc.">
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
+                    <DescuentoIcon fontSize="small" color="error" />
+                    <strong>Descuentos</strong>
+                  </Box>
+                </Tooltip>
+              </TableCell>
+              <TableCell align="right">
+                <Tooltip title="Incentivos, premios, bonificaciones">
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
+                    <IncentivoIcon fontSize="small" color="success" />
+                    <strong>Incentivos</strong>
+                  </Box>
+                </Tooltip>
+              </TableCell>
               <TableCell align="right"><strong>Total Pagado</strong></TableCell>
               <TableCell align="right"><strong>Saldo Pendiente</strong></TableCell>
               <TableCell align="center"><strong>Estado</strong></TableCell>
@@ -247,6 +303,18 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
                 <TableCell align="right">
                   <Typography variant="body2" color="purple">
                     {formatCurrency(employee.bonus)}
+                  </Typography>
+                </TableCell>
+                
+                <TableCell align="right">
+                  <Typography variant="body2" color="error.main" fontWeight={employee.descuentos > 0 ? 'bold' : 'normal'}>
+                    {employee.descuentos > 0 ? `-${formatCurrency(employee.descuentos)}` : formatCurrency(0)}
+                  </Typography>
+                </TableCell>
+                
+                <TableCell align="right">
+                  <Typography variant="body2" color="success.main" fontWeight={employee.incentivos > 0 ? 'bold' : 'normal'}>
+                    {employee.incentivos > 0 ? `+${formatCurrency(employee.incentivos)}` : formatCurrency(0)}
                   </Typography>
                 </TableCell>
                 
@@ -312,6 +380,16 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
                 </Typography>
               </TableCell>
               <TableCell align="right">
+                <Typography variant="h6" fontWeight="bold" color="error.main">
+                  -{formatCurrency(totales.descuentos)}
+                </Typography>
+              </TableCell>
+              <TableCell align="right">
+                <Typography variant="h6" fontWeight="bold" color="success.main">
+                  +{formatCurrency(totales.incentivos)}
+                </Typography>
+              </TableCell>
+              <TableCell align="right">
                 <Typography variant="h6" fontWeight="bold" color="text.primary">
                   {formatCurrency(totales.totalPagado)}
                 </Typography>
@@ -336,7 +414,7 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
 
             {payrollData.length === 0 && (
               <TableRow>
-                <TableCell colSpan={10} align="center">
+                <TableCell colSpan={12} align="center">
                   <Typography variant="body2" color="text.secondary" sx={{ py: 3 }}>
                     No hay empleados activos registrados.
                   </Typography>
@@ -354,6 +432,12 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
           💰 <strong>Pagos Adicionales:</strong> Horas extra, aguinaldos y bonus son compensaciones adicionales independientes del sueldo base
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+          📉 <strong>Descuentos:</strong> Sanciones, faltantes de caja, roturas, ausencias y otros descuentos aplicados al empleado
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+          🏆 <strong>Incentivos:</strong> Premios por productividad, ventas, presentismo perfecto, comisiones y bonificaciones especiales
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
           🔍 <strong>Filtro:</strong> {filterType === 'total' ? 'Histórico completo' : `Período: ${monthName}`}
