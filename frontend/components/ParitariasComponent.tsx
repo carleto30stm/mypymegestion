@@ -163,7 +163,7 @@ const ParitariasComponent: React.FC = () => {
       descripcion: formData.descripcion
     };
 
-    if (editingCategory) {
+    if (editingCategory && editingCategory._id) {
       await dispatch(updateCategory({ id: editingCategory._id, category: categoryData }));
     } else {
       await dispatch(addCategory(categoryData));
@@ -328,7 +328,7 @@ const ParitariasComponent: React.FC = () => {
                               </IconButton>
                             </Tooltip>
                             <Tooltip title="Eliminar">
-                              <IconButton onClick={() => handleDeleteCategory(category._id)} color="error" size="small">
+                              <IconButton onClick={() => category._id && handleDeleteCategory(category._id)} color="error" size="small">
                                 <DeleteIcon />
                               </IconButton>
                             </Tooltip>

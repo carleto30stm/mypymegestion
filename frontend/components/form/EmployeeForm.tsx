@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
-import { AppDispatch, RootState } from '../../redux/store';
+import { useDispatch } from 'react-redux';
+import { AppDispatch } from '../../redux/store';
 import { addEmployee, updateEmployee } from '../../redux/slices/employeesSlice';
-import { fetchCategories } from '../../redux/slices/categoriesSlice';
+import { categoriasAPI, CategoriaUnificada } from '../../services/rrhhService';
 import { formatCurrency, formatNumberInput, getNumericValue } from '../../utils/formatters';
 import { Employee, ObraSocial, AdicionalesEmpleado } from '../../types';
 import {
@@ -35,7 +35,10 @@ interface EmployeeFormProps {
 
 const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCancel }) => {
   const dispatch = useDispatch<AppDispatch>();
-  const { items: categories } = useSelector((state: RootState) => state.categories);
+  
+  // Estado local para categorías unificadas (internas + CCT)
+  const [categorias, setCategorias] = useState<CategoriaUnificada[]>([]);
+  const [loadingCategorias, setLoadingCategorias] = useState(false);
   
   const [formData, setFormData] = useState<Omit<Employee, '_id'>>({
     nombre: '',
@@ -78,8 +81,20 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
   const [nuevoAdicional, setNuevoAdicional] = useState({ concepto: '', monto: '' });
 
   useEffect(() => {
-    dispatch(fetchCategories());
-  }, [dispatch]);
+    const cargarCategorias = async () => {
+      setLoadingCategorias(true);
+      try {
+        // Cargar todas las categorías (con y sin valorHora) para empleados
+        const data = await categoriasAPI.obtenerTodasParaManoObra(false);
+        setCategorias(data);
+      } catch (error) {
+        console.error('Error cargando categorías:', error);
+      } finally {
+        setLoadingCategorias(false);
+      }
+    };
+    cargarCategorias();
+  }, []);
 
   useEffect(() => {
     if (employee) {
@@ -256,17 +271,17 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
 
   const handleCategoryChange = (event: SelectChangeEvent) => {
     const categoryId = event.target.value;
-    const selectedCategory = categories.find(c => c._id === categoryId);
+    const selectedCategory = categorias.find(c => c._id === categoryId);
     
     if (selectedCategory) {
       setFormData(prev => ({
         ...prev,
         categoria: categoryId,
-        sueldoBase: selectedCategory.sueldoBasico,
+        sueldoBase: selectedCategory.sueldoBasico || 0,
         hora: selectedCategory.valorHora || 0,
-        puesto: selectedCategory.nombre // Opcional: actualizar puesto con nombre de categoría
+        puesto: selectedCategory.nombre.split(' (')[0] // Quitar el nombre del convenio si existe
       }));
-      setSueldoFormatted(formatCurrency(selectedCategory.sueldoBasico));
+      setSueldoFormatted(formatCurrency(selectedCategory.sueldoBasico || 0));
       setHoraFormatted(formatCurrency(selectedCategory.valorHora || 0));
     } else {
       setFormData(prev => ({ ...prev, categoria: '' }));
@@ -331,11 +346,13 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
                 value={formData.categoria || ''}
                 label="Categoría"
                 onChange={handleCategoryChange}
+                disabled={loadingCategorias}
               >
                 <MenuItem value=""><em>Ninguna</em></MenuItem>
-                {categories.map((cat) => (
+                {categorias.map((cat) => (
                   <MenuItem key={cat._id} value={cat._id}>
-                    {cat.nombre}
+                    {cat.origen === 'convenio' ? '📋 ' : '🏢 '}{cat.nombre}
+                    {cat.sueldoBasico ? ` - $${cat.sueldoBasico.toLocaleString('es-AR')}` : ''}
                   </MenuItem>
                 ))}
               </Select>

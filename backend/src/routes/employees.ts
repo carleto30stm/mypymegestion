@@ -54,6 +54,7 @@ router.post('/', async (req, res) => {
       nombre,
       apellido,
       documento,
+      modalidadContratacion,
       direccion,
       fechaNacimiento,
       puesto,
@@ -92,6 +93,7 @@ router.post('/', async (req, res) => {
       sueldoBase: Number(sueldoBase),
       hora: Number(hora),
       estado: estado || 'activo',
+      modalidadContratacion: modalidadContratacion || 'informal',
       email: email?.trim(),
       telefono: telefono?.trim(),
       observaciones: observaciones?.trim()
@@ -134,6 +136,7 @@ router.put('/:id', async (req, res) => {
       nombre,
       apellido,
       documento,
+      modalidadContratacion,
       direccion,
       fechaNacimiento,
       puesto,
@@ -183,6 +186,10 @@ router.put('/:id', async (req, res) => {
     employee.sueldoBase = Number(sueldoBase);
     employee.hora = Number(hora);
     employee.estado = estado || 'activo';
+    // Guardar modalidad de contratación si viene en el body
+    if (modalidadContratacion) {
+      employee.modalidadContratacion = modalidadContratacion;
+    }
     employee.email = email?.trim();
     employee.telefono = telefono?.trim();
     employee.observaciones = observaciones?.trim();

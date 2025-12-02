@@ -1090,6 +1090,7 @@ const CobranzasPage: React.FC = () => {
         montoTotal={ventasSeleccionadas.reduce((sum, v) => sum + v.saldoPendiente, 0)}
         cliente={clienteSeleccionado || undefined}
         onConfirm={handleConfirmarPago}
+        permitirPagoParcial={true}
       />
 
       {/* Modal Ver Detalle Recibo */}

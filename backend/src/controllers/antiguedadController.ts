@@ -159,7 +159,9 @@ export const getAntiguedadTodos = async (req: Request, res: Response) => {
     const { area, incluirAdicional } = req.query;
 
     // Construir filtro
-    const filtro: any = { activo: true };
+    // Nota: el modelo de Employee usa el campo `estado` con valores 'activo'|'inactivo'
+    // por eso debemos filtrar por estado: 'activo' (no `activo: true`).
+    const filtro: any = { estado: 'activo' };
     if (area) {
       filtro.area = area;
     }

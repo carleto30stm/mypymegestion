@@ -11,6 +11,7 @@ export interface ICategoriaConvenio {
   nombre: string;           // Ej: "Oficial", "Medio Oficial", "Ayudante"
   descripcion?: string;
   salarioBasico: number;    // Sueldo básico de la categoría
+  valorHora?: number;       // Valor hora (opcional, si no se define se calcula automáticamente)
   adicionales?: {
     concepto: string;       // Ej: "Antigüedad", "Título", "Presentismo"
     tipo: 'porcentaje' | 'fijo';
@@ -107,6 +108,7 @@ const CategoriaConvenioSchema = new Schema({
   nombre: { type: String, required: true },
   descripcion: { type: String },
   salarioBasico: { type: Number, required: true, min: 0 },
+  valorHora: { type: Number, min: 0 }, // Opcional: si no se define, se calcula automáticamente
   adicionales: [AdicionalCategoriaSchema],
   orden: { type: Number, default: 0 },
   activa: { type: Boolean, default: true }

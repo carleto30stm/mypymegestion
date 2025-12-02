@@ -1,11 +1,14 @@
 import express from 'express';
 import Category from '../models/Category.js';
+import type { ICategory } from '../models/Category.js';
 import Employee from '../models/Employee.js';
+import Convenio from '../models/Convenio.js';
+import type { IConvenio } from '../models/Convenio.js';
 import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-// @desc    Obtener todas las categorías
+// @desc    Obtener todas las categorías (internas)
 // @route   GET /api/categories
 // @access  Private
 router.get('/', async (req, res) => {
@@ -14,6 +17,108 @@ router.get('/', async (req, res) => {
         res.json(categories);
     } catch (error) {
         res.status(500).json({ message: 'Error al obtener categorías', error });
+    }
+});
+
+// @desc    Obtener todas las categorías unificadas (internas + CCT) para mano de obra
+// @route   GET /api/categories/todas-mano-obra
+// @access  Private
+// @query   soloConValorHora (boolean) - Solo devolver categorías que tienen valor hora > 0
+router.get('/todas-mano-obra', async (req, res) => {
+    try {
+        const soloConValorHora = req.query.soloConValorHora === 'true';
+        const categoriasUnificadas: Array<{
+            _id: string;
+            nombre: string;
+            valorHora: number;
+            sueldoBasico?: number;
+            origen: 'interna' | 'convenio';
+            convenioId?: string;
+            convenioNombre?: string;
+            codigoCategoria?: string;
+        }> = [];
+
+        // 1. Obtener categorías internas
+        const categoriasInternas = await Category.find({}).sort({ nombre: 1 });
+        
+        for (const cat of categoriasInternas) {
+            // Usar valorHora si está definido, sino calcularlo desde sueldoBasico
+            // Fórmula: sueldoBasico / (48 horas semanales * 4.33 semanas promedio)
+            let valorHoraFinal: number;
+            if (cat.valorHora && cat.valorHora > 0) {
+                valorHoraFinal = cat.valorHora;
+            } else if (cat.sueldoBasico && cat.sueldoBasico > 0) {
+                const horasMensuales = 48 * 4.33; // ~208 horas mensuales
+                valorHoraFinal = cat.sueldoBasico / horasMensuales;
+            } else {
+                valorHoraFinal = 0;
+            }
+            
+            // Si se requiere valorHora > 0 y no lo tiene, saltar
+            if (soloConValorHora && valorHoraFinal <= 0) continue;
+            
+            categoriasUnificadas.push({
+                _id: (cat._id as any).toString(),
+                nombre: cat.nombre,
+                valorHora: Math.round(valorHoraFinal * 100) / 100,
+                sueldoBasico: cat.sueldoBasico,
+                origen: 'interna'
+            });
+        }
+
+        // 2. Obtener categorías de convenios CCT activos
+        const convenios = await Convenio.find({ estado: 'vigente' });
+        
+        for (const conv of convenios) {
+            if (!conv.categorias) continue;
+            
+            for (const cat of conv.categorias) {
+                if (cat.activa === false) continue;
+                
+                // Usar valorHora del convenio si está definido, sino calcularlo
+                let valorHoraFinal: number;
+                if (cat.valorHora && cat.valorHora > 0) {
+                    // Usar el valor hora definido manualmente
+                    valorHoraFinal = cat.valorHora;
+                } else {
+                    // Calcular automáticamente: salarioBasico / (jornadaCompleta * 4.33 semanas promedio)
+                    const horasMensuales = (conv.jornadaCompleta || 48) * 4.33;
+                    valorHoraFinal = cat.salarioBasico / horasMensuales;
+                }
+                
+                // Si se requiere valorHora > 0 y no lo tiene, saltar
+                if (soloConValorHora && valorHoraFinal <= 0) continue;
+                
+                categoriasUnificadas.push({
+                    _id: `${(conv._id as any).toString()}|${cat.codigo}`, // ID compuesto
+                    nombre: `${cat.nombre} (${conv.nombre})`,
+                    valorHora: Math.round(valorHoraFinal * 100) / 100,
+                    sueldoBasico: cat.salarioBasico,
+                    origen: 'convenio',
+                    convenioId: (conv._id as any).toString(),
+                    convenioNombre: conv.nombre,
+                    codigoCategoria: cat.codigo
+                });
+            }
+        }
+
+        // Ordenar: primero internas, luego por convenio, y alfabéticamente
+        categoriasUnificadas.sort((a, b) => {
+            if (a.origen !== b.origen) {
+                return a.origen === 'interna' ? -1 : 1;
+            }
+            if (a.origen === 'convenio' && b.origen === 'convenio') {
+                if (a.convenioNombre !== b.convenioNombre) {
+                    return (a.convenioNombre || '').localeCompare(b.convenioNombre || '');
+                }
+            }
+            return a.nombre.localeCompare(b.nombre);
+        });
+
+        res.json(categoriasUnificadas);
+    } catch (error) {
+        console.error('Error al obtener categorías unificadas:', error);
+        res.status(500).json({ message: 'Error al obtener categorías unificadas', error });
     }
 });
 

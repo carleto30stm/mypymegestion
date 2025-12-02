@@ -56,6 +56,17 @@ export const MOMENTO_COBRO = ['anticipado', 'contra_entrega', 'diferido'] as con
 
 // Estados de recibo de pago
 export const ESTADOS_RECIBO = ['activo', 'anulado'] as const;
+
+// Interface para categorías de empleados (para mano de obra en recetas)
+export interface Category {
+  _id?: string;
+  nombre: string;
+  sueldoBasico: number;
+  valorHora?: number;
+  descripcion?: string;
+  fechaActualizacion?: string;
+}
+
 export interface User {
   id: string;
   username: string;
@@ -857,6 +868,16 @@ export interface ItemReceta {
   costo?: number;
 }
 
+// Interface para item de mano de obra en receta (operarios por categoría)
+export interface ItemManoObra {
+  categoriaId: string;
+  nombreCategoria: string;
+  cantidadOperarios: number;  // Cantidad de operarios de esta categoría
+  horasPorOperario: number;   // Horas que trabaja cada operario
+  valorHora: number;          // Valor hora de la categoría
+  costoTotal?: number;        // Calculado: cantidadOperarios * horasPorOperario * valorHora
+}
+
 // Interface para receta (BOM)
 export interface Receta {
   _id?: string;
@@ -864,10 +885,11 @@ export interface Receta {
   codigoProducto: string;
   nombreProducto: string;
   materiasPrimas: ItemReceta[];
+  manoObra?: ItemManoObra[];  // Array de operarios por categoría
   rendimiento: number;
   tiempoPreparacion: number;
   costoMateriasPrimas: number;
-  costoManoObra?: number;
+  costoManoObra?: number;     // Calculado desde manoObra[]
   costoIndirecto?: number;
   costoTotal: number;
   costoUnitario?: number;

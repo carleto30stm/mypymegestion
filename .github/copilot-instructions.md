@@ -18,6 +18,9 @@ Breve: este proyecto es una aplicación fullstack (React + Vite en frontend, Nod
   - Backend: Express + TypeScript + Mongoose en `backend/src/`.
     - `backend/src/models/Gasto.ts` contiene esquema y validación por rubro/subRubro; actualizarlo cuando añadas rubros.
   - Comunicación: todas las llamadas REST usan prefijo `/api/*`. Ejemplos: `/api/auth` (login), `/api/gastos` (CRUD gastos).
+    - Importante: cuando trabajes con categorías relacionadas con "mano de obra" (cálculo de costos, selección de categoría para operarios, etc.) utiliza el endpoint unificado
+      `/api/categories/todas-mano-obra` — este endpoint devuelve tanto las **categorías internas** como las **categorías de convenios (CCT)** y, si no existe `valorHora`, calcula automáticamente un `valorHora` a partir del salario básico. 
+    - Para operaciones CRUD específicas sobre las categorías internas (crear/editar/eliminar) continúa usando `/api/categories` como antes.
   - **CRÍTICO - Prefijo /api en Redux slices**: SIEMPRE usar el prefijo `/api` en las URLs de los thunks de Redux. El cliente axios (`services/api.ts`) tiene configurado `baseURL` que ya incluye el dominio, pero las rutas DEBEN empezar con `/api`. Ejemplo correcto: `api.get('/api/ventas/estadisticas')`, NO `api.get('/ventas/estadisticas')`.
 
 3) Estado y autenticación (puntos críticos que rompen roles)
