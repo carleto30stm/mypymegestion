@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   Paper,
@@ -32,13 +32,17 @@ import {
   ExpandLess as CollapseIcon,
   Receipt as ReceiptIcon,
   CheckCircle as CheckIcon,
-  PersonAdd as PersonAddIcon
+  PersonAdd as PersonAddIcon,
+  TrendingDown as DescuentoIcon,
+  TrendingUp as IncentivoIcon
 } from '@mui/icons-material';
 import { AppDispatch, RootState } from '../redux/store';
-import { LiquidacionPeriodo, LiquidacionEmpleado } from '../types';
+import { LiquidacionPeriodo, LiquidacionEmpleado, TIPOS_DESCUENTO, TIPOS_INCENTIVO, APORTES_EMPLEADO, CONTRIBUCIONES_EMPLEADOR } from '../types';
 import { liquidarEmpleado, fetchPeriodoById, cerrarPeriodo, agregarEmpleado } from '../redux/slices/liquidacionSlice';
 import { fetchGastos } from '../redux/slices/gastosSlice';
 import { fetchEmployees } from '../redux/slices/employeesSlice';
+import { fetchDescuentos } from '../redux/slices/descuentosEmpleadoSlice';
+import { fetchIncentivos } from '../redux/slices/incentivosEmpleadoSlice';
 import { formatCurrency } from '../utils/formatters';
 import ReciboSueldo from './ReciboSueldo';
 
@@ -50,6 +54,8 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
   const dispatch = useDispatch<AppDispatch>();
   const user = useSelector((state: RootState) => state.auth.user);
   const { items: empleados } = useSelector((state: RootState) => state.employees);
+  const { items: descuentosPeriodo } = useSelector((state: RootState) => state.descuentosEmpleado);
+  const { items: incentivosPeriodo } = useSelector((state: RootState) => state.incentivosEmpleado);
   
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [openLiquidar, setOpenLiquidar] = useState(false);
@@ -66,12 +72,70 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
 
   const isEditable = periodo.estado === 'abierto' && (user?.userType === 'admin' || user?.userType === 'oper_ad');
 
+  // Obtener período en formato YYYY-MM desde las fechas del período
+  const periodoMes = useMemo(() => {
+    if (!periodo.fechaInicio) return '';
+    return periodo.fechaInicio.slice(0, 7); // YYYY-MM
+  }, [periodo.fechaInicio]);
+
   // Cargar empleados si no están cargados
-  React.useEffect(() => {
+  useEffect(() => {
     if (empleados.length === 0) {
       dispatch(fetchEmployees());
     }
   }, [dispatch, empleados.length]);
+
+  // Cargar descuentos e incentivos del período
+  useEffect(() => {
+    if (periodoMes) {
+      dispatch(fetchDescuentos({ periodoAplicacion: periodoMes, estado: 'aplicado' }));
+      dispatch(fetchIncentivos({ periodoAplicacion: periodoMes, estado: 'pagado' }));
+    }
+  }, [dispatch, periodoMes]);
+
+  // Calcular descuentos e incentivos por empleado
+  const descuentosPorEmpleado = useMemo(() => {
+    const map: Record<string, number> = {};
+    descuentosPeriodo.forEach(d => {
+      if (d.estado === 'aplicado' || d.estado === 'pendiente') {
+        const empId = typeof d.empleadoId === 'string' ? d.empleadoId : d.empleadoId._id;
+        map[empId] = (map[empId] || 0) + (d.montoCalculado || d.monto);
+      }
+    });
+    return map;
+  }, [descuentosPeriodo]);
+
+  const incentivosPorEmpleado = useMemo(() => {
+    const map: Record<string, number> = {};
+    incentivosPeriodo.forEach(i => {
+      if (i.estado === 'pagado' || i.estado === 'pendiente') {
+        const empId = typeof i.empleadoId === 'string' ? i.empleadoId : i.empleadoId._id;
+        map[empId] = (map[empId] || 0) + (i.montoCalculado || i.monto);
+      }
+    });
+    return map;
+  }, [incentivosPeriodo]);
+
+  // Detalle de descuentos por empleado
+  const descuentosDetalleEmpleado = useMemo(() => {
+    const map: Record<string, typeof descuentosPeriodo> = {};
+    descuentosPeriodo.forEach(d => {
+      const empId = typeof d.empleadoId === 'string' ? d.empleadoId : d.empleadoId._id;
+      if (!map[empId]) map[empId] = [];
+      map[empId].push(d);
+    });
+    return map;
+  }, [descuentosPeriodo]);
+
+  const incentivosDetalleEmpleado = useMemo(() => {
+    const map: Record<string, typeof incentivosPeriodo> = {};
+    incentivosPeriodo.forEach(i => {
+      const empId = typeof i.empleadoId === 'string' ? i.empleadoId : i.empleadoId._id;
+      if (!map[empId]) map[empId] = [];
+      map[empId].push(i);
+    });
+    return map;
+  }, [incentivosPeriodo]);
 
   // Filtrar empleados que no están en el período
   const empleadosDisponibles = empleados.filter(emp => 
@@ -149,8 +213,95 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
     }
   };
 
+  // Función para enriquecer datos de liquidación con datos del empleado
+  const enriquecerLiquidacionConEmpleado = (liquidacion: LiquidacionEmpleado): LiquidacionEmpleado => {
+    const empleadoData = empleados.find(e => e._id === liquidacion.empleadoId);
+    if (!empleadoData) return liquidacion;
+
+    // Calcular antigüedad en años
+    let antiguedad = 0;
+    if (empleadoData.fechaIngreso) {
+      const fechaIngreso = new Date(empleadoData.fechaIngreso);
+      const hoy = new Date();
+      antiguedad = Math.floor((hoy.getTime() - fechaIngreso.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+    }
+
+    // Calcular adicionales
+    const adicionalAntiguedad = liquidacion.sueldoBase * (antiguedad * 0.01); // 1% por año
+    const adicionalPresentismo = empleadoData.adicionales?.presentismo 
+      ? liquidacion.sueldoBase * 0.0833 // 8.33%
+      : 0;
+
+    // Base imponible para aportes
+    const baseImponible = liquidacion.sueldoBase + liquidacion.totalHorasExtra + adicionalAntiguedad + adicionalPresentismo;
+    
+    // Determinar si es empleado formal (con aportes)
+    const esEmpleadoFormal = empleadoData.modalidadContratacion === 'formal';
+    
+    // Calcular aportes solo si es empleado formal
+    const aporteJubilacion = esEmpleadoFormal ? baseImponible * (APORTES_EMPLEADO.JUBILACION / 100) : 0;
+    const aporteObraSocial = esEmpleadoFormal ? baseImponible * (APORTES_EMPLEADO.OBRA_SOCIAL / 100) : 0;
+    const aportePami = esEmpleadoFormal ? baseImponible * (APORTES_EMPLEADO.PAMI / 100) : 0;
+    const aporteSindicato = esEmpleadoFormal && empleadoData.sindicato ? baseImponible * (APORTES_EMPLEADO.SINDICATO / 100) : 0;
+    const totalAportes = aporteJubilacion + aporteObraSocial + aportePami + aporteSindicato;
+
+    // Calcular contribuciones patronales (para el gasto AFIP)
+    const contribJubilacion = esEmpleadoFormal ? baseImponible * (CONTRIBUCIONES_EMPLEADOR.JUBILACION / 100) : 0;
+    const contribObraSocial = esEmpleadoFormal ? baseImponible * (CONTRIBUCIONES_EMPLEADOR.OBRA_SOCIAL / 100) : 0;
+    const contribPami = esEmpleadoFormal ? baseImponible * (CONTRIBUCIONES_EMPLEADOR.PAMI / 100) : 0;
+    const contribART = esEmpleadoFormal ? baseImponible * (CONTRIBUCIONES_EMPLEADOR.ART / 100) : 0;
+    const totalContribuciones = contribJubilacion + contribObraSocial + contribPami + contribART;
+
+    // Costo total para el empleador
+    const costoTotal = baseImponible + totalContribuciones;
+
+    // Obtener descuentos e incentivos
+    const descuentosEmp = descuentosPorEmpleado[liquidacion.empleadoId] || 0;
+    const incentivosEmp = incentivosPorEmpleado[liquidacion.empleadoId] || 0;
+
+    return {
+      ...liquidacion,
+      empleadoDocumento: empleadoData.documento,
+      empleadoCuit: empleadoData.cuit,
+      empleadoLegajo: empleadoData.legajo,
+      empleadoPuesto: empleadoData.puesto,
+      empleadoFechaIngreso: empleadoData.fechaIngreso,
+      empleadoCategoria: empleadoData.categoriaConvenio,
+      empleadoObraSocial: empleadoData.obraSocial?.nombre,
+      empleadoSindicato: empleadoData.sindicato,
+      empleadoAntiguedad: antiguedad,
+      empleadoModalidad: empleadoData.modalidadContratacion || 'informal',
+      adicionalAntiguedad,
+      adicionalPresentismo,
+      adicionalZona: 0,
+      otrosAdicionales: 0,
+      viaticos: 0,
+      otrosNoRemunerativos: 0,
+      totalNoRemunerativo: 0,
+      totalRemunerativo: baseImponible,
+      totalBruto: baseImponible + liquidacion.aguinaldos + liquidacion.bonus + incentivosEmp,
+      // Aportes del empleado (solo para formales)
+      aporteJubilacion,
+      aporteObraSocial,
+      aportePami,
+      aporteSindicato,
+      totalAportes,
+      // Contribuciones patronales (solo para formales)
+      contribucionJubilacion: contribJubilacion,
+      contribucionObraSocial: contribObraSocial,
+      contribucionPami: contribPami,
+      contribucionART: contribART,
+      totalContribuciones,
+      // Costo total empleador
+      costoTotal,
+      // Deducciones totales
+      totalDeducciones: liquidacion.adelantos + descuentosEmp + totalAportes,
+    };
+  };
+
   const handleOpenRecibo = (empleado: LiquidacionEmpleado) => {
-    setReciboEmpleado(empleado);
+    const liquidacionEnriquecida = enriquecerLiquidacionConEmpleado(empleado);
+    setReciboEmpleado(liquidacionEnriquecida);
     setOpenRecibo(true);
   };
 
@@ -201,27 +352,53 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
 
   const pendientesCount = periodo.liquidaciones.filter(l => l.estado === 'pendiente').length;
   const pagadosCount = periodo.liquidaciones.filter(l => l.estado === 'pagado').length;
+  
+  // Totales de descuentos e incentivos del período
+  const totalDescuentosPeriodo = Object.values(descuentosPorEmpleado).reduce((sum, val) => sum + val, 0);
+  const totalIncentivosPeriodo = Object.values(incentivosPorEmpleado).reduce((sum, val) => sum + val, 0);
 
   return (
     <Box>
       {/* Estadísticas */}
-      <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
-        <Paper sx={{ flex: 1, p: 2 }}>
+      <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+        <Paper sx={{ flex: '1 1 150px', p: 2 }}>
           <Typography variant="body2" color="text.secondary">Empleados Totales</Typography>
           <Typography variant="h4" fontWeight="bold">{periodo.liquidaciones.length}</Typography>
         </Paper>
-        <Paper sx={{ flex: 1, p: 2 }}>
+        <Paper sx={{ flex: '1 1 150px', p: 2 }}>
           <Typography variant="body2" color="text.secondary">Pendientes de Pago</Typography>
           <Typography variant="h4" fontWeight="bold" color="warning.main">{pendientesCount}</Typography>
         </Paper>
-        <Paper sx={{ flex: 1, p: 2 }}>
+        <Paper sx={{ flex: '1 1 150px', p: 2 }}>
           <Typography variant="body2" color="text.secondary">Pagados</Typography>
           <Typography variant="h4" fontWeight="bold" color="success.main">{pagadosCount}</Typography>
         </Paper>
-        <Paper sx={{ flex: 1, p: 2 }}>
+        <Paper sx={{ flex: '1 1 150px', p: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <DescuentoIcon fontSize="small" color="error" />
+            <Typography variant="body2" color="text.secondary">Descuentos</Typography>
+          </Box>
+          <Typography variant="h5" fontWeight="bold" color="error.main">
+            -{formatCurrency(totalDescuentosPeriodo)}
+          </Typography>
+        </Paper>
+        <Paper sx={{ flex: '1 1 150px', p: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <IncentivoIcon fontSize="small" color="success" />
+            <Typography variant="body2" color="text.secondary">Incentivos</Typography>
+          </Box>
+          <Typography variant="h5" fontWeight="bold" color="success.main">
+            +{formatCurrency(totalIncentivosPeriodo)}
+          </Typography>
+        </Paper>
+        <Paper sx={{ flex: '1 1 150px', p: 2 }}>
           <Typography variant="body2" color="text.secondary">Total a Liquidar</Typography>
           <Typography variant="h4" fontWeight="bold" color="primary.main">
-            {formatCurrency(periodo.tipo === 'quincenal' ? periodo.totalGeneral / 2 : periodo.totalGeneral)}
+            {formatCurrency(
+              (periodo.tipo === 'quincenal' ? periodo.totalGeneral / 2 : periodo.totalGeneral) 
+              - totalDescuentosPeriodo 
+              + totalIncentivosPeriodo
+            )}
           </Typography>
         </Paper>
       </Box>
@@ -262,13 +439,52 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
               <TableCell align="right"><strong>Sueldo Base</strong></TableCell>
               <TableCell align="right"><strong>Horas Extra</strong></TableCell>
               <TableCell align="right"><strong>Adelantos</strong></TableCell>
+              <TableCell align="right">
+                <Tooltip title="Descuentos por sanciones, faltantes, etc.">
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
+                    <DescuentoIcon fontSize="small" color="error" />
+                    <strong>Descuentos</strong>
+                  </Box>
+                </Tooltip>
+              </TableCell>
+              <TableCell align="right">
+                <Tooltip title="Incentivos por productividad, ventas, etc.">
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
+                    <IncentivoIcon fontSize="small" color="success" />
+                    <strong>Incentivos</strong>
+                  </Box>
+                </Tooltip>
+              </TableCell>
               <TableCell align="right"><strong>Total a Pagar</strong></TableCell>
               <TableCell align="center"><strong>Estado</strong></TableCell>
               <TableCell align="center"><strong>Acciones</strong></TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {periodo.liquidaciones.map((liquidacion) => (
+            {periodo.liquidaciones.map((liquidacion) => {
+              // Calcular descuentos e incentivos para este empleado
+              const descuentosEmp = descuentosPorEmpleado[liquidacion.empleadoId] || 0;
+              const incentivosEmp = incentivosPorEmpleado[liquidacion.empleadoId] || 0;
+              const descuentosDetalleEmp = descuentosDetalleEmpleado[liquidacion.empleadoId] || [];
+              const incentivosDetalleEmp = incentivosDetalleEmpleado[liquidacion.empleadoId] || [];
+              
+              // Calcular total ajustado
+              const sueldoBaseAjustado = periodo.tipo === 'quincenal' ? liquidacion.sueldoBase / 2 : liquidacion.sueldoBase;
+              
+              // Obtener modalidad del empleado
+              const empleadoData = empleados.find(e => e._id === liquidacion.empleadoId);
+              const esEmpleadoFormal = empleadoData?.modalidadContratacion === 'formal';
+              
+              // Calcular aportes si es formal
+              const baseImponible = sueldoBaseAjustado + liquidacion.totalHorasExtra;
+              const totalAportesEmp = esEmpleadoFormal 
+                ? baseImponible * ((APORTES_EMPLEADO.JUBILACION + APORTES_EMPLEADO.OBRA_SOCIAL + APORTES_EMPLEADO.PAMI + (empleadoData?.sindicato ? APORTES_EMPLEADO.SINDICATO : 0)) / 100)
+                : 0;
+              
+              // Total ajustado (informal = bruto, formal = neto)
+              const totalAjustado = sueldoBaseAjustado + liquidacion.totalHorasExtra - liquidacion.adelantos - descuentosEmp + incentivosEmp - totalAportesEmp;
+              
+              return (
               <React.Fragment key={liquidacion.empleadoId}>
                 <TableRow hover>
                   <TableCell>
@@ -277,13 +493,24 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
                     </IconButton>
                   </TableCell>
                   <TableCell>
-                    <Typography variant="body2" fontWeight="medium">
-                      {liquidacion.empleadoApellido}, {liquidacion.empleadoNombre}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="body2" fontWeight="medium">
+                        {liquidacion.empleadoApellido}, {liquidacion.empleadoNombre}
+                      </Typography>
+                      <Tooltip title={esEmpleadoFormal ? 'Empleado formal - Con aportes' : 'Empleado informal - Pago en mano'}>
+                        <Chip 
+                          label={esEmpleadoFormal ? '📋' : '💵'} 
+                          size="small" 
+                          variant="outlined"
+                          color={esEmpleadoFormal ? 'primary' : 'default'}
+                          sx={{ height: 20, fontSize: '0.7rem' }}
+                        />
+                      </Tooltip>
+                    </Box>
                   </TableCell>
                   <TableCell align="right">
                     <Typography variant="body2" color="text.secondary">
-                      {formatCurrency(periodo.tipo === 'quincenal' ? liquidacion.sueldoBase / 2 : liquidacion.sueldoBase)}
+                      {formatCurrency(sueldoBaseAjustado)}
                     </Typography>
                   </TableCell>
                   <TableCell align="right">
@@ -297,9 +524,26 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
                     </Typography>
                   </TableCell>
                   <TableCell align="right">
-                    <Typography variant="body2" fontWeight="bold" color="primary.main">
-                      {formatCurrency(periodo.tipo === 'quincenal' ? liquidacion.totalAPagar / 2 : liquidacion.totalAPagar)}
+                    <Typography variant="body2" color="error.main" fontWeight={descuentosEmp > 0 ? 'medium' : 'normal'}>
+                      {descuentosEmp > 0 ? `-${formatCurrency(descuentosEmp)}` : '-'}
                     </Typography>
+                  </TableCell>
+                  <TableCell align="right">
+                    <Typography variant="body2" color="success.main" fontWeight={incentivosEmp > 0 ? 'medium' : 'normal'}>
+                      {incentivosEmp > 0 ? `+${formatCurrency(incentivosEmp)}` : '-'}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right">
+                    <Box>
+                      <Typography variant="body2" fontWeight="bold" color="primary.main">
+                        {formatCurrency(totalAjustado)}
+                      </Typography>
+                      {esEmpleadoFormal && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                          (Neto)
+                        </Typography>
+                      )}
+                    </Box>
                   </TableCell>
                   <TableCell align="center">
                     <Chip
@@ -334,13 +578,18 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
                 
                 {/* Fila expandida con detalles */}
                 <TableRow>
-                  <TableCell colSpan={8} sx={{ p: 0 }}>
+                  <TableCell colSpan={10} sx={{ p: 0 }}>
                     <Collapse in={expandedRows.has(liquidacion.empleadoId)} timeout="auto" unmountOnExit>
                       <Box sx={{ p: 2, backgroundColor: 'grey.50' }}>
-                        <Typography variant="subtitle2" gutterBottom>
-                          Detalle de Liquidación
-                        </Typography>
-                        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mt: 1 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                          <Typography variant="subtitle2">Detalle de Liquidación</Typography>
+                          <Chip 
+                            label={esEmpleadoFormal ? '📋 Formal (con aportes)' : '💵 Informal (en mano)'} 
+                            size="small" 
+                            color={esEmpleadoFormal ? 'primary' : 'default'}
+                          />
+                        </Box>
+                        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 2, mt: 1 }}>
                           <Box>
                             <Typography variant="caption" color="text.secondary">Sueldo Base:</Typography>
                             <Typography variant="body2">{formatCurrency(liquidacion.sueldoBase)}</Typography>
@@ -370,12 +619,54 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
                             </Typography>
                           </Box>
                           <Box>
-                            <Typography variant="caption" color="text.secondary">Descuentos:</Typography>
+                            <Typography variant="caption" color="text.secondary">Descuentos (sistema):</Typography>
                             <Typography variant="body2" color="error.main">
-                              -{formatCurrency(liquidacion.descuentos)}
+                              -{formatCurrency(descuentosEmp)}
+                            </Typography>
+                          </Box>
+                          <Box>
+                            <Typography variant="caption" color="text.secondary">Incentivos:</Typography>
+                            <Typography variant="body2" color="success.main">
+                              +{formatCurrency(incentivosEmp)}
                             </Typography>
                           </Box>
                         </Box>
+                        
+                        {/* Detalle de descuentos del sistema */}
+                        {descuentosDetalleEmp.length > 0 && (
+                          <Box sx={{ mt: 2, p: 1.5, backgroundColor: 'error.50', borderRadius: 1, border: '1px solid', borderColor: 'error.200' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+                              <DescuentoIcon fontSize="small" color="error" />
+                              <Typography variant="caption" color="error.main" fontWeight="medium">
+                                Descuentos aplicados ({descuentosDetalleEmp.length}):
+                              </Typography>
+                            </Box>
+                            {descuentosDetalleEmp.map((d, index) => (
+                              <Typography key={index} variant="caption" display="block" color="error.dark">
+                                • {TIPOS_DESCUENTO[d.tipo as keyof typeof TIPOS_DESCUENTO] || d.tipo}: {d.motivo} - {formatCurrency(d.montoCalculado || d.monto)}
+                                {d.esPorcentaje && ` (${d.monto}%)`}
+                              </Typography>
+                            ))}
+                          </Box>
+                        )}
+
+                        {/* Detalle de incentivos del sistema */}
+                        {incentivosDetalleEmp.length > 0 && (
+                          <Box sx={{ mt: 2, p: 1.5, backgroundColor: 'success.50', borderRadius: 1, border: '1px solid', borderColor: 'success.200' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+                              <IncentivoIcon fontSize="small" color="success" />
+                              <Typography variant="caption" color="success.main" fontWeight="medium">
+                                Incentivos aplicados ({incentivosDetalleEmp.length}):
+                              </Typography>
+                            </Box>
+                            {incentivosDetalleEmp.map((i, index) => (
+                              <Typography key={index} variant="caption" display="block" color="success.dark">
+                                • {TIPOS_INCENTIVO[i.tipo as keyof typeof TIPOS_INCENTIVO] || i.tipo}: {i.motivo} - {formatCurrency(i.montoCalculado || i.monto)}
+                                {i.esPorcentaje && ` (${i.monto}%)`}
+                              </Typography>
+                            ))}
+                          </Box>
+                        )}
                         
                         {liquidacion.horasExtra.length > 0 && (
                           <Box sx={{ mt: 2 }}>
@@ -419,7 +710,8 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
                   </TableCell>
                 </TableRow>
               </React.Fragment>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </TableContainer>
@@ -430,45 +722,172 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
           Liquidar Sueldo
         </DialogTitle>
         <DialogContent>
-          {selectedEmpleado && (
+          {selectedEmpleado && (() => {
+            // Calcular valores para este empleado
+            const empleadoData = empleados.find(e => e._id === selectedEmpleado.empleadoId);
+            const esEmpleadoFormal = empleadoData?.modalidadContratacion === 'formal';
+            const sueldoBasePeriodo = periodo.tipo === 'quincenal' ? selectedEmpleado.sueldoBase / 2 : selectedEmpleado.sueldoBase;
+            const baseImponible = sueldoBasePeriodo + selectedEmpleado.totalHorasExtra;
+            
+            // Aportes del empleado (solo formales)
+            const aporteJubilacion = esEmpleadoFormal ? baseImponible * (APORTES_EMPLEADO.JUBILACION / 100) : 0;
+            const aporteObraSocial = esEmpleadoFormal ? baseImponible * (APORTES_EMPLEADO.OBRA_SOCIAL / 100) : 0;
+            const aportePami = esEmpleadoFormal ? baseImponible * (APORTES_EMPLEADO.PAMI / 100) : 0;
+            const aporteSindicato = esEmpleadoFormal && empleadoData?.sindicato ? baseImponible * (APORTES_EMPLEADO.SINDICATO / 100) : 0;
+            const totalAportesEmp = aporteJubilacion + aporteObraSocial + aportePami + aporteSindicato;
+            
+            // Contribuciones patronales (solo formales)
+            const contribJubilacion = esEmpleadoFormal ? baseImponible * (CONTRIBUCIONES_EMPLEADOR.JUBILACION / 100) : 0;
+            const contribObraSocial = esEmpleadoFormal ? baseImponible * (CONTRIBUCIONES_EMPLEADOR.OBRA_SOCIAL / 100) : 0;
+            const contribPami = esEmpleadoFormal ? baseImponible * (CONTRIBUCIONES_EMPLEADOR.PAMI / 100) : 0;
+            const contribART = esEmpleadoFormal ? baseImponible * (CONTRIBUCIONES_EMPLEADOR.ART / 100) : 0;
+            const totalContribuciones = contribJubilacion + contribObraSocial + contribPami + contribART;
+            
+            // Total a pagar al empleado
+            const totalAPagar = sueldoBasePeriodo + selectedEmpleado.totalHorasExtra 
+              - selectedEmpleado.adelantos 
+              - (descuentosPorEmpleado[selectedEmpleado.empleadoId] || 0) 
+              + (incentivosPorEmpleado[selectedEmpleado.empleadoId] || 0)
+              - totalAportesEmp;
+            
+            // Costo total para la empresa
+            const costoTotalEmpresa = totalAPagar + totalAportesEmp + totalContribuciones;
+            
+            return (
             <Box sx={{ pt: 2 }}>
-              <Alert severity="info" sx={{ mb: 2 }}>
-                Se generará un gasto de tipo SUELDOS por el monto total a pagar
-              </Alert>
+              {esEmpleadoFormal ? (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  <strong>Empleado FORMAL:</strong> Se generarán 2 gastos:
+                  <br/>• Sueldo neto al empleado
+                  <br/>• Cargas sociales (AFIP) - pendiente de pago
+                </Alert>
+              ) : (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <strong>Empleado INFORMAL:</strong> Se genera un único gasto por el monto bruto (pago en mano)
+                </Alert>
+              )}
               
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2">Empleado:</Typography>
-                <Typography variant="body1" fontWeight="bold">
-                  {selectedEmpleado.empleadoApellido}, {selectedEmpleado.empleadoNombre}
-                </Typography>
+              <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Box>
+                  <Typography variant="subtitle2">Empleado:</Typography>
+                  <Typography variant="body1" fontWeight="bold">
+                    {selectedEmpleado.empleadoApellido}, {selectedEmpleado.empleadoNombre}
+                  </Typography>
+                </Box>
+                <Chip 
+                  label={esEmpleadoFormal ? '📋 Formal' : '💵 Informal'} 
+                  color={esEmpleadoFormal ? 'primary' : 'default'}
+                />
               </Box>
               
               <Box sx={{ mb: 2, p: 2, backgroundColor: 'grey.50', borderRadius: 1 }}>
-                <Typography variant="caption" color="text.secondary">Desglose:</Typography>
+                <Typography variant="caption" color="text.secondary" fontWeight="bold">Haberes:</Typography>
                 <Box sx={{ mt: 1 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                     <Typography variant="body2">Sueldo Base:</Typography>
-                    <Typography variant="body2">{formatCurrency(selectedEmpleado.sueldoBase)}</Typography>
+                    <Typography variant="body2">{formatCurrency(sueldoBasePeriodo)}</Typography>
                   </Box>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                     <Typography variant="body2" color="info.main">Horas Extra:</Typography>
-                    <Typography variant="body2" color="info.main">
-                      +{formatCurrency(selectedEmpleado.totalHorasExtra)}
-                    </Typography>
+                    <Typography variant="body2" color="info.main">+{formatCurrency(selectedEmpleado.totalHorasExtra)}</Typography>
                   </Box>
+                  {incentivosPorEmpleado[selectedEmpleado.empleadoId] > 0 && (
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                      <Typography variant="body2" color="success.main">
+                        <IncentivoIcon fontSize="small" sx={{ verticalAlign: 'middle', mr: 0.5 }} />
+                        Incentivos:
+                      </Typography>
+                      <Typography variant="body2" color="success.main">+{formatCurrency(incentivosPorEmpleado[selectedEmpleado.empleadoId])}</Typography>
+                    </Box>
+                  )}
+                </Box>
+                
+                <Typography variant="caption" color="text.secondary" fontWeight="bold" sx={{ display: 'block', mt: 2 }}>Deducciones:</Typography>
+                <Box sx={{ mt: 1 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                     <Typography variant="body2" color="warning.main">Adelantos:</Typography>
-                    <Typography variant="body2" color="warning.main">
-                      -{formatCurrency(selectedEmpleado.adelantos)}
-                    </Typography>
+                    <Typography variant="body2" color="warning.main">-{formatCurrency(selectedEmpleado.adelantos)}</Typography>
                   </Box>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1, pt: 1, borderTop: 1, borderColor: 'divider' }}>
-                    <Typography variant="subtitle2" fontWeight="bold">Total a Pagar:</Typography>
-                    <Typography variant="subtitle2" fontWeight="bold" color="primary.main">
-                      {formatCurrency(periodo.tipo === 'quincenal' ? selectedEmpleado.totalAPagar / 2 : selectedEmpleado.totalAPagar)}
-                    </Typography>
-                  </Box>
+                  {descuentosPorEmpleado[selectedEmpleado.empleadoId] > 0 && (
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                      <Typography variant="body2" color="error.main">
+                        <DescuentoIcon fontSize="small" sx={{ verticalAlign: 'middle', mr: 0.5 }} />
+                        Descuentos:
+                      </Typography>
+                      <Typography variant="body2" color="error.main">-{formatCurrency(descuentosPorEmpleado[selectedEmpleado.empleadoId])}</Typography>
+                    </Box>
+                  )}
+                  
+                  {/* Aportes (solo formales) */}
+                  {esEmpleadoFormal && (
+                    <>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                        <Typography variant="body2" color="error.main">Jubilación (11%):</Typography>
+                        <Typography variant="body2" color="error.main">-{formatCurrency(aporteJubilacion)}</Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                        <Typography variant="body2" color="error.main">Obra Social (3%):</Typography>
+                        <Typography variant="body2" color="error.main">-{formatCurrency(aporteObraSocial)}</Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                        <Typography variant="body2" color="error.main">PAMI (3%):</Typography>
+                        <Typography variant="body2" color="error.main">-{formatCurrency(aportePami)}</Typography>
+                      </Box>
+                      {aporteSindicato > 0 && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                          <Typography variant="body2" color="error.main">Sindicato (2%):</Typography>
+                          <Typography variant="body2" color="error.main">-{formatCurrency(aporteSindicato)}</Typography>
+                        </Box>
+                      )}
+                    </>
+                  )}
                 </Box>
+                
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2, pt: 1, borderTop: 1, borderColor: 'divider' }}>
+                  <Typography variant="subtitle2" fontWeight="bold">
+                    {esEmpleadoFormal ? 'Sueldo NETO:' : 'Total a Pagar:'}
+                  </Typography>
+                  <Typography variant="subtitle2" fontWeight="bold" color="primary.main">
+                    {formatCurrency(totalAPagar)}
+                  </Typography>
+                </Box>
+                
+                {/* Contribuciones patronales (solo formales) */}
+                {esEmpleadoFormal && (
+                  <Box sx={{ mt: 2, p: 1.5, backgroundColor: 'warning.50', borderRadius: 1, border: '1px solid', borderColor: 'warning.200' }}>
+                    <Typography variant="caption" color="warning.dark" fontWeight="bold">
+                      Contribuciones patronales (carga AFIP):
+                    </Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                      <Typography variant="caption" color="warning.dark">Jubilación (10.17%):</Typography>
+                      <Typography variant="caption" color="warning.dark">{formatCurrency(contribJubilacion)}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="caption" color="warning.dark">Obra Social (6%):</Typography>
+                      <Typography variant="caption" color="warning.dark">{formatCurrency(contribObraSocial)}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="caption" color="warning.dark">PAMI (1.5%):</Typography>
+                      <Typography variant="caption" color="warning.dark">{formatCurrency(contribPami)}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="caption" color="warning.dark">ART (2.5%):</Typography>
+                      <Typography variant="caption" color="warning.dark">{formatCurrency(contribART)}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1, pt: 0.5, borderTop: 1, borderColor: 'warning.300' }}>
+                      <Typography variant="caption" color="warning.dark" fontWeight="bold">Total AFIP:</Typography>
+                      <Typography variant="caption" color="warning.dark" fontWeight="bold">
+                        {formatCurrency(totalAportesEmp + totalContribuciones)}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+                      <Typography variant="body2" fontWeight="bold" color="error.main">COSTO TOTAL EMPRESA:</Typography>
+                      <Typography variant="body2" fontWeight="bold" color="error.main">
+                        {formatCurrency(costoTotalEmpresa)}
+                      </Typography>
+                    </Box>
+                  </Box>
+                )}
               </Box>
               
               <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
@@ -514,7 +933,8 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
                 rows={3}
               />
             </Box>
-          )}
+            );
+          })()}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseLiquidar}>Cancelar</Button>
@@ -613,6 +1033,8 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
           periodo={periodo}
           open={openRecibo}
           onClose={handleCloseRecibo}
+          descuentosDetalle={descuentosDetalleEmpleado[reciboEmpleado.empleadoId] || []}
+          incentivosDetalle={incentivosDetalleEmpleado[reciboEmpleado.empleadoId] || []}
         />
       )}
     </Box>

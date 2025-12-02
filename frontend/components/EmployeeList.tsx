@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../redux/store';
 import { fetchEmployees, deleteEmployee } from '../redux/slices/employeesSlice';
@@ -19,12 +19,14 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  Tooltip
 } from '@mui/material';
 import {
   Edit as EditIcon,
   Delete as DeleteIcon,
-  Person as PersonIcon
+  Person as PersonIcon,
+  Cake as CakeIcon
 } from '@mui/icons-material';
 
 interface EmployeeListProps {
@@ -46,6 +48,35 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, onEdit }) => {
       dispatch(fetchEmployees());
     }
   }, [dispatch, status]);
+
+  // Función para calcular antigüedad
+  const calcularAntiguedad = (fechaIngreso: string): { años: number; meses: number; texto: string } => {
+    const fecha = new Date(fechaIngreso);
+    const hoy = new Date();
+    
+    let años = hoy.getFullYear() - fecha.getFullYear();
+    let meses = hoy.getMonth() - fecha.getMonth();
+    
+    if (meses < 0) {
+      años--;
+      meses += 12;
+    }
+    
+    if (hoy.getDate() < fecha.getDate()) {
+      meses--;
+      if (meses < 0) {
+        años--;
+        meses += 12;
+      }
+    }
+    
+    let texto = '';
+    if (años > 0) texto = `${años}a`;
+    if (meses > 0) texto += `${texto ? ' ' : ''}${meses}m`;
+    if (!texto) texto = '<1m';
+    
+    return { años, meses, texto };
+  };
 
   const handleEdit = (employee: Employee) => {
     onEdit(employee);
@@ -106,6 +137,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, onEdit }) => {
               <TableCell><strong>Documento</strong></TableCell>
               <TableCell><strong>Puesto</strong></TableCell>
               <TableCell><strong>Fecha Ingreso</strong></TableCell>
+              <TableCell align="center"><strong>Antigüedad</strong></TableCell>
               <TableCell align="right"><strong>Sueldo Base</strong></TableCell>
               <TableCell align="center"><strong>Estado</strong></TableCell>
               <TableCell align="center"><strong>Acciones</strong></TableCell>
@@ -158,6 +190,23 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, onEdit }) => {
                   </Typography>
                 </TableCell>
                 
+                <TableCell align="center">
+                  {(() => {
+                    const ant = calcularAntiguedad(employee.fechaIngreso);
+                    return (
+                      <Tooltip title={`${ant.años} años, ${ant.meses} meses`}>
+                        <Chip
+                          icon={<CakeIcon />}
+                          label={ant.texto}
+                          size="small"
+                          color={ant.años >= 5 ? 'success' : ant.años >= 1 ? 'primary' : 'default'}
+                          variant={ant.años >= 10 ? 'filled' : 'outlined'}
+                        />
+                      </Tooltip>
+                    );
+                  })()}
+                </TableCell>
+                
                 <TableCell align="right">
                   <Typography variant="body2" fontWeight="medium" color="primary">
                     {formatCurrency(employee.sueldoBase)}
@@ -193,7 +242,7 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, onEdit }) => {
             
             {employees.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} align="center">
+                <TableCell colSpan={8} align="center">
                   <Typography variant="body2" color="text.secondary" sx={{ py: 3 }}>
                     No hay empleados registrados. Haz clic en "Nuevo Empleado" para agregar uno.
                   </Typography>

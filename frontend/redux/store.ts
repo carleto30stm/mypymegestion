@@ -15,6 +15,8 @@ import cuentaCorrienteReducer from './slices/cuentaCorrienteSlice';
 import interesesReducer from './slices/interesesSlice';
 import metricasProductosReducer from './slices/metricasProductosSlice';
 import categoriesReducer from './slices/categoriesSlice';
+import descuentosEmpleadoReducer from './slices/descuentosEmpleadoSlice';
+import incentivosEmpleadoReducer from './slices/incentivosEmpleadoSlice';
 
 // Configurar el logger solo en desarrollo
 const logger = createLogger({
@@ -43,6 +45,8 @@ export const store = configureStore({
     intereses: interesesReducer,
     metricasProductos: metricasProductosReducer,
     categories: categoriesReducer,
+    descuentosEmpleado: descuentosEmpleadoReducer,
+    incentivosEmpleado: incentivosEmpleadoReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

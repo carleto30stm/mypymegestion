@@ -25,6 +25,14 @@ import cuentaCorrienteRoutes from './routes/cuentaCorriente.js';
 import interesesRoutes from './routes/intereses.js';
 import migrationChequesRoutes from './routes/migration-cheques.js';
 import categoriesRoutes from './routes/categories.js';
+import descuentosEmpleadoRoutes from './routes/descuentosEmpleado.js';
+import incentivosEmpleadoRoutes from './routes/incentivosEmpleado.js';
+import liquidacionFinalRoutes from './routes/liquidacionFinal.js';
+import conveniosRoutes from './routes/convenios.js';
+import recibosSueldoRoutes from './routes/recibosSueldo.js';
+import f931Routes from './routes/f931.js';
+import antiguedadRoutes from './routes/antiguedad.js';
+import libroSueldosRoutes from './routes/libroSueldos.js';
 import { iniciarCalculoInteresesDiario } from './jobs/calcularInteresesPunitorios.js';
 
 dotenv.config();
@@ -104,6 +112,14 @@ const start = async () => {
     app.use('/api/intereses', interesesRoutes);
     app.use('/api/migration', migrationChequesRoutes); // Endpoint temporal para migración de cheques
     app.use('/api/categories', categoriesRoutes);
+    app.use('/api/descuentos-empleado', descuentosEmpleadoRoutes);
+    app.use('/api/incentivos-empleado', incentivosEmpleadoRoutes);
+    app.use('/api/liquidacion-final', liquidacionFinalRoutes);
+    app.use('/api/convenios', conveniosRoutes);
+    app.use('/api/recibos-sueldo', recibosSueldoRoutes);
+    app.use('/api/f931', f931Routes);
+    app.use('/api/antiguedad', antiguedadRoutes);
+    app.use('/api/libro-sueldos', libroSueldosRoutes);
 
     const env = process.env.NODE_ENV || 'development';
     app.listen(PORT, () => {

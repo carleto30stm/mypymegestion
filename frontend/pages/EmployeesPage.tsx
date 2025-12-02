@@ -25,12 +25,14 @@ import {
   AccountBalance as PayrollIcon,
   Person as PersonIcon,
   ArrowBack as BackIcon,
-  Work as WorkIcon
+  Work as WorkIcon,
+  TrendingDown as DescuentoIcon
 } from '@mui/icons-material';
 import EmployeeList from '../components/EmployeeList';
 import EmployeeForm from '../components/form/EmployeeForm';
 import EmployeePayrollComponent from '../components/EmployeePayroll';
 import ParitariasComponent from '../components/ParitariasComponent';
+import DescuentosIncentivosComponent from '../components/DescuentosIncentivosComponent';
 import Modal from '../components/modal/Modal';
 import { Employee } from '../types';
 
@@ -217,6 +219,12 @@ const EmployeesPage: React.FC = () => {
             id="employee-tab-2"
             aria-controls="employee-tabpanel-2"
           />
+          <Tab 
+            icon={<DescuentoIcon />} 
+            label="Descuentos / Incentivos" 
+            id="employee-tab-3"
+            aria-controls="employee-tabpanel-3"
+          />
         </Tabs>
 
         {/* Panel 1: Lista de Empleados */}
@@ -270,6 +278,11 @@ const EmployeesPage: React.FC = () => {
         {/* Panel 3: Paritarias y Categorías */}
         <TabPanel value={tabValue} index={2}>
           <ParitariasComponent />
+        </TabPanel>
+
+        {/* Panel 4: Descuentos e Incentivos */}
+        <TabPanel value={tabValue} index={3}>
+          <DescuentosIncentivosComponent />
         </TabPanel>
       </Paper>
 

@@ -1033,9 +1033,10 @@ export const getEstadisticasProductos = async (req: ExpressRequest, res: Express
     }
 };
 
-// @desc    Obtener ventas sin facturar (confirmadas, requieren factura AFIP, no facturadas)
+// @desc    Obtener ventas sin facturar (confirmadas o pendientes de cobro, no facturadas)
 // @route   GET /api/ventas/sin-facturar
 // @access  Private
+// CAMBIO DE ENFOQUE: Ahora las facturas se pueden emitir ANTES de cobrar
 export const getVentasSinFacturar = async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         // Primero, obtener IDs de ventas que ya están en facturas borrador
@@ -1064,7 +1065,8 @@ export const getVentasSinFacturar = async (req: ExpressRequest, res: ExpressResp
         // en este proyecto no emitimos Factura tipo C (para consumidores finales exentos).
         // Solo emitimos Facturas A y B que requieren IVA discriminado.
         
-        // Buscar ventas confirmadas y cobradas, CON IVA, sin facturar
+        // NUEVO ENFOQUE: Las facturas se pueden emitir ANTES de cobrar
+        // Buscar ventas confirmadas, CON IVA, sin facturar (sin importar estado de cobranza)
         const ventas = await Venta.find({
             $and: [
                 {
@@ -1079,19 +1081,8 @@ export const getVentasSinFacturar = async (req: ExpressRequest, res: ExpressResp
                 },
                 // Solo ventas con IVA aplicado (no emitimos Factura C para exentos)
                 { aplicaIVA: true },
-                // COMENTADO: Filtro original que incluía también requiereFacturaAFIP
-                // {
-                //     $or: [
-                //         { requiereFacturaAFIP: true },
-                //         { aplicaIVA: true } // También incluir ventas con IVA
-                //     ]
-                // },
-                { 
-                    $or: [
-                        { estadoCobranza: 'cobrado' }, // Debe estar cobrada
-                        { montoCobrado: { $gt: 0 } } // O tener monto cobrado
-                    ]
-                },
+                // NO requerimos que esté cobrada - se puede facturar antes de cobrar
+                // { estadoCobranza: 'cobrado' }, // REMOVIDO
                 { facturada: { $ne: true } },
                 {
                     $or: [

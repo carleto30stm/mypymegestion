@@ -8,6 +8,7 @@ import EmployeesPage from './pages/EmployeesPage';
 // import HorasExtraPage from './pages/HorasExtraPage';
 import LiquidacionPage from './pages/LiquidacionPage';
 import ReportsPage from './pages/ReportsPage';
+import RRHHPage from './pages/RRHHPage';
 import ProductosPage from './pages/ProductosPage';
 import MetricasProductosPage from './pages/MetricasProductosPage';
 import ClientesPage from './pages/ClientesPage';
@@ -47,6 +48,7 @@ const App: React.FC = () => {
           <Route path="/liquidacion" element={<LiquidacionPage />} />
           {/* <Route path="/horas-extra" element={<HorasExtraPage />} /> */}
           <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/rrhh" element={<RRHHPage />} />
           <Route path="/productos" element={<ProductosPage />} />
           <Route path="/metricas-productos" element={<MetricasProductosPage />} />
           <Route path="/clientes" element={<ClientesPage />} />
