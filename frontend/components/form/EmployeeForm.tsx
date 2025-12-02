@@ -167,10 +167,6 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
       const numericValue = getNumericValue(formatted);
       setFormData(prev => ({ ...prev, hora: numericValue }));
       return;
-    } else if (field === 'antiguedad') {
-      const numericValue = parseInt(value, 10);
-      setFormData(prev => ({ ...prev, antiguedad: isNaN(numericValue) ? 0 : numericValue }));
-      return;
     }
     
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -184,7 +180,8 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
     setFormData(prev => ({
       ...prev,
       obraSocial: {
-        ...prev.obraSocial,
+        nombre: prev.obraSocial?.nombre ?? '',
+        numero: prev.obraSocial?.numero ?? '',
         [field]: value
       }
     }));
@@ -197,7 +194,9 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
     setFormData(prev => ({
       ...prev,
       adicionales: {
-        ...prev.adicionales,
+        presentismo: prev.adicionales?.presentismo ?? false,
+        zonaPeligrosa: prev.adicionales?.zonaPeligrosa ?? false,
+        otrosAdicionales: prev.adicionales?.otrosAdicionales ?? [],
         [field]: event.target.checked
       }
     }));
@@ -211,9 +210,10 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
         setFormData(prev => ({
           ...prev,
           adicionales: {
-            ...prev.adicionales,
+            presentismo: prev.adicionales?.presentismo ?? false,
+            zonaPeligrosa: prev.adicionales?.zonaPeligrosa ?? false,
             otrosAdicionales: [
-              ...(prev.adicionales?.otrosAdicionales || []),
+              ...(prev.adicionales?.otrosAdicionales ?? []),
               { concepto: nuevoAdicional.concepto, monto }
             ]
           }
@@ -228,8 +228,9 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
     setFormData(prev => ({
       ...prev,
       adicionales: {
-        ...prev.adicionales,
-        otrosAdicionales: prev.adicionales?.otrosAdicionales?.filter((_, i) => i !== index) || []
+        presentismo: prev.adicionales?.presentismo ?? false,
+        zonaPeligrosa: prev.adicionales?.zonaPeligrosa ?? false,
+        otrosAdicionales: (prev.adicionales?.otrosAdicionales ?? []).filter((_, i) => i !== index)
       }
     }));
   };
@@ -367,11 +368,24 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
           <Grid item xs={12} sm={6}>
             <TextField
               label="Antigüedad (Años)"
-              type="number"
-              value={formData.antiguedad}
-              onChange={handleChange('antiguedad')}
+              type="text"
+              value={(() => {
+                if (!formData.fechaIngreso) return '-';
+                const ingreso = new Date(formData.fechaIngreso);
+                const hoy = new Date();
+                const diffMs = hoy.getTime() - ingreso.getTime();
+                const diffYears = diffMs / (1000 * 60 * 60 * 24 * 365.25);
+                if (diffYears < 0) return '0';
+                if (diffYears < 1) {
+                  const meses = Math.floor(diffYears * 12);
+                  return meses === 0 ? 'Menos de 1 mes' : `${meses} mes${meses > 1 ? 'es' : ''}`;
+                }
+                return `${Math.floor(diffYears)} año${Math.floor(diffYears) > 1 ? 's' : ''}`;
+              })()}
               fullWidth
-              InputProps={{ inputProps: { min: 0 } }}
+              disabled
+              InputProps={{ readOnly: true }}
+              helperText="Calculado automáticamente desde la fecha de ingreso"
             />
           </Grid>
           

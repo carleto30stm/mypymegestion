@@ -80,44 +80,68 @@ Breve: este proyecto es una aplicación fullstack (React + Vite en frontend, Nod
       - `formatCurrencyWithSymbol(value)`: retorna "$ 100.000,00"
       - `parseCurrency(value)`: parsea string "100.000,00" a número
     - **CRÍTICO - Inputs de Moneda en Formularios**:
-      - **SIEMPRE** usar formato argentino de moneda en inputs que representan dinero (precios, montos, totales, entrada, salida, debe, haber, etc).
-      - **NO usar type="number"** para inputs de moneda - usar TextField con formateo manual.
+      - **SIEMPRE** usar formato argentino de moneda en inputs que representan dinero (precios, montos, totales, entrada, salida, debe, haber, salarios, etc).
+      - **NO usar type="number"** para inputs de moneda - usar TextField con type="text" y formateo manual.
       - **Patrón obligatorio**: usar funciones centralizadas de `utils/formatters.ts`
-      - **Implementación estándar**:
+      - **Implementación estándar (PATRÓN OBLIGATORIO)**:
         ```tsx
         import { formatNumberInput, getNumericValue, formatCurrency } from '../utils/formatters';
         
-        // Estado para display formateado
+        // 1. Estado separado para el valor formateado (display)
         const [montoFormatted, setMontoFormatted] = useState('');
         
-        // Handler: formatea mientras el usuario escribe
+        // 2. Handler que formatea en tiempo real mientras el usuario escribe
         const handleMontoChange = (value: string) => {
-          const formatted = formatNumberInput(value);
+          const formatted = formatNumberInput(value);  // Formatea: 1234,5 → 1.234,5
           setMontoFormatted(formatted);
-          const numericValue = getNumericValue(formatted);
-          // Usar numericValue para cálculos/backend
+          // Para guardar en estado principal, usar getNumericValue:
+          const numericValue = getNumericValue(formatted);  // Convierte: 1.234,50 → 1234.5
+          setFormData(prev => ({ ...prev, monto: numericValue.toString() }));
         };
         
-        // TextField
+        // 3. En el JSX: type="text", value usa el estado formateado
         <TextField
-          value={formatCurrency(monto || 0)}
+          type="text"
+          value={montoFormatted}
           onChange={(e) => handleMontoChange(e.target.value)}
-          placeholder="0,00"
+          placeholder="Ej: 350.000,00"
+          helperText="Formato: 1.000,50 (coma para decimales)"
+          InputProps={{ startAdornment: '$' }}
         />
+        
+        // 4. Al resetear formulario, SIEMPRE resetear también el estado formateado
+        const handleReset = () => {
+          setMontoFormatted('');
+          setFormData({ monto: '' });
+        };
+        
+        // 5. Al validar/enviar, usar getNumericValue para obtener el número
+        const handleSubmit = () => {
+          const montoNumerico = getNumericValue(montoFormatted);
+          if (montoNumerico <= 0) {
+            setError('Debe ingresar un monto válido');
+            return;
+          }
+          // Enviar montoNumerico al backend
+        };
         ```
       - **Funciones disponibles en utils/formatters.ts**:
         - `formatNumberInput(value)`: Formatea mientras el usuario escribe (permite comas, agrega puntos cada 3 dígitos)
         - `getNumericValue(formatted)`: Convierte formato argentino a número (1.000,50 → 1000.5)
-        - `formatCurrency(value)`: Formatea número para display (1000 → "1.000,00")
+        - `formatCurrency(value)`: Formatea número para display estático (1000 → "1.000,00")
         - `parseCurrency(value)`: Parsea string formateado a número
       - **Ejemplos de campos que DEBEN usar este formato**:
-        - Gastos: entrada, salida, montos de transferencia
+        - Gastos: entrada, salida, montos de transferencia, montoInteres
         - Ventas: precio unitario, subtotal, total, IVA, descuentos
         - Cobros: monto de cada forma de pago (efectivo, cheque, transferencia, tarjeta)
         - Cuenta Corriente: debe, haber, saldo, límite de crédito, montos de ajustes
         - Productos: precio, costo
         - Clientes: límite de crédito, saldo
-      - **Referencia**: Ver `FormaPagoModal.tsx` y `ExpenseForm.tsx` como ejemplos de implementación correcta.
+        - **RRHH**: salarioBasico en categorías de convenio, sueldos, bonos, adicionales
+      - **Archivos de referencia con implementación correcta**:
+        - `frontend/components/form/ExpenseForm.tsx`: entrada, salida, montoTransferencia, montoInteres
+        - `frontend/components/FormaPagoModal.tsx`: montos de formas de pago
+        - `frontend/pages/RRHHPage.tsx`: salarioBasico en formulario de categorías de convenio
     - **NO reinventar formatos** - usar estas funciones en todo el proyecto.
   - **Componentes Reutilizables - UI/UX**:
     - **ConfirmDialog**: Modal de confirmación reutilizable en `frontend/components/modal/ConfirmDialog.tsx`

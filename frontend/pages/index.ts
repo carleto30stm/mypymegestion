@@ -10,6 +10,9 @@ export * from './LiquidacionPage';
 export * from './LoginPage';
 export * from './ReportsPage';
 
+// Módulo RRHH completo
+export { default as RRHHPage } from './RRHHPage';
+
 // Módulos de compras e inventario
 export { default as ProveedoresPage } from './ProveedoresPage';
 export { default as MateriasPrimasPage } from './MateriasPrimasPage';

@@ -19,7 +19,11 @@ import {
   CardContent,
   Grid,
   Divider,
-  Tooltip
+  Tooltip,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem
 } from '@mui/material';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import { useDispatch, useSelector } from 'react-redux';
@@ -64,6 +68,7 @@ const CrearFacturaDialog: React.FC<CrearFacturaDialogProps> = ({ open, onClose, 
   const [tabValue, setTabValue] = useState(0);
   const [selectedVentas, setSelectedVentas] = useState<string[]>([]);
   const [filtroCliente, setFiltroCliente] = useState<string | null>(null);
+  const [filtroCobranza, setFiltroCobranza] = useState<string>('');
   const [fechaDesde, setFechaDesde] = useState<string>('');
   const [fechaHasta, setFechaHasta] = useState<string>('');
 
@@ -78,6 +83,7 @@ const CrearFacturaDialog: React.FC<CrearFacturaDialogProps> = ({ open, onClose, 
       dispatch(clearError());
       setSelectedVentas([]);
       setFiltroCliente(null);
+      setFiltroCobranza('');
       setFechaDesde('');
       setFechaHasta('');
     }
@@ -97,6 +103,12 @@ const CrearFacturaDialog: React.FC<CrearFacturaDialogProps> = ({ open, onClose, 
     if (filtroCliente) {
       const clienteId = venta.clienteId;
       if (clienteId !== filtroCliente) return false;
+    }
+
+    // Filtro por estado de cobranza
+    if (filtroCobranza) {
+      const estadoCobranza = venta.estadoCobranza || 'pendiente';
+      if (estadoCobranza !== filtroCobranza) return false;
     }
 
     // Filtro por fechas
@@ -203,9 +215,38 @@ const CrearFacturaDialog: React.FC<CrearFacturaDialogProps> = ({ open, onClose, 
       valueGetter: (_value: any, row: Venta) => row.nombreCliente || 'Cliente desconocido'
     },
     {
+      field: 'estadoCobranza',
+      headerName: 'Cobranza',
+      width: 110,
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: (params: GridRenderCellParams) => {
+        const venta = params.row as Venta;
+        const estadoCobranza = venta.estadoCobranza || 'pendiente';
+        const colorMap: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
+          cobrado: 'success',
+          parcial: 'warning',
+          pendiente: 'error',
+        };
+        const labelMap: Record<string, string> = {
+          cobrado: 'Cobrado',
+          parcial: 'Parcial',
+          pendiente: 'Pendiente',
+        };
+        return (
+          <Chip
+            label={labelMap[estadoCobranza] || estadoCobranza}
+            color={colorMap[estadoCobranza] || 'default'}
+            size="small"
+            sx={{ fontSize: '0.7rem' }}
+          />
+        );
+      }
+    },
+    {
       field: 'productos',
       headerName: 'Productos',
-      width: 280,
+      width: 220,
       renderCell: (params: GridRenderCellParams) => {
         const venta = params.row as Venta;
         const productos = venta.items?.map(item => 
@@ -213,7 +254,7 @@ const CrearFacturaDialog: React.FC<CrearFacturaDialogProps> = ({ open, onClose, 
         ).join(', ') || '-';
         return (
           <Tooltip title={productos}>
-            <Typography variant="body2" noWrap sx={{ maxWidth: 270 }}>
+            <Typography variant="body2" noWrap sx={{ maxWidth: 210 }}>
               {productos}
             </Typography>
           </Tooltip>
@@ -296,6 +337,13 @@ const CrearFacturaDialog: React.FC<CrearFacturaDialogProps> = ({ open, onClose, 
 
         {/* Tab 1: Desde Ventas */}
         <TabPanel value={tabValue} index={0}>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <Typography variant="body2">
+              <strong>Nuevo flujo:</strong> Puede facturar ventas <strong>antes o después</strong> de cobrarlas. 
+              Las ventas pendientes de cobro se muestran con estado "Pendiente" en la columna Cobranza.
+            </Typography>
+          </Alert>
+
           {error && (
             <Alert severity="error" sx={{ mb: 2 }} onClose={() => dispatch(clearError())}>
               {error}
@@ -315,7 +363,7 @@ const CrearFacturaDialog: React.FC<CrearFacturaDialogProps> = ({ open, onClose, 
                 Filtros
               </Typography>
               <Grid container spacing={2}>
-                <Grid item xs={12} md={6}>
+                <Grid item xs={12} md={4}>
                   <Autocomplete
                     options={clientesParaFiltro}
                     getOptionLabel={(option) => option.label}
@@ -327,6 +375,21 @@ const CrearFacturaDialog: React.FC<CrearFacturaDialogProps> = ({ open, onClose, 
                       <TextField {...params} label="Cliente" size="small" />
                     )}
                   />
+                </Grid>
+                <Grid item xs={12} md={2}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Cobranza</InputLabel>
+                    <Select
+                      value={filtroCobranza}
+                      label="Cobranza"
+                      onChange={(e) => setFiltroCobranza(e.target.value)}
+                    >
+                      <MenuItem value="">Todas</MenuItem>
+                      <MenuItem value="cobrado">✅ Cobradas</MenuItem>
+                      <MenuItem value="parcial">⏳ Parcial</MenuItem>
+                      <MenuItem value="pendiente">❌ Pendientes</MenuItem>
+                    </Select>
+                  </FormControl>
                 </Grid>
                 <Grid item xs={12} md={3}>
                   <TextField

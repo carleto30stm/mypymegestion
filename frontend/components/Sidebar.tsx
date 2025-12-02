@@ -36,6 +36,7 @@ import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import EngineeringIcon from '@mui/icons-material/Engineering';
+import WorkIcon from '@mui/icons-material/Work';
 
 export const drawerWidth = 240;
 export const drawerHandleWidth = 40;
@@ -166,6 +167,20 @@ const Sidebar: React.FC<SidebarProps> = ({
                 <AssessmentIcon />
               </ListItemIcon>
               <ListItemText primary="Reportes Contables" />
+            </ListItemButton>
+          </ListItem>
+        )}
+        
+        {canViewEmployees && (
+          <ListItem disablePadding>
+            <ListItemButton 
+              onClick={() => navigate('/rrhh')}
+              selected={location.pathname === '/rrhh'}
+            >
+              <ListItemIcon>
+                <WorkIcon />
+              </ListItemIcon>
+              <ListItemText primary="RRHH" />
             </ListItemButton>
           </ListItem>
         )}

@@ -8,6 +8,7 @@ import {
   deleteCategory, 
   applyParitaria 
 } from '../redux/slices/categoriesSlice';
+import { conveniosAPI } from '../services/rrhhService';
 import { Category } from '../types';
 import {
   Box,
@@ -31,20 +32,52 @@ import {
   Tooltip,
   Card,
   CardContent,
-  Divider
+  Divider,
+  Chip,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  CircularProgress
 } from '@mui/material';
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
   TrendingUp as TrendingUpIcon,
-  Calculate as CalculateIcon
+  Calculate as CalculateIcon,
+  ExpandMore as ExpandMoreIcon,
+  Business as BusinessIcon,
+  Work as WorkIcon
 } from '@mui/icons-material';
 import { formatCurrency, formatNumberInput, getNumericValue } from '../utils/formatters';
+
+// Interface para categoría de convenio
+interface CategoriaConvenio {
+  codigo: string;
+  nombre: string;
+  salarioBasico: number;
+  orden: number;
+  activa?: boolean;
+}
+
+// Interface para convenio
+interface Convenio {
+  _id: string;
+  numero: string;
+  nombre: string;
+  sindicato: string;
+  estado: string;
+  categorias: CategoriaConvenio[];
+}
 
 const ParitariasComponent: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { items: categories, status, error } = useSelector((state: RootState) => state.categories);
+
+  // Estado para convenios CCT
+  const [convenios, setConvenios] = useState<Convenio[]>([]);
+  const [loadingConvenios, setLoadingConvenios] = useState(false);
+  const [errorConvenios, setErrorConvenios] = useState<string | null>(null);
 
   const [openDialog, setOpenDialog] = useState(false);
   const [openParitariaDialog, setOpenParitariaDialog] = useState(false);
@@ -65,10 +98,36 @@ const ParitariasComponent: React.FC = () => {
   const [antiguedadYears, setAntiguedadYears] = useState('');
   const [selectedCatId, setSelectedCatId] = useState('');
   const [antiguedadPercent, setAntiguedadPercent] = useState('1'); // 1% por año default
+  const [selectedSource, setSelectedSource] = useState<'interna' | 'convenio'>('interna');
 
+  // Cargar categorías internas y convenios
   useEffect(() => {
     dispatch(fetchCategories());
+    loadConvenios();
   }, [dispatch]);
+
+  const loadConvenios = async () => {
+    setLoadingConvenios(true);
+    setErrorConvenios(null);
+    try {
+      const response = await conveniosAPI.obtenerTodos();
+      setConvenios(response.data || response || []);
+    } catch (err: any) {
+      console.error('Error cargando convenios:', err);
+      setErrorConvenios(err.response?.data?.message || 'Error al cargar convenios');
+    } finally {
+      setLoadingConvenios(false);
+    }
+  };
+
+  // Obtener todas las categorías de convenios para la calculadora
+  const todasCategoriasConvenio = convenios.flatMap(conv => 
+    (conv.categorias || []).filter(c => c.activa !== false).map(cat => ({
+      ...cat,
+      convenioNombre: conv.nombre,
+      convenioId: conv._id
+    }))
+  );
 
   const handleOpenDialog = (category?: Category) => {
     if (category) {
@@ -121,7 +180,7 @@ const ParitariasComponent: React.FC = () => {
   const handleApplyParitaria = async () => {
     const percent = parseFloat(paritariaPercent);
     if (!isNaN(percent)) {
-      if (window.confirm(`¿Está seguro de aplicar un aumento del ${percent}% a TODAS las categorías?`)) {
+      if (window.confirm(`¿Está seguro de aplicar un aumento del ${percent}% a TODAS las categorías internas?`)) {
         await dispatch(applyParitaria({ porcentaje: percent }));
         setOpenParitariaDialog(false);
         setParitariaPercent('');
@@ -129,23 +188,41 @@ const ParitariasComponent: React.FC = () => {
     }
   };
 
-  // Calculator Logic
+  // Calculator Logic - soporta categorías internas y de convenio
   const calculateAntiguedad = () => {
     if (!selectedCatId || !antiguedadYears) return null;
-    const category = categories.find(c => c._id === selectedCatId);
-    if (!category) return null;
+    
+    let sueldoBasico = 0;
+    let nombreCategoria = '';
+    
+    if (selectedSource === 'interna') {
+      const category = categories.find(c => c._id === selectedCatId);
+      if (!category) return null;
+      sueldoBasico = category.sueldoBasico;
+      nombreCategoria = category.nombre;
+    } else {
+      // Buscar en categorías de convenio (formato: convenioId|codigo)
+      const [convenioId, codigo] = selectedCatId.split('|');
+      const convenio = convenios.find(c => c._id === convenioId);
+      if (!convenio) return null;
+      const catConvenio = convenio.categorias.find(c => c.codigo === codigo);
+      if (!catConvenio) return null;
+      sueldoBasico = catConvenio.salarioBasico;
+      nombreCategoria = `${catConvenio.nombre} (${convenio.nombre})`;
+    }
 
     const years = parseFloat(antiguedadYears);
     const percentPerYear = parseFloat(antiguedadPercent);
     const totalPercent = years * percentPerYear;
-    const antiguedadAmount = category.sueldoBasico * (totalPercent / 100);
-    const totalSalary = category.sueldoBasico + antiguedadAmount;
+    const antiguedadAmount = sueldoBasico * (totalPercent / 100);
+    const totalSalary = sueldoBasico + antiguedadAmount;
 
     return {
-      base: category.sueldoBasico,
+      base: sueldoBasico,
       antiguedadAmount,
       total: totalSalary,
-      percent: totalPercent
+      percent: totalPercent,
+      nombreCategoria
     };
   };
 
@@ -159,6 +236,22 @@ const ParitariasComponent: React.FC = () => {
 
   return (
     <Box sx={{ p: 3 }}>
+      {/* Texto de ayuda */}
+      <Alert severity="info" sx={{ mb: 3 }} icon={false}>
+        <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+          💡 ¿Cuándo usar esta sección?
+        </Typography>
+        <Typography variant="body2">
+          • <strong>Categorías internas:</strong> Crea tu propia escala salarial para la empresa (Gerente, Supervisor, Vendedor, etc.)<br />
+          • <strong>Empleados informales:</strong> Personal que no está bajo ningún convenio sindical<br />
+          • <strong>Aumentos por decisión propia:</strong> Aplica aumentos que la empresa decide, no impuestos por sindicatos<br />
+          • <strong>Personal fuera de convenio:</strong> Gerentes, dueños, personal jerárquico<br />
+          <Box component="span" sx={{ color: 'text.secondary', fontSize: '0.85em', display: 'block', mt: 1 }}>
+            📋 Para convenios colectivos de trabajo (CCT) y paritarias sindicales, usa la sección <strong>Recursos Humanos → Convenios CCT</strong>
+          </Box>
+        </Typography>
+      </Alert>
+
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h5" component="h2">
           Gestión de Categorías y Paritarias
@@ -184,61 +277,163 @@ const ParitariasComponent: React.FC = () => {
       </Box>
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {errorConvenios && <Alert severity="warning" sx={{ mb: 2 }}>{errorConvenios}</Alert>}
 
       <Grid container spacing={3}>
         <Grid item xs={12} md={8}>
-          <Paper sx={{ width: '100%', overflow: 'hidden' }}>
-            <TableContainer sx={{ maxHeight: 600 }}>
-              <Table stickyHeader>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Categoría</TableCell>
-                    <TableCell align="right">Sueldo Básico</TableCell>
-                    <TableCell align="right">Valor Hora</TableCell>
-                    <TableCell>Descripción</TableCell>
-                    <TableCell align="right">Acciones</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {categories.map((category) => (
-                    <TableRow key={category._id} hover>
-                      <TableCell component="th" scope="row" sx={{ fontWeight: 'bold' }}>
-                        {category.nombre}
-                      </TableCell>
-                      <TableCell align="right">
-                        <Typography color="primary" fontWeight="medium">
-                          {formatCurrency(category.sueldoBasico)}
-                        </Typography>
-                      </TableCell>
-                      <TableCell align="right">
-                        {category.valorHora ? formatCurrency(category.valorHora) : '-'}
-                      </TableCell>
-                      <TableCell>{category.descripcion || '-'}</TableCell>
-                      <TableCell align="right">
-                        <Tooltip title="Editar">
-                          <IconButton onClick={() => handleOpenDialog(category)} color="primary" size="small">
-                            <EditIcon />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Eliminar">
-                          <IconButton onClick={() => handleDeleteCategory(category._id)} color="error" size="small">
-                            <DeleteIcon />
-                          </IconButton>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {categories.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={5} align="center">
-                        No hay categorías registradas
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Paper>
+          {/* Sección: Categorías Internas */}
+          <Accordion defaultExpanded>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <WorkIcon color="primary" />
+                <Typography variant="h6">Categorías Internas (Informales)</Typography>
+                <Chip label={categories.length} size="small" color="primary" sx={{ ml: 1 }} />
+              </Box>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Escalas salariales propias de la empresa para empleados fuera de convenio o personal informal.
+              </Typography>
+              <Paper sx={{ width: '100%', overflow: 'hidden' }}>
+                <TableContainer sx={{ maxHeight: 400 }}>
+                  <Table stickyHeader size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Categoría</TableCell>
+                        <TableCell align="right">Sueldo Básico</TableCell>
+                        <TableCell align="right">Valor Hora</TableCell>
+                        <TableCell>Descripción</TableCell>
+                        <TableCell align="right">Acciones</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {categories.map((category) => (
+                        <TableRow key={category._id} hover>
+                          <TableCell component="th" scope="row" sx={{ fontWeight: 'bold' }}>
+                            {category.nombre}
+                          </TableCell>
+                          <TableCell align="right">
+                            <Typography color="primary" fontWeight="medium">
+                              {formatCurrency(category.sueldoBasico)}
+                            </Typography>
+                          </TableCell>
+                          <TableCell align="right">
+                            {category.valorHora ? formatCurrency(category.valorHora) : '-'}
+                          </TableCell>
+                          <TableCell>{category.descripcion || '-'}</TableCell>
+                          <TableCell align="right">
+                            <Tooltip title="Editar">
+                              <IconButton onClick={() => handleOpenDialog(category)} color="primary" size="small">
+                                <EditIcon />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Eliminar">
+                              <IconButton onClick={() => handleDeleteCategory(category._id)} color="error" size="small">
+                                <DeleteIcon />
+                              </IconButton>
+                            </Tooltip>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {categories.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={5} align="center">
+                            No hay categorías internas registradas
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Paper>
+            </AccordionDetails>
+          </Accordion>
+
+          {/* Sección: Categorías de Convenios CCT */}
+          <Accordion defaultExpanded sx={{ mt: 2 }}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <BusinessIcon color="secondary" />
+                <Typography variant="h6">Categorías de Convenios CCT (Formales)</Typography>
+                <Chip label={convenios.length} size="small" color="secondary" sx={{ ml: 1 }} />
+              </Box>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Escalas salariales según Convenios Colectivos de Trabajo para empleados en relación de dependencia formal.
+                <br />
+                <em>Para crear o editar convenios, ve a <strong>Recursos Humanos → Convenios CCT</strong></em>
+              </Typography>
+              
+              {loadingConvenios ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                  <CircularProgress />
+                </Box>
+              ) : convenios.length === 0 ? (
+                <Alert severity="info" variant="outlined">
+                  No hay convenios CCT registrados. Crea uno en la sección de Recursos Humanos.
+                </Alert>
+              ) : (
+                convenios.map((convenio) => (
+                  <Paper key={convenio._id} variant="outlined" sx={{ mb: 2, overflow: 'hidden' }}>
+                    <Box sx={{ p: 2, bgcolor: 'grey.50', borderBottom: 1, borderColor: 'divider' }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Box>
+                          <Typography variant="subtitle1" fontWeight="bold">
+                            {convenio.nombre} ({convenio.numero})
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            Sindicato: {convenio.sindicato}
+                          </Typography>
+                        </Box>
+                        <Chip 
+                          label={convenio.estado} 
+                          size="small" 
+                          color={convenio.estado === 'vigente' ? 'success' : 'default'} 
+                        />
+                      </Box>
+                    </Box>
+                    <TableContainer>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Código</TableCell>
+                            <TableCell>Categoría</TableCell>
+                            <TableCell align="right">Salario Básico</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {(convenio.categorias || [])
+                            .filter(cat => cat.activa !== false)
+                            .sort((a, b) => (a.orden || 0) - (b.orden || 0))
+                            .map((cat, idx) => (
+                              <TableRow key={`${convenio._id}-${cat.codigo}-${idx}`} hover>
+                                <TableCell>
+                                  <Chip label={cat.codigo} size="small" variant="outlined" />
+                                </TableCell>
+                                <TableCell>{cat.nombre}</TableCell>
+                                <TableCell align="right">
+                                  <Typography color="secondary" fontWeight="medium">
+                                    {formatCurrency(cat.salarioBasico)}
+                                  </Typography>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          {(!convenio.categorias || convenio.categorias.length === 0) && (
+                            <TableRow>
+                              <TableCell colSpan={3} align="center" sx={{ color: 'text.secondary' }}>
+                                Sin categorías definidas
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </Paper>
+                ))
+              )}
+            </AccordionDetails>
+          </Accordion>
         </Grid>
 
         <Grid item xs={12} md={4}>
@@ -249,10 +444,28 @@ const ParitariasComponent: React.FC = () => {
                 <Typography variant="h6">Calculadora de Antigüedad</Typography>
               </Box>
               <Typography variant="body2" color="text.secondary" paragraph>
-                Simula el sueldo final incluyendo antigüedad.
+                Simula el sueldo final incluyendo antigüedad (internas o convenio).
               </Typography>
               
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {/* Selector de fuente */}
+                <TextField
+                  select
+                  label="Tipo de Categoría"
+                  value={selectedSource}
+                  onChange={(e) => {
+                    setSelectedSource(e.target.value as 'interna' | 'convenio');
+                    setSelectedCatId('');
+                  }}
+                  SelectProps={{ native: true }}
+                  fullWidth
+                  size="small"
+                >
+                  <option value="interna">Categorías Internas</option>
+                  <option value="convenio">Categorías de Convenio CCT</option>
+                </TextField>
+
+                {/* Selector de categoría según fuente */}
                 <TextField
                   select
                   label="Categoría"
@@ -263,11 +476,26 @@ const ParitariasComponent: React.FC = () => {
                   size="small"
                 >
                   <option value="">Seleccione una categoría</option>
-                  {categories.map((cat) => (
-                    <option key={cat._id} value={cat._id}>
-                      {cat.nombre} - {formatCurrency(cat.sueldoBasico)}
-                    </option>
-                  ))}
+                  {selectedSource === 'interna' ? (
+                    categories.map((cat) => (
+                      <option key={cat._id} value={cat._id}>
+                        {cat.nombre} - {formatCurrency(cat.sueldoBasico)}
+                      </option>
+                    ))
+                  ) : (
+                    convenios.flatMap(conv => 
+                      (conv.categorias || [])
+                        .filter(cat => cat.activa !== false)
+                        .map(cat => (
+                          <option 
+                            key={`${conv._id}|${cat.codigo}`} 
+                            value={`${conv._id}|${cat.codigo}`}
+                          >
+                            [{conv.nombre}] {cat.nombre} - {formatCurrency(cat.salarioBasico)}
+                          </option>
+                        ))
+                    )
+                  )}
                 </TextField>
 
                 <TextField

@@ -174,13 +174,20 @@ export interface EmployeePayroll {
   nombre: string;
   apellido: string;
   sueldoBase: number;
+  antiguedadAnios: number;       // Años de antigüedad calculados desde fechaIngreso
+  antiguedadTexto: string;       // Texto formateado (ej: "3 años 2m")
+  adicionalAntiguedad: number;   // Monto adicional por antigüedad
+  sueldoBruto: number;           // sueldoBase + adicionalAntiguedad
+  modalidad: 'formal' | 'informal'; // Tipo de contratación
   totalPagado: number; // Suma de gastos con su nombre en subRubro de SUELDOS
   adelantos: number;    // Adelantos registrados (concepto = 'adelanto')
   horasExtra: number;   // Horas extra (concepto = 'hora_extra')
   sueldos: number;      // Sueldos regulares (concepto = 'sueldo')
   aguinaldos: number;   // Aguinaldos (concepto = 'aguinaldo')
   bonus: number;        // Bonus (concepto = 'bonus')
-  saldoPendiente: number; // sueldoBase - (sueldos + adelantos) - Los pagos extra (horas extra, aguinaldos, bonus) no afectan el sueldo base
+  descuentos?: number;  // Descuentos aplicados
+  incentivos?: number;  // Incentivos aplicados
+  saldoPendiente: number; // sueldoBruto - (sueldos + adelantos) + incentivos - descuentos
 }
 
 // Interface para registro de horas extras
