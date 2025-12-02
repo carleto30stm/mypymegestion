@@ -10,16 +10,27 @@ export interface IItemReceta {
   costo?: number; // Costo unitario al momento de crear/actualizar
 }
 
+// Interface para item de mano de obra en receta (operarios por categoría)
+export interface IItemManoObra {
+  categoriaId: mongoose.Types.ObjectId;
+  nombreCategoria: string;
+  cantidadOperarios: number; // Cantidad de operarios de esta categoría
+  horasPorOperario: number; // Horas que trabaja cada operario en esta receta
+  valorHora: number; // Valor hora al momento de crear/actualizar
+  costoTotal?: number; // Calculado: cantidadOperarios * horasPorOperario * valorHora
+}
+
 // Interface para el documento de Receta
 export interface IReceta extends Document {
   productoId: mongoose.Types.ObjectId;
   codigoProducto: string;
   nombreProducto: string;
   materiasPrimas: IItemReceta[];
+  manoObra?: IItemManoObra[]; // Array de operarios por categoría
   rendimiento: number; // Cantidad de unidades que produce esta receta
   tiempoPreparacion: number; // Minutos
   costoMateriasPrimas: number; // Calculado automáticamente
-  costoManoObra?: number;
+  costoManoObra?: number; // Calculado desde manoObra[]
   costoIndirecto?: number;
   costoTotal: number;
   precioVentaSugerido?: number;
@@ -61,6 +72,38 @@ const ItemRecetaSchema = new Schema<IItemReceta>({
   }
 }, { _id: false });
 
+// Schema para item de mano de obra
+const ItemManoObraSchema = new Schema<IItemManoObra>({
+  categoriaId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Category',
+    required: [true, 'El ID de categoría es obligatorio']
+  },
+  nombreCategoria: {
+    type: String,
+    required: [true, 'El nombre de categoría es obligatorio']
+  },
+  cantidadOperarios: {
+    type: Number,
+    required: [true, 'La cantidad de operarios es obligatoria'],
+    min: [1, 'Debe haber al menos 1 operario']
+  },
+  horasPorOperario: {
+    type: Number,
+    required: [true, 'Las horas por operario son obligatorias'],
+    min: [0.1, 'Las horas deben ser mayores a 0']
+  },
+  valorHora: {
+    type: Number,
+    required: [true, 'El valor hora es obligatorio'],
+    min: [0, 'El valor hora no puede ser negativo']
+  },
+  costoTotal: {
+    type: Number,
+    min: [0, 'El costo no puede ser negativo']
+  }
+}, { _id: false });
+
 const RecetaSchema = new Schema<IReceta>({
   productoId: {
     type: Schema.Types.ObjectId,
@@ -86,6 +129,10 @@ const RecetaSchema = new Schema<IReceta>({
       },
       message: 'La receta debe tener al menos una materia prima'
     }
+  },
+  manoObra: {
+    type: [ItemManoObraSchema],
+    default: []
   },
   rendimiento: {
     type: Number,
@@ -174,6 +221,17 @@ RecetaSchema.pre('save', async function(next) {
     } else {
       this.costoMateriasPrimas = 0;
     }
+
+    // Calcular costo de mano de obra desde el array de operarios
+    if (this.manoObra && Array.isArray(this.manoObra) && this.manoObra.length > 0) {
+      this.costoManoObra = this.manoObra.reduce((total, item) => {
+        // Calcular costo total de cada item y guardarlo
+        const costoItem = (item.cantidadOperarios || 0) * (item.horasPorOperario || 0) * (item.valorHora || 0);
+        item.costoTotal = costoItem;
+        return total + costoItem;
+      }, 0);
+    }
+    // Si no hay manoObra array pero hay costoManoObra manual, mantenerlo
 
     // Calcular costo total
     this.costoTotal = this.costoMateriasPrimas + 

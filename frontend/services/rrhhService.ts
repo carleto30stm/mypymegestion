@@ -9,6 +9,34 @@ import api from './api';
  * - Recibos de Sueldo
  */
 
+// ========== CATEGORÍAS UNIFICADAS (internas + CCT) ==========
+export interface CategoriaUnificada {
+  _id: string;
+  nombre: string;
+  valorHora: number;
+  sueldoBasico?: number;
+  origen: 'interna' | 'convenio';
+  convenioId?: string;
+  convenioNombre?: string;
+  codigoCategoria?: string;
+}
+
+export const categoriasAPI = {
+  // Obtener todas las categorías unificadas (internas + convenios CCT)
+  obtenerTodasParaManoObra: async (soloConValorHora: boolean = true): Promise<CategoriaUnificada[]> => {
+    const response = await api.get('/api/categories/todas-mano-obra', {
+      params: { soloConValorHora: soloConValorHora.toString() }
+    });
+    return response.data;
+  },
+
+  // Obtener solo categorías internas
+  obtenerInternas: async () => {
+    const response = await api.get('/api/categories');
+    return response.data;
+  }
+};
+
 // ========== CONVENIOS COLECTIVOS ==========
 export const conveniosAPI = {
   // Listar todos los convenios

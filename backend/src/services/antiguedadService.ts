@@ -339,7 +339,7 @@ export async function getEmpleadosProximosAniversario(
   };
 }>> {
   try {
-    const empleados = await Employee.find({ activo: true });
+    const empleados = await Employee.find({ estado: 'activo' });
     const ahora = new Date();
     const resultados: Array<{
       empleado: { id: string; nombre: string; apellido: string };
@@ -389,7 +389,7 @@ export async function getRankingAntiguedad(
   antiguedad: IAntiguedad;
 }>> {
   try {
-    const empleados = await Employee.find({ activo: true });
+    const empleados = await Employee.find({ estado: 'activo' });
     const ahora = new Date();
 
     const conAntiguedad = empleados
@@ -443,7 +443,7 @@ export async function getEstadisticasAntiguedad(): Promise<{
   } | null;
 }> {
   try {
-    const empleados = await Employee.find({ activo: true });
+    const empleados = await Employee.find({ estado: 'activo' });
     const ahora = new Date();
 
     const empleadosConFecha = empleados.filter(emp => emp.fechaIngreso);

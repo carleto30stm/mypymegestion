@@ -46,7 +46,8 @@ import {
   Calculate as CalculateIcon
 } from '@mui/icons-material';
 import { recetasAPI, productosAPI, materiasPrimasAPI } from '../services/api';
-import type { Receta, ItemReceta, Producto, MateriaPrima } from '../types';
+import { categoriasAPI, CategoriaUnificada } from '../services/rrhhService';
+import type { Receta, ItemReceta, ItemManoObra, Producto, MateriaPrima } from '../types';
 import { formatCurrency } from '../utils/formatters';
 
 const RecetasPage: React.FC = () => {
@@ -54,6 +55,7 @@ const RecetasPage: React.FC = () => {
   const [recetas, setRecetas] = useState<Receta[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
   const [materiasPrimas, setMateriasPrimas] = useState<MateriaPrima[]>([]);
+  const [categorias, setCategorias] = useState<CategoriaUnificada[]>([]); // Categorías internas + CCT para mano de obra
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -67,6 +69,7 @@ const RecetasPage: React.FC = () => {
   const [recetaForm, setRecetaForm] = useState<Partial<Receta>>({
     productoId: '',
     materiasPrimas: [],
+    manoObra: [],
     rendimiento: 1,
     tiempoPreparacion: 0,
     costoManoObra: 0,
@@ -80,8 +83,12 @@ const RecetasPage: React.FC = () => {
   const [mpSeleccionada, setMpSeleccionada] = useState('');
   const [cantidadMp, setCantidadMp] = useState(0);
 
+  // Estados para agregar mano de obra (operario por categoría)
+  const [categoriaSeleccionada, setCategoriaSeleccionada] = useState('');
+  const [cantidadOperarios, setCantidadOperarios] = useState(1);
+  const [minutosPorOperario, setMinutosPorOperario] = useState(60);
+
   // Estados separados para los valores formateados
-  const [costoManoObraFormatted, setCostoManoObraFormatted] = useState('');
   const [costoIndirectoFormatted, setCostoIndirectoFormatted] = useState('');
   const [precioVentaSugeridoFormatted, setPrecioVentaSugeridoFormatted] = useState('');
   const [margenDeseado, setMargenDeseado] = useState<number>(0);
@@ -154,15 +161,6 @@ const RecetasPage: React.FC = () => {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     
-    // Manejar campos de costo con formato especial
-    if (name === 'costoManoObra') {
-      const formatted = formatNumberInput(value);
-      setCostoManoObraFormatted(formatted);
-      const numericValue = getNumericValue(formatted);
-      setRecetaForm(prev => ({ ...prev, costoManoObra: numericValue }));
-      return;
-    }
-    
     if (name === 'costoIndirecto') {
       const formatted = formatNumberInput(value);
       setCostoIndirectoFormatted(formatted);
@@ -191,14 +189,16 @@ const RecetasPage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const [recetasData, productosData, materiasData] = await Promise.all([
+      const [recetasData, productosData, materiasData, categoriasData] = await Promise.all([
         recetasAPI.obtenerTodas({ estado: filtroEstado || undefined }),
         productosAPI.obtenerTodos(),
-        materiasPrimasAPI.obtenerTodas()
+        materiasPrimasAPI.obtenerTodas(),
+        categoriasAPI.obtenerTodasParaManoObra(true) // Solo categorías con valorHora > 0
       ]);
       setRecetas(recetasData);
       setProductos(productosData);
       setMateriasPrimas(materiasData);
+      setCategorias(categoriasData);
     } catch (err: any) {
       setError(err.response?.data?.mensaje || 'Error al cargar datos');
       console.error('Error cargando datos:', err);
@@ -210,14 +210,10 @@ const RecetasPage: React.FC = () => {
   const handleAbrirDialogo = (receta?: Receta) => {
     if (receta) {
       setRecetaEditando(receta);
-      setRecetaForm(receta);
-      
-      // Formatear los valores existentes con decimales
-      if (receta.costoManoObra && receta.costoManoObra > 0) {
-        setCostoManoObraFormatted(formatCurrency(receta.costoManoObra));
-      } else {
-        setCostoManoObraFormatted('');
-      }
+      setRecetaForm({
+        ...receta,
+        manoObra: receta.manoObra || []
+      });
       
       if (receta.costoIndirecto && receta.costoIndirecto > 0) {
         setCostoIndirectoFormatted(formatCurrency(receta.costoIndirecto));
@@ -230,12 +226,13 @@ const RecetasPage: React.FC = () => {
       } else {
         setPrecioVentaSugeridoFormatted('');
       }
-      setMargenDeseado(0); // Reset margen deseado al editar
+      setMargenDeseado(0);
     } else {
       setRecetaEditando(null);
       setRecetaForm({
         productoId: '',
         materiasPrimas: [],
+        manoObra: [],
         rendimiento: 1,
         tiempoPreparacion: 0,
         costoManoObra: 0,
@@ -246,11 +243,14 @@ const RecetasPage: React.FC = () => {
       });
       
       // Limpiar valores formateados
-      setCostoManoObraFormatted('');
       setCostoIndirectoFormatted('');
       setPrecioVentaSugeridoFormatted('');
       setMargenDeseado(0);
     }
+    // Limpiar estados de agregar mano de obra
+    setCategoriaSeleccionada('');
+    setCantidadOperarios(1);
+    setMinutosPorOperario(60);
     setOpenReceta(true);
   };
 
@@ -259,7 +259,55 @@ const RecetasPage: React.FC = () => {
     setRecetaEditando(null);
     setMpSeleccionada('');
     setCantidadMp(0);
+    setCategoriaSeleccionada('');
+    setCantidadOperarios(1);
+    setMinutosPorOperario(60);
     setMargenDeseado(0);
+  };
+
+  // Función para agregar mano de obra (operarios por categoría)
+  const handleAgregarManoObra = () => {
+    if (!categoriaSeleccionada || cantidadOperarios <= 0 || minutosPorOperario <= 0) {
+      setError('Seleccione una categoría, cantidad de operarios y minutos válidos');
+      return;
+    }
+
+    const categoria = categorias.find(c => c._id === categoriaSeleccionada);
+    if (!categoria) return;
+
+    // Verificar si ya está agregada esta categoría
+    if (recetaForm.manoObra?.some(item => item.categoriaId === categoria._id)) {
+      setError('Esta categoría ya está agregada. Edite la existente o elimínela primero.');
+      return;
+    }
+
+    // Convertir minutos a horas para el cálculo (valorHora es por hora)
+    const horasCalculadas = minutosPorOperario / 60;
+    const costoTotal = cantidadOperarios * horasCalculadas * (categoria.valorHora || 0);
+
+    const nuevaManoObra: ItemManoObra = {
+      categoriaId: categoria._id!,
+      nombreCategoria: categoria.nombre,
+      cantidadOperarios: cantidadOperarios,
+      horasPorOperario: horasCalculadas, // Guardamos en horas para compatibilidad
+      valorHora: categoria.valorHora || 0,
+      costoTotal: costoTotal
+    };
+
+    setRecetaForm({
+      ...recetaForm,
+      manoObra: [...(recetaForm.manoObra || []), nuevaManoObra]
+    });
+    setCategoriaSeleccionada('');
+    setCantidadOperarios(1);
+    setMinutosPorOperario(60);
+  };
+
+  // Función para eliminar mano de obra
+  const handleEliminarManoObra = (index: number) => {
+    const nuevaManoObra = [...(recetaForm.manoObra || [])];
+    nuevaManoObra.splice(index, 1);
+    setRecetaForm({ ...recetaForm, manoObra: nuevaManoObra });
   };
 
   const handleAgregarMateriaPrima = () => {
@@ -384,11 +432,18 @@ const RecetasPage: React.FC = () => {
     return colores[estado] || 'default';
   };
 
+  const calcularCostoManoObra = () => {
+    return (recetaForm.manoObra || []).reduce((sum, item) => 
+      sum + (item.cantidadOperarios || 0) * (item.horasPorOperario || 0) * (item.valorHora || 0), 0
+    );
+  };
+
   const calcularCostoTotal = () => {
     const costoMP = (recetaForm.materiasPrimas || []).reduce((sum, mp) => 
       sum + (mp.costo || 0) * mp.cantidad, 0
     );
-    return costoMP + (recetaForm.costoManoObra || 0) + (recetaForm.costoIndirecto || 0);
+    const costoMO = calcularCostoManoObra();
+    return costoMP + costoMO + (recetaForm.costoIndirecto || 0);
   };
 
   const calcularCostoUnitario = () => {
@@ -697,27 +752,125 @@ const RecetasPage: React.FC = () => {
               </List>
             </Grid>
 
-            {/* Costos */}
+            {/* Mano de Obra */}
             <Grid item xs={12}>
               <Divider sx={{ my: 2 }} />
               <Typography variant="h6" gutterBottom>
-                Costos Adicionales
+                Mano de Obra (Operarios por Categoría)
+              </Typography>
+              {categorias.length === 0 && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  No hay categorías con valor hora definido. Configure el <strong>Valor Hora</strong> en las categorías internas (Empleados → Paritarias) o verifique que existan convenios CCT activos con categorías (RRHH → Convenios CCT).
+                </Alert>
+              )}
+            </Grid>
+
+            {/* Agregar Mano de Obra */}
+            {categorias.length > 0 && (
+              <>
+                <Grid item xs={12} md={4}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Categoría de Operario</InputLabel>
+                    <Select
+                      value={categoriaSeleccionada}
+                      label="Categoría de Operario"
+                      onChange={(e) => setCategoriaSeleccionada(e.target.value)}
+                    >
+                      {categorias.map((cat) => (
+                        <MenuItem key={cat._id} value={cat._id}>
+                          {cat.origen === 'convenio' ? '📋 ' : '🏢 '}{cat.nombre} ({formatearMoneda(cat.valorHora)}/hora)
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} md={2}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Cant. Operarios"
+                    type="number"
+                    value={cantidadOperarios}
+                    onChange={(e) => setCantidadOperarios(parseInt(e.target.value) || 1)}
+                    inputProps={{ min: 1, step: 1 }}
+                  />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    label="Minutos c/u"
+                    type="number"
+                    value={minutosPorOperario}
+                    onChange={(e) => setMinutosPorOperario(parseInt(e.target.value) || 0)}
+                    inputProps={{ min: 1, step: 5 }}
+                    helperText="Minutos por operario"
+                  />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <Button
+                    fullWidth
+                    variant="outlined"
+                    onClick={handleAgregarManoObra}
+                    startIcon={<AddIcon />}
+                    disabled={!categoriaSeleccionada}
+                  >
+                    Agregar
+                  </Button>
+                </Grid>
+              </>
+            )}
+
+            {/* Lista de Mano de Obra */}
+            <Grid item xs={12}>
+              <List dense>
+                {recetaForm.manoObra?.map((item, index) => {
+                  const costoItem = (item.cantidadOperarios || 0) * (item.horasPorOperario || 0) * (item.valorHora || 0);
+                  return (
+                    <ListItem key={index} sx={{ bgcolor: 'action.hover', mb: 0.5, borderRadius: 1 }}>
+                      <ListItemText
+                        primary={
+                          <Typography variant="body2" fontWeight="bold">
+                            {item.nombreCategoria}
+                          </Typography>
+                        }
+                        secondary={
+                          <Typography variant="caption" color="textSecondary">
+                            {item.cantidadOperarios} operario(s) × {Math.round((item.horasPorOperario || 0) * 60)} min × {formatearMoneda(item.valorHora)}/h = <strong>{formatearMoneda(costoItem)}</strong>
+                          </Typography>
+                        }
+                      />
+                      <ListItemSecondaryAction>
+                        <IconButton
+                          edge="end"
+                          onClick={() => handleEliminarManoObra(index)}
+                          color="error"
+                          size="small"
+                        >
+                          <RemoveIcon />
+                        </IconButton>
+                      </ListItemSecondaryAction>
+                    </ListItem>
+                  );
+                })}
+              </List>
+              {(recetaForm.manoObra?.length || 0) > 0 && (
+                <Box sx={{ mt: 1, p: 1, bgcolor: 'primary.light', borderRadius: 1 }}>
+                  <Typography variant="body2" color="primary.contrastText" fontWeight="bold">
+                    Total Mano de Obra: {formatearMoneda(calcularCostoManoObra())}
+                  </Typography>
+                </Box>
+              )}
+            </Grid>
+
+            {/* Costos Adicionales */}
+            <Grid item xs={12}>
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="h6" gutterBottom>
+                Otros Costos
               </Typography>
             </Grid>
-            <Grid item xs={12} md={4}>
-              <TextField
-                fullWidth
-                label="Costo Mano de Obra"
-                name="costoManoObra"
-                type="text"
-                value={costoManoObraFormatted}
-                onChange={handleInputChange}
-                placeholder="Ej: 1.500,50"
-                helperText="Formato: 1.000,50 (usar coma para decimales)"
-                inputProps={{ min: 0, step: 0.01 }}
-              />
-            </Grid>
-            <Grid item xs={12} md={4}>
+            <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
                 label="Costos Indirectos"
@@ -726,11 +879,11 @@ const RecetasPage: React.FC = () => {
                 value={costoIndirectoFormatted}
                 onChange={handleInputChange}
                 placeholder="Ej: 500,25"
-                helperText="Formato: 1.000,50 (usar coma para decimales)"
+                helperText="Electricidad, gas, depreciación, etc."
                 inputProps={{ min: 0, step: 0.01 }}
               />
             </Grid>
-            <Grid item xs={12} md={4}>
+            <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
                 label="Precio Venta Sugerido"
@@ -780,17 +933,35 @@ const RecetasPage: React.FC = () => {
             <Grid item xs={12}>
               <Card variant="outlined" sx={{ bgcolor: 'grey.50' }}>
                 <CardContent>
+                  <Typography variant="subtitle2" color="textSecondary" gutterBottom>
+                    Desglose de Costos
+                  </Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={6} md={3}>
+                      <Typography variant="caption" color="textSecondary">Materias Primas:</Typography>
+                      <Typography variant="body2">{formatearMoneda((recetaForm.materiasPrimas || []).reduce((sum, mp) => sum + (mp.costo || 0) * mp.cantidad, 0))}</Typography>
+                    </Grid>
+                    <Grid item xs={6} md={3}>
+                      <Typography variant="caption" color="textSecondary">Mano de Obra:</Typography>
+                      <Typography variant="body2">{formatearMoneda(calcularCostoManoObra())}</Typography>
+                    </Grid>
+                    <Grid item xs={6} md={3}>
+                      <Typography variant="caption" color="textSecondary">Costos Indirectos:</Typography>
+                      <Typography variant="body2">{formatearMoneda(recetaForm.costoIndirecto || 0)}</Typography>
+                    </Grid>
+                    <Grid item xs={6} md={3}>
+                      <Typography variant="caption" color="textSecondary">Costo Total:</Typography>
+                      <Typography variant="h6" color="primary">{formatearMoneda(calcularCostoTotal())}</Typography>
+                    </Grid>
+                  </Grid>
+                  <Divider sx={{ my: 1 }} />
                   <Grid container spacing={2}>
                     <Grid item xs={6}>
-                      <Typography variant="body2" color="textSecondary">Costo Total:</Typography>
-                      <Typography variant="h6">{formatearMoneda(calcularCostoTotal())}</Typography>
-                    </Grid>
-                    <Grid item xs={6}>
-                      <Typography variant="body2" color="textSecondary">Costo Unitario:</Typography>
+                      <Typography variant="body2" color="textSecondary">Costo Unitario (/{recetaForm.rendimiento || 1} un):</Typography>
                       <Typography variant="h6">{formatearMoneda(calcularCostoUnitario())}</Typography>
                     </Grid>
                     {recetaForm.precioVentaSugerido && recetaForm.precioVentaSugerido > 0 && (
-                      <Grid item xs={12}>
+                      <Grid item xs={6}>
                         <Typography variant="body2" color="textSecondary">Margen Bruto:</Typography>
                         <Typography
                           variant="h6"

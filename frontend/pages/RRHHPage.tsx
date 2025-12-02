@@ -115,14 +115,16 @@ const RRHHPage: React.FC = () => {
     sindicato: '',
     estado: 'vigente',
     fechaVigenciaDesde: new Date().toISOString().split('T')[0],
-    categorias: [] as { nombre: string; codigo: string; salarioBasico: number; orden: number }[]
+    categorias: [] as { nombre: string; codigo: string; salarioBasico: number; valorHora?: number; orden: number }[]
   });
   const [nuevaCategoria, setNuevaCategoria] = useState({
     nombre: '',
     codigo: '',
-    salarioBasico: ''
+    salarioBasico: '',
+    valorHora: ''
   });
   const [salarioBasicoFormatted, setSalarioBasicoFormatted] = useState('');
+  const [valorHoraFormatted, setValorHoraFormatted] = useState('');
 
   const handleTabChange = (_: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -202,8 +204,9 @@ const RRHHPage: React.FC = () => {
       fechaVigenciaDesde: new Date().toISOString().split('T')[0],
       categorias: []
     });
-    setNuevaCategoria({ nombre: '', codigo: '', salarioBasico: '' });
+    setNuevaCategoria({ nombre: '', codigo: '', salarioBasico: '', valorHora: '' });
     setSalarioBasicoFormatted('');
+    setValorHoraFormatted('');
     setOpenConvenioDialog(true);
   };
 
@@ -220,17 +223,20 @@ const RRHHPage: React.FC = () => {
         nombre: c.nombre,
         codigo: c.codigo || '',
         salarioBasico: c.salarioBasico,
+        valorHora: c.valorHora,
         orden: c.orden || idx
       })) || []
     });
-    setNuevaCategoria({ nombre: '', codigo: '', salarioBasico: '' });
+    setNuevaCategoria({ nombre: '', codigo: '', salarioBasico: '', valorHora: '' });
     setSalarioBasicoFormatted('');
+    setValorHoraFormatted('');
     setOpenConvenioDialog(true);
   };
 
   // Agregar categoría al convenio
   const handleAgregarCategoria = () => {
     const salarioNumerico = getNumericValue(salarioBasicoFormatted);
+    const valorHoraNumerico = getNumericValue(valorHoraFormatted);
     if (nuevaCategoria.nombre && salarioNumerico > 0) {
       setConvenioForm(prev => ({
         ...prev,
@@ -240,12 +246,14 @@ const RRHHPage: React.FC = () => {
             nombre: nuevaCategoria.nombre,
             codigo: nuevaCategoria.codigo || nuevaCategoria.nombre.substring(0, 3).toUpperCase(),
             salarioBasico: salarioNumerico,
+            valorHora: valorHoraNumerico > 0 ? valorHoraNumerico : undefined,
             orden: prev.categorias.length
           }
         ]
       }));
-      setNuevaCategoria({ nombre: '', codigo: '', salarioBasico: '' });
+      setNuevaCategoria({ nombre: '', codigo: '', salarioBasico: '', valorHora: '' });
       setSalarioBasicoFormatted('');
+      setValorHoraFormatted('');
     }
   };
 
@@ -1065,7 +1073,24 @@ const RRHHPage: React.FC = () => {
                     size="small"
                     fullWidth
                     placeholder="Ej: 350.000,00"
-                    helperText="Formato: 1.000,50 (coma para decimales)"
+                    helperText="Sueldo mensual"
+                    InputProps={{ startAdornment: '$' }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={2}>
+                  <TextField
+                    label="Valor Hora"
+                    type="text"
+                    value={valorHoraFormatted}
+                    onChange={(e) => {
+                      const formatted = formatNumberInput(e.target.value);
+                      setValorHoraFormatted(formatted);
+                      setNuevaCategoria({ ...nuevaCategoria, valorHora: formatted });
+                    }}
+                    size="small"
+                    fullWidth
+                    placeholder="Opcional"
+                    helperText="Si no se define, se calcula"
                     InputProps={{ startAdornment: '$' }}
                   />
                 </Grid>
