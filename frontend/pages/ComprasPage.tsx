@@ -558,6 +558,7 @@ const ComprasPage: React.FC = () => {
                 type="number"
                 value={precioItem}
                 onChange={(e) => setPrecioItem(parseFloat(e.target.value))}
+                inputProps={{ step: 0.001 }}
               />
             </Grid>
             <Grid item xs={6} md={2}>

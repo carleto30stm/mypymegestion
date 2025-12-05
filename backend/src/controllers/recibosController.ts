@@ -112,6 +112,14 @@ export const crearRecibo = async (req: ExpressRequest, res: ExpressResponse) => 
       return res.status(400).json({ message: 'Debe especificar al menos una forma de pago' });
     }
 
+    // Validar montos en las formas de pago (no se permiten montos <= 0)
+    for (const fp of formasPago) {
+      if (typeof fp.monto !== 'number' || fp.monto <= 0) {
+        await session.abortTransaction();
+        return res.status(400).json({ message: 'Todas las formas de pago deben tener un monto mayor a cero' });
+      }
+    }
+
     if (!creadoPor) {
       await session.abortTransaction();
       return res.status(400).json({ message: 'El creador es obligatorio' });
@@ -190,7 +198,9 @@ export const crearRecibo = async (req: ExpressRequest, res: ExpressResponse) => 
         montoPendienteDistribuir -= montoCobrado;
       
         // Actualizar venta
-        venta.montoCobrado += montoCobrado;
+        // Evitar sobrepago accidental: cap al total de la venta
+        const nuevoMontoCobrado = Math.min(venta.montoCobrado + montoCobrado, venta.total);
+        venta.montoCobrado = nuevoMontoCobrado;
         venta.saldoPendiente = ventaRel.saldoRestante;
         
         // Actualizar estado de cobranza y estadoGranular
@@ -218,6 +228,13 @@ export const crearRecibo = async (req: ExpressRequest, res: ExpressResponse) => 
     const nombreCliente = cliente.razonSocial || `${cliente.apellido || ''} ${cliente.nombre}`.trim();
     const documentoCliente = cliente.numeroDocumento;
     
+    // Calcular totales correctos para el recibo
+    // totalACobrar: para regularizaciones = totalFormasPago, para cobros de ventas = suma de montoCobrado en ventasRelacionadas
+    const totalCobradoEnVentas = ventasRelacionadas.reduce((sum, vr) => sum + (vr.montoCobrado || 0), 0);
+    const totalACobrarFinal = esRegularizacion ? totalFormasPago : totalCobradoEnVentas;
+    const vueltoFinal = esRegularizacion ? 0 : (totalFormasPago > totalACobrarFinal ? totalFormasPago - totalACobrarFinal : 0);
+    const saldoPendienteFinal = esRegularizacion ? 0 : (totalFormasPago < totalACobrarFinal ? totalACobrarFinal - totalFormasPago : 0);
+
     // Crear el recibo
     const nuevoRecibo = new ReciboPago({
       fecha: new Date(),
@@ -227,10 +244,10 @@ export const crearRecibo = async (req: ExpressRequest, res: ExpressResponse) => 
       ventasRelacionadas,
       formasPago,
       totales: {
-        totalACobrar: esRegularizacion ? totalFormasPago : totalACobrar,
+        totalACobrar: totalACobrarFinal,
         totalCobrado: totalFormasPago,
-        vuelto: esRegularizacion ? 0 : (totalFormasPago > totalACobrar ? totalFormasPago - totalACobrar : 0),
-        saldoPendiente: esRegularizacion ? 0 : (totalFormasPago < totalACobrar ? totalACobrar - totalFormasPago : 0)
+        vuelto: vueltoFinal,
+        saldoPendiente: saldoPendienteFinal
       },
       momentoCobro: momentoCobro || 'diferido', // Siempre 'diferido' si no se especifica
       estadoRecibo: 'activo',

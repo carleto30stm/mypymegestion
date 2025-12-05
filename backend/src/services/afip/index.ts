@@ -31,5 +31,13 @@ export {
   type RespuestaCAE
 } from './AFIPServiceSOAP.js';
 
+// Servicio de consulta de padrón A4
+export {
+  AFIPPadronService,
+  type DatosPersonaAFIP,
+  type ResultadoConsultaPadron,
+  type PadronServiceConfig
+} from './AFIPPadronService.js';
+
 // Re-exportar como default el servicio principal
 export { default } from './AFIPServiceSOAP.js';

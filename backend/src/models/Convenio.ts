@@ -207,7 +207,7 @@ const ConvenioSchema = new Schema({
 // ÍNDICES
 // =====================================================
 
-ConvenioSchema.index({ numero: 1 });
+// ConvenioSchema.index({ numero: 1 });
 ConvenioSchema.index({ nombre: 'text', sindicato: 'text' });
 ConvenioSchema.index({ estado: 1 });
 ConvenioSchema.index({ 'categorias.codigo': 1 });

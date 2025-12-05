@@ -46,7 +46,7 @@ import {
   Info as InfoIcon,
   ArrowBack as ArrowBackIcon
 } from '@mui/icons-material';
-import { formatCurrency, parseCurrency } from '../utils/formatters';
+import { formatCurrency, formatNumberInput, getNumericValue } from '../utils/formatters';
 
 const VentasPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -336,25 +336,26 @@ const VentasPage: React.FC = () => {
                       </TableCell>
                       <TableCell align="right">
                         <TextField
-                          size="small"
-                          value={item.precioUnitario}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            const precio = parseCurrency(value);
-                            if (!isNaN(precio) && precio >= 0) {
-                              setCarrito(carrito.map(i =>
-                                i.productoId === item.productoId
-                                  ? {
-                                      ...i,
-                                      precioUnitario: precio,
-                                      subtotal: (precio * i.cantidad) * (1 - ((i.porcentajeDescuento || 0) / 100)),
-                                      total: (precio * i.cantidad) * (1 - ((i.porcentajeDescuento || 0) / 100)),
-                                      descuento: (precio * i.cantidad) * ((i.porcentajeDescuento || 0) / 100)
-                                    }
-                                  : i
-                              ));
-                            }
-                          }}
+                            size="small"
+                            value={formatNumberInput(String(item.precioUnitario).replace('.', ','))}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              const formatted = formatNumberInput(raw);
+                              const precio = getNumericValue(formatted);
+                              if (!isNaN(precio) && precio >= 0) {
+                                setCarrito(carrito.map(i =>
+                                  i.productoId === item.productoId
+                                    ? {
+                                        ...i,
+                                        precioUnitario: precio,
+                                        subtotal: (precio * i.cantidad) * (1 - ((i.porcentajeDescuento || 0) / 100)),
+                                        total: (precio * i.cantidad) * (1 - ((i.porcentajeDescuento || 0) / 100)),
+                                        descuento: (precio * i.cantidad) * ((i.porcentajeDescuento || 0) / 100)
+                                      }
+                                    : i
+                                ));
+                              }
+                            }}
                           variant="outlined"
                           sx={{ width: '100px' }}
                           inputProps={{
