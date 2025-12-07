@@ -714,7 +714,7 @@ const RecetasPage: React.FC = () => {
                 type="number"
                 value={cantidadMp}
                 onChange={(e) => setCantidadMp(parseFloat(e.target.value))}
-                inputProps={{ min: 0, step: 0.01 }}
+                inputProps={{ min: 0, step: 0.001 }}
               />
             </Grid>
             <Grid item xs={12} md={2}>
@@ -880,7 +880,7 @@ const RecetasPage: React.FC = () => {
                 onChange={handleInputChange}
                 placeholder="Ej: 500,25"
                 helperText="Electricidad, gas, depreciación, etc."
-                inputProps={{ min: 0, step: 0.01 }}
+                inputProps={{ min: 0, step: 0.001 }}
               />
             </Grid>
             <Grid item xs={12} md={6}>
@@ -893,7 +893,7 @@ const RecetasPage: React.FC = () => {
                 onChange={handleInputChange}
                 placeholder="Ej: 3.000,00"
                 helperText="Formato: 1.000,50 (usar coma para decimales)"
-                inputProps={{ min: 0, step: 0.01 }}
+                inputProps={{ min: 0, step: 0.001 }}
               />
             </Grid>
 

@@ -19,6 +19,7 @@ import AFIPWSFEService, {
   type ResultadoCAE,
   type WSFEConfig
 } from './AFIPWSFEService.js';
+import AFIPPadronService from './AFIPPadronService.js';
 
 export interface AFIPConfig {
   cuit: string;
@@ -388,7 +389,8 @@ export class AFIPServiceSOAP {
 
   /**
    * NUEVO: Determina tipo de factura consultando directamente a AFIP
-   * Este método es más preciso porque consulta los servicios de AFIP
+   * Este método consulta el padrón A4 de AFIP para obtener la condición IVA real
+   * NO confía en el valor guardado localmente (el cliente puede haber cambiado de condición)
    */
   async determinarTipoFacturaDesdeAFIP(
     cuitCliente: string,
@@ -398,91 +400,58 @@ export class AFIPServiceSOAP {
     condicionIVA: number; 
     descripcionCondicion: string;
     discriminaIVA: boolean;
+    usarDNIEnLugarDeCUIT: boolean;
   }> {
     try {
       console.log('\n🔍 ========== CONSULTA AFIP PARA TIPO FACTURA ==========');
       console.log('🔍 CUIT Cliente:', cuitCliente);
       console.log('🔍 Empresa condición IVA:', empresaCondicionIVA);
 
-      // Consultar condiciones IVA disponibles desde AFIP
-      const condicionesIVA = await this.wsfeService.obtenerCondicionesIVA();
-      console.log('📋 Condiciones IVA obtenidas de AFIP:', condicionesIVA.length);
-
-      // Consultar tipos de comprobante habilitados
-      const tiposComprobante = await this.wsfeService.obtenerTiposComprobante();
-      console.log('📋 Tipos comprobante habilitados:', tiposComprobante.map((t: any) => `${t.id}-${t.descripcion}`).join(', '));
-
-      // Normalizar empresa
-      const empresaNorm = empresaCondicionIVA.toUpperCase().replace(/\s+/g, '_');
-      const empresaRI = empresaNorm === 'RESPONSABLE_INSCRIPTO' || empresaNorm === 'RESPONSABLE_INSCRITO';
-
-      // Por defecto: Consumidor Final (lo más común)
-      let condicionIVACliente = CONDICION_IVA.CONSUMIDOR_FINAL;
-      let descripcionCondicion = 'Consumidor Final';
+      // Crear servicio de padrón con la misma config
+      const padronConfig: any = {
+        cuit: this.config.cuit,
+        certPath: this.config.certPath,
+        keyPath: this.config.keyPath,
+        production: this.config.production
+      };
       
-      // Si el CUIT tiene formato válido, detectar por prefijo
-      const cuitLimpio = cuitCliente.replace(/[^0-9]/g, '');
-      if (cuitLimpio.length === 11) {
-        // CUIT válido - analizar prefijo
-        const prefijo = cuitLimpio.substring(0, 2);
-        
-        console.log('🔍 Prefijo CUIT detectado:', prefijo);
-        
-        if (prefijo === '30' || prefijo === '33') {
-          // Persona jurídica - generalmente RI
-          condicionIVACliente = CONDICION_IVA.RESPONSABLE_INSCRIPTO;
-          descripcionCondicion = 'Responsable Inscripto';
-          console.log('✅ CUIT 30/33 → Persona Jurídica → Responsable Inscripto');
-        } else if (prefijo === '20' || prefijo === '23' || prefijo === '27') {
-          // Persona física - casi siempre monotributo
-          // EXCEPCIÓN: Algunos profesionales con CUIT 20/27 pueden ser RI
-          // Pero por defecto asumimos Monotributo (más común y más seguro)
-          condicionIVACliente = CONDICION_IVA.RESPONSABLE_MONOTRIBUTO;
-          descripcionCondicion = 'Monotributista';
-          console.log('✅ CUIT 20/23/27 → Persona Física → Monotributista (por defecto)');
-        }
-      } else {
-        console.log('⚠️  CUIT inválido o DNI - asumiendo Consumidor Final');
+      // Solo incluir taFolder si está definido
+      if (this.config.taFolder) {
+        padronConfig.taFolder = this.config.taFolder;
       }
+      
+      const padronService = new AFIPPadronService(padronConfig);
 
-      console.log('🎯 Condición IVA detectada:', descripcionCondicion, `(código ${condicionIVACliente})`);
+      // Consultar padrón AFIP para obtener condición IVA REAL
+      const resultado = await padronService.determinarTipoFactura(
+        cuitCliente,
+        empresaCondicionIVA
+      );
 
-      // Determinar tipo de factura según lógica de negocio
-      let tipoFactura: string;
-      let discriminaIVA: boolean;
-
-      if (!empresaRI) {
-        tipoFactura = 'C';
-        discriminaIVA = false;
-      } else {
-        if (condicionIVACliente === CONDICION_IVA.RESPONSABLE_INSCRIPTO) {
-          tipoFactura = 'A';
-          discriminaIVA = true;
-        } else {
-          tipoFactura = 'B';
-          discriminaIVA = true;
-        }
-      }
-
-      console.log('📄 Tipo factura determinado:', tipoFactura);
-      console.log('💰 Discrimina IVA:', discriminaIVA);
+      console.log('📄 Tipo factura determinado:', resultado.tipoFactura);
+      console.log('💼 Condición IVA AFIP:', resultado.condicionIVADescripcion, `(código ${resultado.condicionIVA})`);
+      console.log('💰 Discrimina IVA:', resultado.discriminaIVA);
+      console.log('📋 Usar DNI en lugar de CUIT:', resultado.usarDNIEnLugarDeCUIT);
       console.log('========== FIN CONSULTA AFIP ==========\n');
 
       return {
-        tipoFactura,
-        condicionIVA: condicionIVACliente,
-        descripcionCondicion,
-        discriminaIVA
+        tipoFactura: resultado.tipoFactura,
+        condicionIVA: resultado.condicionIVA,
+        descripcionCondicion: resultado.condicionIVADescripcion,
+        discriminaIVA: resultado.discriminaIVA,
+        usarDNIEnLugarDeCUIT: resultado.usarDNIEnLugarDeCUIT
       };
     } catch (error: any) {
       console.error('❌ Error al consultar AFIP para tipo factura:', error.message);
-      console.log('⚠️  Usando lógica estática como fallback');
+      console.log('⚠️  Usando lógica de fallback segura');
       
+      // Fallback seguro: tratar como Consumidor Final y usar DNI
       return {
         tipoFactura: 'B',
         condicionIVA: CONDICION_IVA.CONSUMIDOR_FINAL,
         descripcionCondicion: 'Consumidor Final (fallback)',
-        discriminaIVA: true
+        discriminaIVA: true,
+        usarDNIEnLugarDeCUIT: true // Seguro para evitar error de padrones
       };
     }
   }
@@ -573,6 +542,8 @@ export class AFIPServiceSOAP {
    */
   private convertirFacturaAComprobante(factura: DatosFactura): ComprobanteDatos {
     console.log('🔧 [convertirFacturaAComprobante] condicionIVA recibida:', factura.cliente.condicionIVA);
+    console.log('🔧 [convertirFacturaAComprobante] tipoDocumento recibido:', factura.cliente.tipoDocumento);
+    console.log('🔧 [convertirFacturaAComprobante] tipoComprobante:', factura.tipoComprobante);
     
     // Si ya es un número (como string), usarlo directamente
     // Si no, intentar convertir desde descripción textual
@@ -589,12 +560,32 @@ export class AFIPServiceSOAP {
     
     console.log('🔧 [convertirFacturaAComprobante] ✅ condicionIVACode FINAL a usar:', condicionIVACode);
     
+    // CRÍTICO: Validar coherencia entre tipo documento, condición IVA y tipo comprobante
+    // Para Factura B a Consumidor Final: AFIP NO valida CUITs, debe usarse DNI (96)
+    let tipoDocumentoFinal = AFIPServiceSOAP.convertirTipoDocumento(factura.cliente.tipoDocumento);
+    let numeroDocumentoFinal = factura.cliente.numeroDocumento;
+    
+    const esFacturaB = factura.tipoComprobante === 'B' || factura.tipoComprobante === 'B_NC' || factura.tipoComprobante === 'B_ND';
+    const esConsumidorFinal = condicionIVACode === CONDICION_IVA.CONSUMIDOR_FINAL;
+    const tieneDocTipoCUIT = tipoDocumentoFinal === TIPO_DOCUMENTO.CUIT;
+    
+    if (esFacturaB && esConsumidorFinal && tieneDocTipoCUIT) {
+      // AFIP rechaza CUITs no registrados en padrones para Consumidor Final
+      // Solución: usar DNI (96) en lugar de CUIT (80) para estos casos
+      console.log('⚠️  [convertirFacturaAComprobante] Factura B a Consumidor Final con CUIT detectado');
+      console.log('   → Cambiando DocTipo de CUIT (80) a DNI (96) para evitar validación de padrones');
+      tipoDocumentoFinal = TIPO_DOCUMENTO.DNI;
+      // El número de documento se mantiene (AFIP acepta el CUIT como número de DNI sin validar)
+    }
+    
+    console.log('🔧 [convertirFacturaAComprobante] tipoDocumento FINAL:', tipoDocumentoFinal);
+    
     return {
       puntoVenta: factura.puntoVenta,
       tipoComprobante: AFIPServiceSOAP.convertirTipoComprobante(factura.tipoComprobante),
       concepto: this.convertirConcepto(factura.concepto),
-      tipoDocumento: AFIPServiceSOAP.convertirTipoDocumento(factura.cliente.tipoDocumento),
-      numeroDocumento: factura.cliente.numeroDocumento,
+      tipoDocumento: tipoDocumentoFinal,
+      numeroDocumento: numeroDocumentoFinal,
       condicionIVA: condicionIVACode, // ✅ DEBE SER NUMBER, NO UNDEFINED
       fecha: factura.fecha,
       importeTotal: factura.importes.total,

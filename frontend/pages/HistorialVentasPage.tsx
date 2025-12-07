@@ -664,7 +664,7 @@ const HistorialVentasPage: React.FC = () => {
                                 total: nuevoSubtotal + nuevoIVA
                               });
                             }}
-                            inputProps={{ min: 0, step: 0.01, style: { textAlign: 'right' } }}
+                            inputProps={{ min: 0, step: 0.001, style: { textAlign: 'right' } }}
                             sx={{ width: 100 }}
                           />
                         </TableCell>

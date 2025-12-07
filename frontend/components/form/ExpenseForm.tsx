@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../../redux/store';
 import { createGasto, updateGasto } from '../../redux/slices/gastosSlice';
@@ -30,6 +30,11 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
 
   // Estado para controlar si se acaba de completar una operación
   const [operationCompleted, setOperationCompleted] = useState(false);
+  
+  // Estado para prevenir doble submit
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  // Ref para bloquear reentradas de submit de forma síncrona
+  const submittingRef = useRef(false);
 
   // Función para mostrar notificaciones
   const showNotification = (message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') => {
@@ -54,6 +59,8 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
       );
       // Resetear el estado de operación completada
       setOperationCompleted(false);
+      setIsSubmitting(false); // Permitir nuevo submit después de éxito
+      submittingRef.current = false; // Reset ref sync
       // Cerrar el modal después de un éxito
       setTimeout(() => {
         onClose();
@@ -62,6 +69,8 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
       showNotification(`Error: ${error}`, 'error');
       // Resetear el estado de operación completada
       setOperationCompleted(false);
+      setIsSubmitting(false); // Permitir reintentar después de error
+      submittingRef.current = false; // Reset ref sync
     }
   }, [status, error, gastoToEdit, onClose, operationCompleted]);
 
@@ -74,6 +83,9 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
       severity: 'info'
     });
     setOperationCompleted(false);
+    setIsSubmitting(false);
+    submittingRef.current = false;
+    submittingRef.current = false;
   }, []); // Solo se ejecuta al montar el componente
 
   const [formData, setFormData] = useState({
@@ -312,17 +324,31 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Prevenir doble submit si ya está en proceso
+    if (status === 'loading' || operationCompleted || submittingRef.current) {
+      console.log('🚫 Submit bloqueado - ya hay una operación en curso');
+      return;
+    }
+
+    // Marcar que estamos procesando (ref sincronizado + state para re-render)
+    submittingRef.current = true;
+    setIsSubmitting(true);
+
     // La fecha ya no la ingresa el usuario: el sistema usará hoy por defecto cuando sea necesario
     if (formData.tipoOperacion === 'transferencia') {
       // Para transferencias validar solo detalle (las cuentas y monto se validan después)
       if (!formData.detalleGastos) {
         alert("Detalle es requerido.");
+        setIsSubmitting(false);
+        submittingRef.current = false;
         return;
       }
     } else {
       // Para entrada y salida validar campos esenciales (fecha se asignará automáticamente si falta)
       if (!formData.rubro || !formData.detalleGastos || !formData.medioDePago) {
         alert("Rubro, medio de pago y detalle son campos requeridos.");
+        setIsSubmitting(false);
+        submittingRef.current = false;
         return;
       }
     }
@@ -335,8 +361,10 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
 
     // Validar según el tipo de operación
     if (formData.tipoOperacion === 'entrada') {
-      if (entradaValue <= 0) {
+        if (entradaValue <= 0) {
         setValidationError('Debe ingresar un monto válido para la entrada');
+        setIsSubmitting(false);
+        submittingRef.current = false;
         return;
       }
     } else if (formData.tipoOperacion === 'salida') {
@@ -344,26 +372,36 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
       if (formData.rubro === 'SUELDOS' && formData.concepto === 'hora_extra') {
         if (horasExtraValue <= 0) {
           setValidationError('Debe ingresar la cantidad de horas extra');
+          setIsSubmitting(false);
+          submittingRef.current = false;
           return;
         }
       } else {
         // Para otros casos, validar salida normalmente
         if (salidaValue <= 0) {
           setValidationError('Debe ingresar un monto válido para la salida');
+          setIsSubmitting(false);
+          submittingRef.current = false;
           return;
         }
       }
     } else if (formData.tipoOperacion === 'transferencia') {
       if (!formData.cuentaOrigen || !formData.cuentaDestino) {
         setValidationError('Debe seleccionar tanto la cuenta origen como la cuenta destino');
+        setIsSubmitting(false);
+        submittingRef.current = false;
         return;
       }
       if (formData.cuentaOrigen === formData.cuentaDestino) {
         setValidationError('La cuenta origen y destino no pueden ser iguales');
+        setIsSubmitting(false);
+        submittingRef.current = false;
         return;
       }
       if (montoTransferenciaValue <= 0) {
         setValidationError('Debe ingresar un monto válido para la transferencia');
+        setIsSubmitting(false);
+        submittingRef.current = false;
         return;
       }
     }
@@ -420,6 +458,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
       
       if (montoCapital < 0) {
         setValidationError('El monto de intereses no puede ser mayor al monto total del préstamo');
+        setIsSubmitting(false);
         return;
       }
       
@@ -455,6 +494,35 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
     // Marcar que se inició una operación
     setOperationCompleted(true);
 
+    // Si es creación (no edit), limpiar el formulario inmediatamente para evitar duplicados por re-click
+    if (!gastoToEdit) {
+      setFormData({
+        fecha: '',
+        rubro: '',
+        subRubro: '',
+        medioDePago: '',
+        clientes: '',
+        detalleGastos: '',
+        tipoOperacion: 'salida',
+        concepto: 'sueldo',
+        comentario: '',
+        fechaStandBy: '',
+        numeroCheque: '',
+        entrada: '',
+        salida: '',
+        banco: '',
+        cuentaOrigen: '',
+        cuentaDestino: '',
+        montoTransferencia: '',
+        horasExtra: '',
+        montoInteres: '',
+      });
+      // Limpiar formatos visuales
+      setEntradaFormatted('');
+      setSalidaFormatted('');
+      setMontoTransferenciaFormatted('');
+      setMontoInteresFormatted('');
+    }
     // Limpiar error de validación
     setValidationError('');
   };
@@ -482,6 +550,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
               value={formData.tipoOperacion}
               label="Tipo de Operación"
               onChange={(e) => handleSelectChange('tipoOperacion', e.target.value)}
+              disabled={isSubmitting || status === 'loading'}
             >
               <MenuItem value="entrada">Entrada</MenuItem>
               <MenuItem value="salida">Salida</MenuItem>
@@ -503,6 +572,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
                   value={formData.rubro}
                   label="Rubro"
                   onChange={(e) => handleSelectChange('rubro', e.target.value)}
+                  disabled={isSubmitting || status === 'loading'}
                 >
                   <MenuItem value="COBRO.VENTA">COBRO.VENTA</MenuItem>
                   <MenuItem value="SERVICIOS">SERVICIOS</MenuItem>
@@ -530,6 +600,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
                 value={formData.subRubro}
                 label="Sub-Rubro"
                 onChange={(e) => handleSelectChange('subRubro', e.target.value)}
+                disabled={isSubmitting || status === 'loading'}
               >
                 {!formData.rubro ? (
                   <MenuItem disabled>Selecciona un rubro primero</MenuItem>
@@ -564,6 +635,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
                 value={formData.medioDePago}
                 label="Medio de Pago"
                 onChange={(e) => handleSelectChange('medioDePago', e.target.value)}
+                disabled={isSubmitting || status === 'loading'}
               >
                 <MenuItem value="CHEQUE TERCERO">Cheque Tercero</MenuItem>
                 <MenuItem value="CHEQUE PROPIO">Cheque Propio</MenuItem>
@@ -585,6 +657,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
             label="Detalle"
             value={formData.detalleGastos}
             onChange={handleInputChange}
+            disabled={isSubmitting || status === 'loading'}
             fullWidth
             required
           />
@@ -599,6 +672,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
                 value={formData.concepto}
                 label="Concepto"
                 onChange={(e) => handleSelectChange('concepto', e.target.value)}
+                disabled={isSubmitting || status === 'loading'}
               >
                 <MenuItem value="sueldo">Sueldo</MenuItem>
                 <MenuItem value="adelanto">Adelanto</MenuItem>
@@ -620,6 +694,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
                 value={formData.banco}
                 label="Banco"
                 onChange={(e) => handleSelectChange('banco', e.target.value)}
+                disabled={isSubmitting || status === 'loading'}
               >
                 <MenuItem value="PROVINCIA">PROVINCIA</MenuItem>
                 <MenuItem value="SANTANDER">SANTANDER</MenuItem>
@@ -639,6 +714,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
               label="Clientes"
               value={formData.clientes}
               onChange={handleInputChange}
+              disabled={isSubmitting || status === 'loading'}
               fullWidth
             />
           </Grid>
@@ -652,6 +728,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
               label="Comentario"
               value={formData.comentario}
               onChange={handleInputChange}
+              disabled={isSubmitting || status === 'loading'}
               fullWidth
             />
           </Grid>
@@ -666,6 +743,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
               type="number"
               value={formData.horasExtra}
               onChange={handleInputChange}
+              disabled={isSubmitting || status === 'loading'}
               fullWidth
               required
               inputProps={{ min: 1 }}
@@ -684,6 +762,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
               type="date"
               value={formData.fechaStandBy}
               onChange={handleInputChange}
+              disabled={isSubmitting || status === 'loading'}
               fullWidth
               InputLabelProps={{ shrink: true }}
               helperText="Fecha en que el cheque será efectivo"
@@ -699,6 +778,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
               type="text"
               value={formData.numeroCheque}
               onChange={handleInputChange}
+              disabled={isSubmitting || status === 'loading'}
               fullWidth
               InputLabelProps={{ shrink: true }}
               helperText="Número de cheque"
@@ -762,6 +842,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
                 type="text"
                 value={montoTransferenciaFormatted}
                 onChange={handleInputChange}
+                disabled={isSubmitting || status === 'loading'}
                 fullWidth
                 required
                 placeholder="Ej: 5.000,25"
@@ -780,6 +861,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
                   type="text"
                   value={entradaFormatted}
                   onChange={handleInputChange}
+                  disabled={isSubmitting || status === 'loading'}
                   fullWidth
                   required
                   placeholder="Ej: 1.500,50"
@@ -797,6 +879,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
                   type="text"
                   value={salidaFormatted}
                   onChange={handleInputChange}
+                  disabled={isSubmitting || status === 'loading'}
                   fullWidth
                   required
                   placeholder="Ej: 2.300,75"
@@ -814,6 +897,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
                   type="text"
                   value={montoInteresFormatted}
                   onChange={handleInputChange}
+                  disabled={isSubmitting || status === 'loading'}
                   fullWidth
                   placeholder="Ej: 500,00"
                   helperText="Si incluye intereses, se crearán 2 registros separados (capital e interés)"
@@ -826,17 +910,22 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
         {/* Botones */}
         <Grid item xs={12}>
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mt: 2 }}>
-            <Button onClick={handleClose} color="secondary">
+            <Button onClick={handleClose} color="secondary" disabled={isSubmitting || status === 'loading'}>
               Cancelar
             </Button>
-            <Button type="submit" variant="contained" color="primary" disabled={status === 'loading'}>
-              {status === 'loading' ? (
+            <Button 
+              type="submit" 
+              variant="contained" 
+              color="primary" 
+              disabled={isSubmitting || status === 'loading'}
+            >
+              {(isSubmitting || status === 'loading') ? (
                 <>
-                  <CircularProgress size={20} sx={{ mr: 1 }} />
-                  {gastoToEdit ? 'Actualizando...' : 'Creando...'}
+                  <CircularProgress size={20} sx={{ mr: 1 }} color="inherit" />
+                  Guardando...
                 </>
               ) : (
-                gastoToEdit ? 'Actualizar' : 'Crear'
+                gastoToEdit ? 'Actualizar' : 'Guardar'
               )}
             </Button>
           </Box>

@@ -492,3 +492,28 @@ los inputs de los formularios deben usar el formato de currency donde correspond
     };
     ```
   - **Campos relacionados**: Aplicar mismo patrón a `usuarioAnulacion`, `modificadoPor`, `aprobadoPor`, etc.
+
+15) **Sistema AFIP - Consulta de Padrón y Condición IVA (CRÍTICO)**
+  - **REGLA FUNDAMENTAL**: NUNCA confiar en la condición IVA guardada localmente para facturación
+  - **Razón**: El cliente puede cambiar de condición IVA (ej: de Monotributista a RI) sin avisar
+  - **Flujo correcto de facturación**:
+    1. Antes de crear factura, consultar `AFIPPadronService.consultarCUIT(cuitCliente)`
+    2. Usar la condición IVA devuelta por AFIP para determinar tipo de factura
+    3. Si el servicio de padrón no está disponible, usar fallback seguro (tratar como CF)
+    4. Si `usarDNIEnLugarDeCUIT=true`, cambiar DocTipo de 80 (CUIT) a 96 (DNI)
+  - **Servicios AFIP**:
+    - `AFIPPadronService` (`backend/src/services/afip/AFIPPadronService.ts`): Consulta padrón A4 de AFIP
+    - `determinarTipoFacturaDesdeAFIP()`: Determina tipo de factura consultando padrón real
+    - Fallback: Si padrón no disponible, infiere por prefijo CUIT pero trata personas físicas como CF
+  - **Campos en Factura**:
+    - `receptorCondicionIVA`: Descripción textual (ej: "Consumidor Final")
+    - `receptorCondicionIVACodigo`: Código numérico AFIP (1=RI, 5=CF, 6=Monotributo)
+    - `receptorTipoDocumento`: 80=CUIT, 96=DNI (ajustado según padrón AFIP)
+  - **Error AFIP 10015 "DocNro no se encuentra registrado en padrones"**:
+    - Ocurre cuando se envía CUIT que no está en padrones de AFIP
+    - Solución: Usar DNI (96) en lugar de CUIT (80) para Consumidor Final
+    - El sistema detecta automáticamente y ajusta el tipo de documento
+  - **Ambiente Homologación vs Producción**:
+    - **HOMOLOGACIÓN**: El padrón A4 NO tiene datos reales → siempre usa inferencia por prefijo
+    - **PRODUCCIÓN**: Intenta consultar padrón A4 real → si falla, usa fallback por prefijo
+    - El servicio `ws_sr_padron_a4` requiere autorización especial en AFIP (solo producción)

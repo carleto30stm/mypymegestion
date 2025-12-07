@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../../redux/store';
 import { Gasto } from '../../types';
@@ -14,13 +14,19 @@ import {
   DialogActions,
   Button,
   Chip,
-  TextField
+  TextField,
+  InputAdornment,
+  Stack,
+  ToggleButtonGroup,
+  ToggleButton
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RestoreIcon from '@mui/icons-material/Restore';
+import SearchIcon from '@mui/icons-material/Search';
+import FilterListIcon from '@mui/icons-material/FilterList';
 import ExpenseForm from '../form/ExpenseForm';
 import { formatDate, formatCurrencyWithSymbol } from '../../utils/formatters';
 import { useAuthDebug } from '../../hooks/useAuthDebug';
@@ -49,6 +55,8 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
   const { items: gastos, status, lastUpdated } = useSelector((state: RootState) => state.gastos);
   const { user } = useSelector((state: RootState) => state.auth);
   const authDebug = useAuthDebug();
+  
+  // Estados de modales
   const [gastoToEdit, setGastoToEdit] = useState<Gasto | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [gastoToDelete, setGastoToDelete] = useState<Gasto | null>(null);
@@ -58,6 +66,11 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
   const [reactivateConfirmOpen, setReactivateConfirmOpen] = useState(false);
   const [gastoToReactivate, setGastoToReactivate] = useState<Gasto | null>(null);
   const [comentarioReactivacion, setComentarioReactivacion] = useState('');
+  
+  // Estados de filtros locales
+  const [searchText, setSearchText] = useState('');
+  const [estadoFilter, setEstadoFilter] = useState<'todos' | 'activos' | 'cancelados' | 'pendientes'>('activos');
+  const [tipoOperacionFilter, setTipoOperacionFilter] = useState<'todos' | 'entrada' | 'salida' | 'transferencia'>('todos');
 
   useEffect(() => {
      dispatch(fetchGastos({ todosPeriodos: true }));   
@@ -396,14 +409,57 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
     });
   }
 
-  const getFilteredGastos = () => {
-    // El backend ya filtró por fecha según el filtro seleccionado
-    // No necesitamos filtrar nuevamente aquí para evitar problemas de zona horaria
-    // Simplemente retornamos todos los gastos que vienen del backend
-    return gastos;
-  };
+  // Función de filtrado con useMemo para optimizar rendimiento
+  const gastosFiltered = useMemo(() => {
+    let filtered = [...gastos];
 
-  const gastosFiltered = getFilteredGastos();
+    // Filtrar por estado
+    if (estadoFilter === 'activos') {
+      filtered = filtered.filter(g => g.estado !== 'cancelado');
+    } else if (estadoFilter === 'cancelados') {
+      filtered = filtered.filter(g => g.estado === 'cancelado');
+    } else if (estadoFilter === 'pendientes') {
+      filtered = filtered.filter(g => g.confirmado === false || g.estadoCheque === 'recibido');
+    }
+
+    // Filtrar por tipo de operación
+    if (tipoOperacionFilter !== 'todos') {
+      filtered = filtered.filter(g => g.tipoOperacion === tipoOperacionFilter);
+    }
+
+    // Búsqueda por texto en múltiples campos
+    if (searchText.trim()) {
+      const search = searchText.toLowerCase().trim();
+      filtered = filtered.filter(g => {
+        const rubro = g.rubro?.toLowerCase() || '';
+        const subRubro = g.subRubro?.toLowerCase() || '';
+        const detalleGastos = g.detalleGastos?.toLowerCase() || '';
+        const clientes = g.clientes?.toLowerCase() || '';
+        const banco = g.banco?.toLowerCase() || '';
+        const numeroCheque = g.numeroCheque?.toLowerCase() || '';
+        const comentario = g.comentario?.toLowerCase() || '';
+        
+        return (
+          rubro.includes(search) ||
+          subRubro.includes(search) ||
+          detalleGastos.includes(search) ||
+          clientes.includes(search) ||
+          banco.includes(search) ||
+          numeroCheque.includes(search) ||
+          comentario.includes(search)
+        );
+      });
+    }
+
+    // Ordenar por fecha descendente (más reciente primero)
+    filtered.sort((a, b) => {
+      const dateA = new Date(a.fecha).getTime();
+      const dateB = new Date(b.fecha).getTime();
+      return dateB - dateA; // DESC
+    });
+
+    return filtered;
+  }, [gastos, estadoFilter, tipoOperacionFilter, searchText]);
 
   return (
     <Paper sx={{ height: 'calc(100vh - 280px)', width: '100%' }}>
@@ -411,6 +467,65 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
             <Typography variant="h5" component="h2" gutterBottom>
                 Dashboard de Gastos
             </Typography>
+            
+            {/* Filtros rápidos */}
+            <Stack spacing={2} sx={{ mb: 2 }}>
+              {/* Búsqueda por texto */}
+              <TextField
+                size="small"
+                placeholder="Buscar gastos..."
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon />
+                    </InputAdornment>
+                  ),
+                }}
+                helperText="🔍 Busca en: Rubro, Sub-Rubro, Detalle, Cliente, Banco/Cuenta, Nro. Cheque, Comentario"
+                sx={{ maxWidth: 500 }}
+              />
+
+              {/* Filtros de estado y tipo */}
+              <Stack direction="row" spacing={2} flexWrap="wrap" alignItems="center">
+                <Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                    <FilterListIcon sx={{ fontSize: 14, verticalAlign: 'middle', mr: 0.5 }} />
+                    Estado:
+                  </Typography>
+                  <ToggleButtonGroup
+                    value={estadoFilter}
+                    exclusive
+                    onChange={(e, newValue) => newValue && setEstadoFilter(newValue)}
+                    size="small"
+                  >
+                    <ToggleButton value="todos">Todos</ToggleButton>
+                    <ToggleButton value="activos">Activos</ToggleButton>
+                    <ToggleButton value="cancelados">Cancelados</ToggleButton>
+                    <ToggleButton value="pendientes">Pendientes</ToggleButton>
+                  </ToggleButtonGroup>
+                </Box>
+
+                <Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                    <FilterListIcon sx={{ fontSize: 14, verticalAlign: 'middle', mr: 0.5 }} />
+                    Tipo:
+                  </Typography>
+                  <ToggleButtonGroup
+                    value={tipoOperacionFilter}
+                    exclusive
+                    onChange={(e, newValue) => newValue && setTipoOperacionFilter(newValue)}
+                    size="small"
+                  >
+                    <ToggleButton value="todos">Todos</ToggleButton>
+                    <ToggleButton value="entrada">Entradas</ToggleButton>
+                    <ToggleButton value="salida">Salidas</ToggleButton>
+                    <ToggleButton value="transferencia">Transferencias</ToggleButton>
+                  </ToggleButtonGroup>
+                </Box>
+              </Stack>
+            </Stack>
             
             <Typography variant="body2" color="text.secondary">
               Mostrando {gastosFiltered.length} de {gastos.length} registros
@@ -452,9 +567,21 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
                 pagination: {
                     paginationModel: { page: 0, pageSize: 25 },
                 },
+                sorting: {
+                    sortModel: [{ field: 'fecha', sort: 'desc' }],
+                },
+                columns: {
+                    columnVisibilityModel: {
+                        transferencia: false,
+                        montoTransferencia: false,
+                        comentario: false,
+                        fechaStandBy: false,
+                        tipoOperacion: false,
+                      },
+                },
             }}
             pageSizeOptions={[10, 25, 50]}
-            checkboxSelection
+            
             disableRowSelectionOnClick
         />
         <Dialog open={isModalOpen} onClose={handleCloseModal} maxWidth="md" fullWidth>

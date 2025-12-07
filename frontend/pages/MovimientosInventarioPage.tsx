@@ -468,7 +468,7 @@ const MovimientosInventarioPage: React.FC = () => {
                 type="number"
                 value={ajusteForm.cantidad}
                 onChange={(e) => setAjusteForm({ ...ajusteForm, cantidad: parseFloat(e.target.value) || 0 })}
-                inputProps={{ min: 0, step: 0.01 }}
+                inputProps={{ min: 0, step: 0.001 }}
               />
             </Grid>
             <Grid item xs={12}>

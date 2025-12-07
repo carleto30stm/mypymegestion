@@ -168,7 +168,8 @@ const gastosSlice = createSlice({
       })
       .addCase(createGasto.fulfilled, (state, action: PayloadAction<Gasto>) => {
         state.status = 'succeeded';
-        state.items.push(action.payload);
+        // Agregar al inicio del array para que aparezca primero
+        state.items.unshift(action.payload);
         state.error = null;
         state.lastUpdated = Date.now();
       })

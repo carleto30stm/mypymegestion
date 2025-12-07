@@ -149,11 +149,11 @@ export const formatNumberInput = (value: string): string => {
     }
   }
   
-  // Parte decimal (máximo 2 dígitos)
+  // Parte decimal (máximo 3 dígitos)
   let decimalPart = parts[1];
   if (decimalPart !== undefined) {
-    if (decimalPart.length > 2) {
-      decimalPart = decimalPart.substring(0, 2);
+    if (decimalPart.length > 3) {
+      decimalPart = decimalPart.substring(0, 3);
     }
     // Si hay parte decimal (incluso vacía), agregar la coma
     return `${integerPart},${decimalPart}`;

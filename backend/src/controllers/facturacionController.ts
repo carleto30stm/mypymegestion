@@ -336,10 +336,21 @@ export const crearFacturaDesdeVenta = async (req: Request, res: Response) => {
     console.log('  - Tipo factura:', resultadoAFIP.tipoFactura);
     console.log('  - Condición IVA:', resultadoAFIP.descripcionCondicion, `(código ${resultadoAFIP.condicionIVA})`);
     console.log('  - Discrimina IVA:', resultadoAFIP.discriminaIVA);
+    console.log('  - Usar DNI en lugar de CUIT:', resultadoAFIP.usarDNIEnLugarDeCUIT);
     console.log('========== FIN CONSULTA AFIP ==========\n');
 
     const tipoComprobanteLetra = resultadoAFIP.tipoFactura;
     const tipoComprobante = convertirLetraATipoComprobante(tipoComprobanteLetra);
+
+    // CRÍTICO: Determinar tipo de documento para AFIP
+    // Si AFIP indica usar DNI en lugar de CUIT, cambiar el tipo de documento
+    let tipoDocumentoParaAFIP = AFIPServiceSOAP.convertirTipoDocumento(cliente.tipoDocumento);
+    if (resultadoAFIP.usarDNIEnLugarDeCUIT && tipoDocumentoParaAFIP === 80) {
+      // El cliente tiene CUIT pero no está en padrones de AFIP
+      // Usar DNI (96) para evitar error "DocNro no se encuentra registrado en padrones"
+      console.log('⚠️ Cambiando tipo documento de CUIT (80) a DNI (96) según indicación de AFIP');
+      tipoDocumentoParaAFIP = 96; // DNI
+    }
 
     // Determinar si el comprobante discrimina IVA
     // CRÍTICO: Respetar venta.aplicaIVA (decisión del usuario) Y resultado de AFIP
@@ -407,7 +418,7 @@ export const crearFacturaDesdeVenta = async (req: Request, res: Response) => {
       emisorInicioActividades: EMPRESA.inicioActividades,
 
       // Datos receptor - USAR CONDICIÓN IVA DETECTADA POR AFIP
-      receptorTipoDocumento: AFIPServiceSOAP.convertirTipoDocumento(cliente.tipoDocumento),
+      receptorTipoDocumento: tipoDocumentoParaAFIP, // ✅ Tipo documento ajustado según padrón AFIP
       receptorNumeroDocumento: cliente.numeroDocumento,
       receptorRazonSocial: cliente.razonSocial || `${cliente.nombre} ${cliente.apellido || ''}`.trim(),
       receptorDomicilio: cliente.direccion,
@@ -520,14 +531,42 @@ export const crearFacturaDesdeVentas = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Cliente no encontrado' });
     }
 
-    // Determinar tipo de factura
-    const tipoComprobanteLetra = AFIPServiceSOAP.determinarTipoFactura(
-      EMPRESA.condicionIVA,
-      cliente.condicionIVA
+    // Determinar tipo de factura consultando AFIP
+    // NO usar condición IVA guardada - el cliente puede haber cambiado
+    const afipConfig: any = {
+      cuit: EMPRESA.cuit,
+      certPath: process.env.AFIP_CERT_PATH || '',
+      keyPath: process.env.AFIP_KEY_PATH || '',
+      production: process.env.AFIP_PRODUCTION === 'true',
+      puntoVenta: EMPRESA.puntoVenta,
+      razonSocial: EMPRESA.razonSocial
+    };
+    if (process.env.AFIP_TA_FOLDER) {
+      afipConfig.taFolder = process.env.AFIP_TA_FOLDER;
+    }
+    
+    const afipService = new AFIPServiceSOAP(afipConfig);
+    const resultadoAFIP = await afipService.determinarTipoFacturaDesdeAFIP(
+      cliente.numeroDocumento,
+      EMPRESA.condicionIVA
     );
+
+    console.log('📋 Resultado consulta AFIP (ventas agrupadas):');
+    console.log('  - Tipo factura:', resultadoAFIP.tipoFactura);
+    console.log('  - Condición IVA:', resultadoAFIP.descripcionCondicion);
+    console.log('  - Usar DNI en lugar de CUIT:', resultadoAFIP.usarDNIEnLugarDeCUIT);
+
+    const tipoComprobanteLetra = resultadoAFIP.tipoFactura;
     const tipoComprobante = convertirLetraATipoComprobante(tipoComprobanteLetra);
 
-    const discriminaIVA = tipoComprobante === 'FACTURA_A';
+    // Determinar tipo de documento para AFIP
+    let tipoDocumentoParaAFIP = AFIPServiceSOAP.convertirTipoDocumento(cliente.tipoDocumento);
+    if (resultadoAFIP.usarDNIEnLugarDeCUIT && tipoDocumentoParaAFIP === 80) {
+      console.log('⚠️ Cambiando tipo documento de CUIT (80) a DNI (96) según indicación de AFIP');
+      tipoDocumentoParaAFIP = 96;
+    }
+
+    const discriminaIVA = resultadoAFIP.discriminaIVA && tipoComprobante === 'FACTURA_A';
     const alicuotaIVA = discriminaIVA ? 21 : 0;
 
     // Agrupar items de todas las ventas
@@ -589,12 +628,13 @@ export const crearFacturaDesdeVentas = async (req: Request, res: Response) => {
       emisorIngresosBrutos: EMPRESA.ingresosBrutos,
       emisorInicioActividades: EMPRESA.inicioActividades,
 
-      // Datos receptor
-      receptorTipoDocumento: AFIPServiceSOAP.convertirTipoDocumento(cliente.tipoDocumento),
+      // Datos receptor - USAR CONDICIÓN IVA DETECTADA POR AFIP
+      receptorTipoDocumento: tipoDocumentoParaAFIP, // ✅ Tipo documento ajustado según padrón AFIP
       receptorNumeroDocumento: cliente.numeroDocumento,
       receptorRazonSocial: cliente.razonSocial || `${cliente.nombre} ${cliente.apellido || ''}`.trim(),
       receptorDomicilio: cliente.direccion,
-      receptorCondicionIVA: cliente.condicionIVA,
+      receptorCondicionIVA: resultadoAFIP.descripcionCondicion, // ✅ Condición detectada por AFIP
+      receptorCondicionIVACodigo: resultadoAFIP.condicionIVA, // ✅ Código numérico para AFIP
 
       // Fechas
       fecha: new Date(),
@@ -684,17 +724,47 @@ export const crearFacturaManual = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Cliente no encontrado' });
     }
 
+    // Consultar AFIP para determinar tipo de factura y tipo de documento
+    // NO usar condición IVA guardada - el cliente puede haber cambiado
+    const afipConfig: any = {
+      cuit: EMPRESA.cuit,
+      certPath: process.env.AFIP_CERT_PATH || '',
+      keyPath: process.env.AFIP_KEY_PATH || '',
+      production: process.env.AFIP_PRODUCTION === 'true',
+      puntoVenta: EMPRESA.puntoVenta,
+      razonSocial: EMPRESA.razonSocial
+    };
+    if (process.env.AFIP_TA_FOLDER) {
+      afipConfig.taFolder = process.env.AFIP_TA_FOLDER;
+    }
+    
+    const afipService = new AFIPServiceSOAP(afipConfig);
+    const resultadoAFIP = await afipService.determinarTipoFacturaDesdeAFIP(
+      cliente.numeroDocumento,
+      EMPRESA.condicionIVA
+    );
+
+    console.log('📋 Resultado consulta AFIP (factura manual):');
+    console.log('  - Tipo factura:', resultadoAFIP.tipoFactura);
+    console.log('  - Condición IVA:', resultadoAFIP.descripcionCondicion);
+    console.log('  - Usar DNI en lugar de CUIT:', resultadoAFIP.usarDNIEnLugarDeCUIT);
+
+    // Determinar tipo de documento para AFIP
+    let tipoDocumentoParaAFIP = AFIPServiceSOAP.convertirTipoDocumento(cliente.tipoDocumento);
+    if (resultadoAFIP.usarDNIEnLugarDeCUIT && tipoDocumentoParaAFIP === 80) {
+      console.log('⚠️ Cambiando tipo documento de CUIT (80) a DNI (96) según indicación de AFIP');
+      tipoDocumentoParaAFIP = 96;
+    }
+
+    // Determinar tipo de comprobante (usar el proporcionado o el detectado por AFIP)
+    const tipoComprobanteResuelto = tipoComprobante
+      ? convertirLetraATipoComprobante(tipoComprobante as string)
+      : convertirLetraATipoComprobante(resultadoAFIP.tipoFactura);
+
     // Crear factura
     const factura = new Factura({
       clienteId: cliente._id,
-      tipoComprobante: tipoComprobante
-        ? convertirLetraATipoComprobante(tipoComprobante as string)
-        : convertirLetraATipoComprobante(
-          AFIPServiceSOAP.determinarTipoFactura(
-            EMPRESA.condicionIVA,
-            cliente.condicionIVA
-          )
-        ),
+      tipoComprobante: tipoComprobanteResuelto,
       estado: 'borrador',
 
       // Datos emisor
@@ -705,12 +775,13 @@ export const crearFacturaManual = async (req: Request, res: Response) => {
       emisorIngresosBrutos: EMPRESA.ingresosBrutos,
       emisorInicioActividades: EMPRESA.inicioActividades,
 
-      // Datos receptor
-      receptorTipoDocumento: AFIPServiceSOAP.convertirTipoDocumento(cliente.tipoDocumento),
+      // Datos receptor - USAR CONDICIÓN IVA DETECTADA POR AFIP
+      receptorTipoDocumento: tipoDocumentoParaAFIP, // ✅ Tipo documento ajustado según padrón AFIP
       receptorNumeroDocumento: cliente.numeroDocumento,
       receptorRazonSocial: cliente.razonSocial || `${cliente.nombre} ${cliente.apellido || ''}`.trim(),
       receptorDomicilio: cliente.direccion,
-      receptorCondicionIVA: cliente.condicionIVA,
+      receptorCondicionIVA: resultadoAFIP.descripcionCondicion, // ✅ Condición detectada por AFIP
+      receptorCondicionIVACodigo: resultadoAFIP.condicionIVA, // ✅ Código numérico para AFIP
 
       // Fechas
       fecha: new Date(),

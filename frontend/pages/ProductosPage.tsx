@@ -431,7 +431,7 @@ const ProductosPage: React.FC = () => {
                 type="number"
                 value={formData.precioCompra}
                 onChange={(e) => setFormData({ ...formData, precioCompra: parseFloat(e.target.value) })}
-                inputProps={{ min: 0, step: 0.01 }}
+                inputProps={{ min: 0, step: 0.001 }}
               />
             </Grid>
             <Grid item xs={12} md={4}>
@@ -441,7 +441,7 @@ const ProductosPage: React.FC = () => {
                 type="number"
                 value={formData.precioVenta}
                 onChange={(e) => setFormData({ ...formData, precioVenta: parseFloat(e.target.value) })}
-                inputProps={{ min: 0, step: 0.01 }}
+                inputProps={{ min: 0, step: 0.001 }}
               />
             </Grid>
             <Grid item xs={12} md={4}>
@@ -467,7 +467,7 @@ const ProductosPage: React.FC = () => {
                 type="number"
                 value={formData.stock}
                 onChange={(e) => setFormData({ ...formData, stock: parseFloat(e.target.value) })}
-                inputProps={{ min: 0, step: 0.01 }}
+                inputProps={{ min: 0, step: 0.001 }}
               />
             </Grid>
             <Grid item xs={12} md={6}>
@@ -477,7 +477,7 @@ const ProductosPage: React.FC = () => {
                 type="number"
                 value={formData.stockMinimo}
                 onChange={(e) => setFormData({ ...formData, stockMinimo: parseFloat(e.target.value) })}
-                inputProps={{ min: 0, step: 0.01 }}
+                inputProps={{ min: 0, step: 0.001 }}
               />
             </Grid>
           </Grid>
@@ -523,7 +523,7 @@ const ProductosPage: React.FC = () => {
                   type="number"
                   value={ajusteData.cantidad}
                   onChange={(e) => setAjusteData({ ...ajusteData, cantidad: e.target.value })}
-                  inputProps={{ min: 0, step: 0.01 }}
+                  inputProps={{ min: 0, step: 0.001 }}
                 />
               </Grid>
               <Grid item xs={12}>
