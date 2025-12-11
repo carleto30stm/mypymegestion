@@ -33,7 +33,7 @@ import {
   Delete as DeleteIcon,
   ShoppingCart as CartIcon
 } from '@mui/icons-material';
-import { formatCurrency, parseCurrency } from '../utils/formatters';
+import { formatCurrency, parseCurrency, formatCurrencyDecimals } from '../utils/formatters';
 
 interface VentaFormProps {
   ventaParaEditar?: Venta | null; // Si se pasa, el formulario se inicializa con estos datos
@@ -290,7 +290,7 @@ const VentaForm: React.FC<VentaFormProps> = ({
                         <Typography variant="body2">{item.nombreProducto}</Typography>
                         <Typography variant="caption" color="textSecondary">{item.codigoProducto}</Typography>
                       </TableCell>
-                      <TableCell align="right">{formatCurrency(item.precioUnitario)}</TableCell>
+                      <TableCell align="right">{formatCurrencyDecimals(item.precioUnitario, 3)}</TableCell>
                       <TableCell align="center">{item.cantidad}</TableCell>
                       <TableCell align="right">
                         <TextField
@@ -312,7 +312,7 @@ const VentaForm: React.FC<VentaFormProps> = ({
                           }}
                         />
                       </TableCell>
-                      <TableCell align="right">{formatCurrency(item.subtotal)}</TableCell>
+                      <TableCell align="right">{formatCurrencyDecimals(item.subtotal, 3)}</TableCell>
                       <TableCell align="center">
                         <IconButton size="small" color="error" onClick={() => eliminarDelCarrito(item.productoId)}>
                           <DeleteIcon fontSize="small" />
@@ -386,18 +386,18 @@ const VentaForm: React.FC<VentaFormProps> = ({
 
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
               <Typography>Subtotal:</Typography>
-              <Typography>{formatCurrency(totales.subtotal)}</Typography>
+              <Typography>{formatCurrencyDecimals(totales.subtotal, 3)}</Typography>
             </Box>
             
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
               <Typography>IVA (21%):</Typography>
-              <Typography>{formatCurrency(totales.iva)}</Typography>
+              <Typography>{formatCurrencyDecimals(totales.iva, 3)}</Typography>
             </Box>
             
             <Divider sx={{ my: 1 }} />
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
               <Typography variant="h6" color="primary">Total:</Typography>
-              <Typography variant="h6" color="primary">{formatCurrency(totales.total)}</Typography>
+              <Typography variant="h6" color="primary">{formatCurrencyDecimals(totales.total, 3)}</Typography>
             </Box>
 
             <Box sx={{ display: 'flex', gap: 1 }}>

@@ -50,7 +50,7 @@ import {
   AddCircle as AddCircleIcon,
   RemoveCircle as RemoveCircleIcon
 } from '@mui/icons-material';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency, formatCurrencyDecimals } from '../utils/formatters';
 
 const ProductosPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -430,7 +430,7 @@ const ProductosPage: React.FC = () => {
                 label="Costo *"
                 type="number"
                 value={formData.precioCompra}
-                onChange={(e) => setFormData({ ...formData, precioCompra: parseFloat(e.target.value) })}
+                onChange={(e) => setFormData({ ...formData, precioCompra: Math.round((parseFloat(e.target.value) || 0) * 1000) / 1000 })}
                 inputProps={{ min: 0, step: 0.001 }}
               />
             </Grid>
@@ -440,7 +440,7 @@ const ProductosPage: React.FC = () => {
                 label="Precio Venta *"
                 type="number"
                 value={formData.precioVenta}
-                onChange={(e) => setFormData({ ...formData, precioVenta: parseFloat(e.target.value) })}
+                onChange={(e) => setFormData({ ...formData, precioVenta: Math.round((parseFloat(e.target.value) || 0) * 1000) / 1000 })}
                 inputProps={{ min: 0, step: 0.001 }}
               />
             </Grid>

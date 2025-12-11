@@ -120,11 +120,19 @@ export const facturasAPI = {
     clienteId: string;
     tipoComprobante: string;
     puntoVenta: number;
+    concepto?: number;
     items: Array<{
+      codigo: string;
       descripcion: string;
       cantidad: number;
+      unidadMedida: string;
       precioUnitario: number;
+      importeBruto: number;
+      importeDescuento: number;
+      importeNeto: number;
       alicuotaIVA: number;
+      importeIVA: number;
+      importeTotal: number;
     }>;
     observaciones?: string;
   }) => {
@@ -530,8 +538,18 @@ export const ordenesProduccionAPI = {
     return response.data;
   },
 
+  editar: async (id: string, datos: any) => {
+    const response = await api.put(`/api/ordenes-produccion/${id}`, datos);
+    return response.data;
+  },
+
   iniciar: async (id: string) => {
     const response = await api.post(`/api/ordenes-produccion/${id}/iniciar`);
+    return response.data;
+  },
+
+  enviar: async (id: string, enviadoPor: string) => {
+    const response = await api.post(`/api/ordenes-produccion/${id}/enviar`, { enviadoPor });
     return response.data;
   },
 
@@ -540,8 +558,8 @@ export const ordenesProduccionAPI = {
     return response.data;
   },
 
-  cancelar: async (id: string, motivoCancelacion: string) => {
-    const response = await api.post(`/api/ordenes-produccion/${id}/cancelar`, { motivoCancelacion });
+  cancelar: async (id: string, motivoCancelacion: string, canceladoPor: string) => {
+    const response = await api.post(`/api/ordenes-produccion/${id}/cancelar`, { motivoCancelacion, canceladoPor });
     return response.data;
   },
 

@@ -18,6 +18,23 @@ export const formatCurrency = (value: number | string): string => {
 };
 
 /**
+ * Formatea un número con cantidad específica de decimales para display (ej: precio unitario)
+ * @param value - number|string
+ * @param decimals - número de decimales (por defecto 2)
+ */
+export const formatCurrencyDecimals = (value: number | string, decimals = 2): string => {
+  if (value === null || value === undefined || value === '') return '';
+
+  const numValue = typeof value === 'string' ? parseFloat(value) : value;
+  if (isNaN(numValue)) return '';
+
+  return numValue.toLocaleString('es-AR', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals
+  });
+};
+
+/**
  * Formatea un número como moneda argentina con símbolo $
  * @param value - Número a formatear
  * @returns String formateado con símbolo de peso

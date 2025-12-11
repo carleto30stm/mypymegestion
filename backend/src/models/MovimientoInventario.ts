@@ -2,7 +2,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IMovimientoInventario extends Document {
   fecha: Date;
-  tipo: 'entrada' | 'salida' | 'ajuste' | 'produccion' | 'devolucion' | 'merma';
+  tipo: 'entrada' | 'salida' | 'ajuste' | 'produccion' | 'devolucion' | 'merma' | 'reserva_produccion_externa' | 'liberacion_reserva';
   materiaPrimaId: mongoose.Types.ObjectId;
   codigoMateriaPrima: string;
   nombreMateriaPrima: string;
@@ -35,7 +35,7 @@ const MovimientoInventarioSchema = new Schema({
   tipo: {
     type: String,
     required: [true, 'El tipo de movimiento es requerido'],
-    enum: ['entrada', 'salida', 'ajuste', 'produccion', 'devolucion', 'merma', 'envio_procesamiento', 'recepcion_procesamiento']
+    enum: ['entrada', 'salida', 'ajuste', 'produccion', 'devolucion', 'merma', 'reserva_produccion_externa', 'liberacion_reserva', 'envio_procesamiento', 'recepcion_procesamiento']
   },
   materiaPrimaId: {
     type: Schema.Types.ObjectId,

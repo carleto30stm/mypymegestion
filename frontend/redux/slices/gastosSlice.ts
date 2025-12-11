@@ -33,11 +33,11 @@ export const fetchGastos = createAsyncThunk(
         return response.data;
       }
       
-      // Por defecto: últimos 3 meses
-      const hasta = params.hasta || new Date().toISOString().split('T')[0];
-      const tresMesesAtras = new Date();
-      tresMesesAtras.setMonth(tresMesesAtras.getMonth() - 3);
-      const desde = params.desde || tresMesesAtras.toISOString().split('T')[0];
+      // Por defecto: mes actual
+      const hoy = new Date();
+      const hasta = params.hasta || hoy.toISOString().split('T')[0];
+      const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+      const desde = params.desde || inicioMes.toISOString().split('T')[0];
       
       // Construir query params
       const queryParams = new URLSearchParams();

@@ -57,10 +57,13 @@ import {
   FactCheck as FactCheckIcon,
   ShoppingCart as ShoppingCartIcon,
   Build as BuildIcon,
+  Send as SendIcon,
+  LocalShipping as LocalShippingIcon,
 } from '@mui/icons-material';
 import { useReactToPrint } from 'react-to-print';
-import { ordenesProduccionAPI, recetasAPI, ventasAPI } from '../services/api';
+import { ordenesProduccionAPI, recetasAPI, ventasAPI, proveedoresAPI } from '../services/api';
 import NotaPedidoProduccion from '../components/NotaPedidoProduccion';
+import { formatNumberInput, getNumericValue, formatCurrency } from '../utils/formatters';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -130,7 +133,7 @@ interface OrdenProduccion {
   nombreProducto: string;
   cantidadAProducir: number;
   unidadesProducidas: number;
-  estado: 'planificada' | 'pendiente' | 'en_proceso' | 'completada' | 'cancelada';
+  estado: 'planificada' | 'enviada' | 'pendiente' | 'en_proceso' | 'en_transito' | 'completada' | 'cancelada';
   prioridad?: 'baja' | 'media' | 'alta' | 'urgente';
   fecha: string;
   fechaInicio?: string;
@@ -138,11 +141,29 @@ interface OrdenProduccion {
   responsable: string;
   observaciones?: string;
   fechaCreacion: string;
+  // Proveedor de mano de obra (producción externa)
+  proveedorId?: {
+    _id: string;
+    razonSocial: string;
+  };
+  esProduccionExterna?: boolean;
+  costoUnitarioManoObraExterna?: number; // Costo unitario del servicio de procesamiento externo
   // Para compatibilidad con el código existente
   receta?: Receta;
   numero?: number;
   cantidadPlanificada?: number;
   cantidadProducida?: number;
+}
+
+interface Proveedor {
+  _id: string;
+  razonSocial: string;
+  numeroDocumento: string;
+  tipoProveedor: string;
+  nombreContacto?: string;
+  telefono?: string;
+  email?: string;
+  estado: string;
 }
 
 interface VentaPendiente {
@@ -185,6 +206,7 @@ const OrdenesProduccionPage: React.FC = () => {
   
   const [ordenes, setOrdenes] = useState<OrdenProduccion[]>([]);
   const [recetas, setRecetas] = useState<Receta[]>([]);
+  const [proveedoresManoObra, setProveedoresManoObra] = useState<Proveedor[]>([]);
   const [loading, setLoading] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingOrden, setEditingOrden] = useState<OrdenProduccion | null>(null);
@@ -205,6 +227,9 @@ const OrdenesProduccionPage: React.FC = () => {
     cantidadPlanificada: 1,
     responsable: '',
     observaciones: '',
+    esProduccionExterna: false,
+    proveedorId: '',
+    costoUnitarioManoObraExterna: '',
   });
 
   // Estado para el modo de creación de orden
@@ -234,6 +259,9 @@ const OrdenesProduccionPage: React.FC = () => {
 
   // Estado para errores de stock insuficiente (alerta persistente)
   const [errorStock, setErrorStock] = useState<string | null>(null);
+
+  // Estado para el formato de costo de mano de obra externa
+  const [costoManoObraFormatted, setCostoManoObraFormatted] = useState('');
 
   const notaPedidoRef = useRef<HTMLDivElement>(null);
   const [resumenParaImprimir, setResumenParaImprimir] = useState<Array<{
@@ -268,12 +296,18 @@ const OrdenesProduccionPage: React.FC = () => {
   const cargarDatos = async () => {
     try {
       setLoading(true);
-      const [ordenesRes, recetasRes] = await Promise.all([
+      const [ordenesRes, recetasRes, proveedoresRes] = await Promise.all([
         ordenesProduccionAPI.obtenerTodas(),
         recetasAPI.obtenerTodas(),
+        proveedoresAPI.obtenerTodos({ estado: 'activo' }),
       ]);
       setOrdenes(ordenesRes);
       setRecetas(recetasRes);
+      // Filtrar solo proveedores de mano de obra
+      const proveedoresFiltrados = proveedoresRes.filter(
+        (p: Proveedor) => p.tipoProveedor === 'PROOVMANO.DE.OBRA'
+      );
+      setProveedoresManoObra(proveedoresFiltrados);
     } catch (error) {
       console.error('Error al cargar datos:', error);
       showSnackbar('Error al cargar datos', 'error');
@@ -315,7 +349,11 @@ const OrdenesProduccionPage: React.FC = () => {
         cantidadPlanificada: orden.cantidadAProducir ?? orden.cantidadPlanificada ?? 1,
         responsable: orden.responsable || '',
         observaciones: orden.observaciones || '',
+        esProduccionExterna: orden.esProduccionExterna || false,
+        proveedorId: orden.proveedorId?._id || '',
+        costoUnitarioManoObraExterna: orden.costoUnitarioManoObraExterna?.toString() || '',
       });
+      setCostoManoObraFormatted(orden.costoUnitarioManoObraExterna ? formatNumberInput(orden.costoUnitarioManoObraExterna.toString()) : '');
       setModoCreacion('manual');
     } else {
       setEditingOrden(null);
@@ -324,7 +362,11 @@ const OrdenesProduccionPage: React.FC = () => {
         cantidadPlanificada: 1,
         responsable: '',
         observaciones: '',
+        esProduccionExterna: false,
+        proveedorId: '',
+        costoUnitarioManoObraExterna: '',
       });
+      setCostoManoObraFormatted('');
       setModoCreacion('manual');
       setVentasParaOrden([]);
       // Cargar ventas pendientes para el diálogo
@@ -355,8 +397,44 @@ const OrdenesProduccionPage: React.FC = () => {
   const handleSubmit = async () => {
     try {
       if (editingOrden) {
-        showSnackbar('Edicion no soportada, cree una nueva orden', 'error');
-        return;
+        // Editar orden existente (solo si está en 'planificada')
+        if (editingOrden.estado !== 'planificada') {
+          showSnackbar('Solo se pueden editar órdenes en estado planificada', 'error');
+          return;
+        }
+
+        if (editingOrden.esProduccionExterna && !formData.proveedorId) {
+          showSnackbar('Seleccione un proveedor de mano de obra', 'error');
+          return;
+        }
+
+        if (editingOrden.esProduccionExterna && !formData.costoUnitarioManoObraExterna) {
+          showSnackbar('Ingrese el costo unitario de mano de obra externa', 'error');
+          return;
+        }
+
+        try {
+          const costoUnitarioMOExterna = editingOrden.esProduccionExterna && formData.costoUnitarioManoObraExterna 
+            ? getNumericValue(costoManoObraFormatted || formData.costoUnitarioManoObraExterna)
+            : undefined;
+
+          await ordenesProduccionAPI.editar(editingOrden._id, {
+            cantidadAProducir: formData.cantidadPlanificada,
+            responsable: formData.responsable || 'Producción Externa',
+            observaciones: formData.observaciones,
+            proveedorId: editingOrden.esProduccionExterna ? formData.proveedorId : undefined,
+            costoUnitarioManoObraExterna: costoUnitarioMOExterna
+          });
+
+          showSnackbar('Orden actualizada correctamente', 'success');
+          handleCloseDialog();
+          cargarDatos();
+          return;
+        } catch (err: any) {
+          const mensaje = err.response?.data?.mensaje || err.response?.data?.message || err.response?.data?.error || 'Error al editar orden';
+          showSnackbar(mensaje, 'error');
+          return;
+        }
       }
       
       if (modoCreacion === 'manual') {
@@ -365,20 +443,37 @@ const OrdenesProduccionPage: React.FC = () => {
           showSnackbar('Seleccione una receta', 'error');
           return;
         }
-        if (!formData.responsable.trim()) {
+        if (!formData.responsable.trim() && !formData.esProduccionExterna) {
           showSnackbar('Ingrese el nombre del responsable', 'error');
+          return;
+        }
+        if (formData.esProduccionExterna && !formData.proveedorId) {
+          showSnackbar('Seleccione un proveedor de mano de obra', 'error');
+          return;
+        }
+        if (formData.esProduccionExterna && !formData.costoUnitarioManoObraExterna) {
+          showSnackbar('Ingrese el costo unitario de mano de obra externa', 'error');
           return;
         }
         try {
           // Limpiar error de stock previo
           setErrorStock(null);
+          
+          // Convertir costo de formato argentino a número
+          const costoUnitarioMOExterna = formData.esProduccionExterna && formData.costoUnitarioManoObraExterna 
+            ? getNumericValue(costoManoObraFormatted || formData.costoUnitarioManoObraExterna)
+            : undefined;
+          
           // Mapear campos del frontend a los que espera el backend
           await ordenesProduccionAPI.crear({
             recetaId: formData.receta,
             cantidadAProducir: formData.cantidadPlanificada,
-            responsable: formData.responsable,
+            responsable: formData.responsable || 'Producción Externa',
             createdBy: user?.username || 'sistema',
-            observaciones: formData.observaciones
+            observaciones: formData.observaciones,
+            esProduccionExterna: formData.esProduccionExterna,
+            proveedorId: formData.esProduccionExterna ? formData.proveedorId : undefined,
+            costoUnitarioManoObraExterna: costoUnitarioMOExterna
           });
           showSnackbar('Orden creada correctamente', 'success');
         } catch (err: any) {
@@ -618,9 +713,9 @@ const OrdenesProduccionPage: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('Esta seguro de eliminar esta orden?')) {
+    if (window.confirm('¿Está seguro de cancelar esta orden? Si es producción externa con MP reservadas, se liberará el stock.')) {
       try {
-        await ordenesProduccionAPI.cancelar(id, 'Cancelada por el usuario');
+        await ordenesProduccionAPI.cancelar(id, 'Cancelada por el usuario', user?.username || 'sistema');
         showSnackbar('Orden cancelada correctamente', 'success');
         cargarDatos();
       } catch (error: any) {
@@ -635,8 +730,12 @@ const OrdenesProduccionPage: React.FC = () => {
         await ordenesProduccionAPI.iniciar(id);
         showSnackbar('Orden iniciada correctamente', 'success');
         cargarDatos();
+      } else if (nuevoEstado === 'enviada') {
+        await ordenesProduccionAPI.enviar(id, user?.username || 'sistema');
+        showSnackbar('Orden enviada a proveedor - Se registró la deuda', 'success');
+        cargarDatos();
       } else if (nuevoEstado === 'cancelada') {
-        await ordenesProduccionAPI.cancelar(id, 'Cancelada por el usuario');
+        await ordenesProduccionAPI.cancelar(id, 'Cancelada por el usuario', user?.username || 'sistema');
         showSnackbar('Orden cancelada correctamente', 'success');
         cargarDatos();
       }
@@ -678,10 +777,12 @@ const OrdenesProduccionPage: React.FC = () => {
   };
 
   const getEstadoChip = (estado: string) => {
-    const config: Record<string, { color: 'default' | 'primary' | 'success' | 'error' | 'warning'; label: string }> = {
+    const config: Record<string, { color: 'default' | 'primary' | 'success' | 'error' | 'warning' | 'info'; label: string }> = {
       pendiente: { color: 'warning', label: 'Pendiente' },
       planificada: { color: 'warning', label: 'Planificada' },
+      enviada: { color: 'info', label: 'Enviada a Proveedor' },
       en_proceso: { color: 'primary', label: 'En Proceso' },
+      en_transito: { color: 'info', label: 'En Tránsito' },
       completada: { color: 'success', label: 'Completada' },
       cancelada: { color: 'error', label: 'Cancelada' },
     };
@@ -856,6 +957,8 @@ const OrdenesProduccionPage: React.FC = () => {
                     <TableCell align="center">Producidas</TableCell>
                     <TableCell align="center">Estado</TableCell>
                     <TableCell>Responsable</TableCell>
+                    <TableCell>Tipo Producción</TableCell>
+                    <TableCell align="right">Costo Total MO Ext.</TableCell>
                     <TableCell>Fecha</TableCell>
                     <TableCell align="center">Acciones</TableCell>
                   </TableRow>
@@ -863,7 +966,7 @@ const OrdenesProduccionPage: React.FC = () => {
                 <TableBody>
                   {ordenes.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} align="center">
+                      <TableCell colSpan={10} align="center">
                         No hay ordenes de produccion
                       </TableCell>
                     </TableRow>
@@ -876,20 +979,59 @@ const OrdenesProduccionPage: React.FC = () => {
                         <TableCell align="center">{orden.unidadesProducidas ?? orden.cantidadProducida ?? 0}</TableCell>
                         <TableCell align="center">{getEstadoChip(orden.estado)}</TableCell>
                         <TableCell>{orden.responsable || '-'}</TableCell>
+                        <TableCell>
+                          {orden.esProduccionExterna ? (
+                            <Chip 
+                              label={orden.proveedorId?.razonSocial || 'Proveedor Externo'} 
+                              color="secondary" 
+                              size="small" 
+                              variant="outlined"
+                            />
+                          ) : (
+                            <Chip label="Interna" color="primary" size="small" />
+                          )}
+                        </TableCell>
+                        <TableCell align="right">
+                          {orden.esProduccionExterna && orden.costoUnitarioManoObraExterna ? (
+                            <Box>
+                              <Typography variant="body2" fontWeight="medium" color="secondary.main">
+                                $ {formatCurrency(orden.costoUnitarioManoObraExterna * orden.cantidadAProducir)}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                (${formatCurrency(orden.costoUnitarioManoObraExterna)} x {orden.cantidadAProducir})
+                              </Typography>
+                            </Box>
+                          ) : (
+                            <Typography variant="body2" color="text.disabled">-</Typography>
+                          )}
+                        </TableCell>
                         <TableCell>{formatearFecha(orden.fechaCreacion || orden.fecha)}</TableCell>
                         <TableCell align="center">
                           <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.5 }}>
+                            {/* Orden Planificada */}
                             {(orden.estado === 'pendiente' || orden.estado === 'planificada') && (
                               <>
-                                <Tooltip title="Iniciar">
-                                  <IconButton
-                                    size="small"
-                                    color="primary"
-                                    onClick={() => handleCambiarEstado(orden._id, 'en_proceso')}
-                                  >
-                                    <PlayIcon />
-                                  </IconButton>
-                                </Tooltip>
+                                {orden.esProduccionExterna ? (
+                                  <Tooltip title="Enviar a Proveedor">
+                                    <IconButton
+                                      size="small"
+                                      color="info"
+                                      onClick={() => handleCambiarEstado(orden._id, 'enviada')}
+                                    >
+                                      <SendIcon />
+                                    </IconButton>
+                                  </Tooltip>
+                                ) : (
+                                  <Tooltip title="Iniciar Producción">
+                                    <IconButton
+                                      size="small"
+                                      color="primary"
+                                      onClick={() => handleCambiarEstado(orden._id, 'en_proceso')}
+                                    >
+                                      <PlayIcon />
+                                    </IconButton>
+                                  </Tooltip>
+                                )}
                                 <Tooltip title="Editar">
                                   <IconButton size="small" onClick={() => handleOpenDialog(orden)}>
                                     <EditIcon />
@@ -906,6 +1048,30 @@ const OrdenesProduccionPage: React.FC = () => {
                                 </Tooltip>
                               </>
                             )}
+                            {/* Orden Enviada (externa - esperando que vuelva) */}
+                            {orden.estado === 'enviada' && (
+                              <>
+                                <Tooltip title="Recibir del Proveedor">
+                                  <IconButton
+                                    size="small"
+                                    color="success"
+                                    onClick={() => handleOpenCompletarDialog(orden)}
+                                  >
+                                    <LocalShippingIcon />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Cancelar">
+                                  <IconButton
+                                    size="small"
+                                    color="error"
+                                    onClick={() => handleDelete(orden._id)}
+                                  >
+                                    <DeleteIcon />
+                                  </IconButton>
+                                </Tooltip>
+                              </>
+                            )}
+                            {/* Orden En Proceso (interna) */}
                             {orden.estado === 'en_proceso' && (
                               <>
                                 <Tooltip title="Completar">
@@ -1131,7 +1297,7 @@ const OrdenesProduccionPage: React.FC = () => {
 
             {modoCreacion === 'manual' ? (
               <>
-                <FormControl fullWidth>
+                <FormControl fullWidth disabled={!!editingOrden}>
                   <InputLabel>Receta / Producto</InputLabel>
                   <Select
                     value={formData.receta}
@@ -1155,16 +1321,81 @@ const OrdenesProduccionPage: React.FC = () => {
                   }
                   inputProps={{ min: 1 }}
                   fullWidth
+                  disabled={!!(editingOrden && !editingOrden.esProduccionExterna)}
+                  helperText={editingOrden && !editingOrden.esProduccionExterna ? 'No se puede cambiar cantidad en producción interna' : ''}
                 />
 
-                <TextField
-                  label="Responsable"
-                  value={formData.responsable}
-                  onChange={(e) => setFormData({ ...formData, responsable: e.target.value })}
-                  fullWidth
-                  required
-                  placeholder="Nombre del operario responsable"
+                {/* Tipo de producción */}
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={formData.esProduccionExterna}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        esProduccionExterna: e.target.checked,
+                        // Limpiar proveedor si se desmarca
+                        proveedorId: e.target.checked ? formData.proveedorId : ''
+                      })}
+                      disabled={!!editingOrden}
+                    />
+                  }
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Typography>Producción Externa (Proveedor de Mano de Obra)</Typography>
+                    </Box>
+                  }
+                  disabled={!!editingOrden}
                 />
+
+                {formData.esProduccionExterna ? (
+                  <>
+                    <FormControl fullWidth required>
+                      <InputLabel>Proveedor de Mano de Obra</InputLabel>
+                      <Select
+                        value={formData.proveedorId}
+                        label="Proveedor de Mano de Obra"
+                        onChange={(e) => setFormData({ ...formData, proveedorId: e.target.value })}
+                      >
+                        {proveedoresManoObra.length === 0 ? (
+                          <MenuItem disabled>No hay proveedores de mano de obra disponibles</MenuItem>
+                        ) : (
+                          proveedoresManoObra.map((proveedor) => (
+                            <MenuItem key={proveedor._id} value={proveedor._id}>
+                              {proveedor.razonSocial}
+                              {proveedor.nombreContacto && ` - ${proveedor.nombreContacto}`}
+                            </MenuItem>
+                          ))
+                        )}
+                      </Select>
+                    </FormControl>
+
+                    <TextField
+                      label="Costo Unitario Mano de Obra Externa"
+                      type="text"
+                      value={costoManoObraFormatted}
+                      onChange={(e) => {
+                        const formatted = formatNumberInput(e.target.value);
+                        setCostoManoObraFormatted(formatted);
+                        const numericValue = getNumericValue(formatted);
+                        setFormData(prev => ({ ...prev, costoUnitarioManoObraExterna: numericValue.toString() }));
+                      }}
+                      fullWidth
+                      required
+                      placeholder="Ej: 5.000,00"
+                      helperText={`Costo por unidad. Total: $${formatCurrency((getNumericValue(costoManoObraFormatted) || 0) * formData.cantidadPlanificada)}`}
+                      InputProps={{ startAdornment: <Typography sx={{ mr: 0.5, color: 'text.secondary' }}>$</Typography> }}
+                    />
+                  </>
+                ) : (
+                  <TextField
+                    label="Responsable"
+                    value={formData.responsable}
+                    onChange={(e) => setFormData({ ...formData, responsable: e.target.value })}
+                    fullWidth
+                    required
+                    placeholder="Nombre del operario responsable"
+                  />
+                )}
 
                 {/* Alerta persistente de stock insuficiente */}
                 {errorStock && (

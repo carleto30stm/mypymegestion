@@ -51,6 +51,7 @@ import {
 import { comprasAPI, proveedoresAPI, materiasPrimasAPI } from '../services/api';
 import type { Compra, ItemCompra, Proveedor, MateriaPrima } from '../types';
 import { MEDIOS_PAGO_GASTOS, BANCOS } from '../types';
+import { formatNumberInput, getNumericValue, formatCurrency } from '../utils/formatters';
 
 const ComprasPage: React.FC = () => {
   const { user } = useSelector((state: RootState) => state.auth);
@@ -94,6 +95,11 @@ const ComprasPage: React.FC = () => {
   const [cantidadItem, setCantidadItem] = useState<number>(0);
   const [precioItem, setPrecioItem] = useState<number>(0);
   const [descuentoItem, setDescuentoItem] = useState<number>(0);
+  
+  // Estados para formato de montos
+  const [precioFormatted, setPrecioFormatted] = useState('');
+  const [descuentoFormatted, setDescuentoFormatted] = useState('');
+  const [ivaFormatted, setIvaFormatted] = useState('');
 
   // Estados para recepción y pago
   const [fechaRecepcion, setFechaRecepcion] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -130,6 +136,7 @@ const ComprasPage: React.FC = () => {
     if (compra) {
       setModoEdicion(true);
       setFormData(compra);
+      setIvaFormatted(compra.iva ? formatNumberInput(compra.iva.toString()) : '');
     } else {
       setModoEdicion(false);
       setFormData({
@@ -146,7 +153,10 @@ const ComprasPage: React.FC = () => {
         comprador: (user as any)?.username || (user as any)?.name || 'Sistema' || '',
         observaciones: ''
       });
+      setIvaFormatted('');
     }
+    setPrecioFormatted('');
+    setDescuentoFormatted('');
     setOpenDialog(true);
   };
 
@@ -167,6 +177,9 @@ const ComprasPage: React.FC = () => {
       comprador: (user as any)?.username || (user as any)?.name || 'Sistema' || '',
       observaciones: ''
     });
+    setPrecioFormatted('');
+    setDescuentoFormatted('');
+    setIvaFormatted('');
   };
 
   const handleProveedorChange = (proveedorId: string) => {
@@ -219,6 +232,8 @@ const ComprasPage: React.FC = () => {
     setCantidadItem(0);
     setPrecioItem(0);
     setDescuentoItem(0);
+    setPrecioFormatted('');
+    setDescuentoFormatted('');
     setError(null);
   };
 
@@ -451,7 +466,7 @@ const ComprasPage: React.FC = () => {
                   <TableCell>{new Date(compra.fecha).toLocaleDateString()}</TableCell>
                   <TableCell>{compra.razonSocialProveedor}</TableCell>
                   <TableCell>{compra.items.length}</TableCell>
-                  <TableCell align="right">${compra.total.toFixed(2)}</TableCell>
+                  <TableCell align="right">${compra.total.toFixed(3)}</TableCell>
                   <TableCell>
                     <Chip
                       label={compra.estado}
@@ -536,7 +551,9 @@ const ComprasPage: React.FC = () => {
                 onChange={(_, value) => {
                   setMateriaPrimaSeleccionada(value);
                   if (value) {
-                    setPrecioItem(value.precioPromedio || 0);
+                    const precio = value.precioPromedio || 0;
+                    setPrecioItem(precio);
+                    setPrecioFormatted(precio > 0 ? formatNumberInput(precio.toString()) : '');
                   }
                 }}
                 renderInput={(params) => <TextField {...params} label="Materia Prima" />}
@@ -555,19 +572,34 @@ const ComprasPage: React.FC = () => {
               <TextField
                 fullWidth
                 label="Precio Unit."
-                type="number"
-                value={precioItem}
-                onChange={(e) => setPrecioItem(parseFloat(e.target.value))}
-                inputProps={{ step: 0.001 }}
+                type="text"
+                value={precioFormatted}
+                onChange={(e) => {
+                  const formatted = formatNumberInput(e.target.value);
+                  setPrecioFormatted(formatted);
+                  const numericValue = getNumericValue(formatted);
+                  setPrecioItem(numericValue);
+                }}
+                placeholder="Ej: 1.000,50"
+                helperText="Formato: 1.000,50"
+                InputProps={{ startAdornment: <Typography sx={{ mr: 0.5, color: 'text.secondary' }}>$</Typography> }}
               />
             </Grid>
             <Grid item xs={6} md={2}>
               <TextField
                 fullWidth
                 label="Descuento"
-                type="number"
-                value={descuentoItem}
-                onChange={(e) => setDescuentoItem(parseFloat(e.target.value))}
+                type="text"
+                value={descuentoFormatted}
+                onChange={(e) => {
+                  const formatted = formatNumberInput(e.target.value);
+                  setDescuentoFormatted(formatted);
+                  const numericValue = getNumericValue(formatted);
+                  setDescuentoItem(numericValue);
+                }}
+                placeholder="Ej: 100,00"
+                helperText="Formato: 1.000,50"
+                InputProps={{ startAdornment: <Typography sx={{ mr: 0.5, color: 'text.secondary' }}>$</Typography> }}
               />
             </Grid>
             <Grid item xs={6} md={2}>
@@ -575,7 +607,7 @@ const ComprasPage: React.FC = () => {
                 fullWidth
                 variant="contained"
                 onClick={agregarItem}
-                sx={{ height: '100%' }}
+                sx={{ height: '57%' }}
               >
                 Agregar
               </Button>
@@ -588,7 +620,7 @@ const ComprasPage: React.FC = () => {
                   <ListItem key={index}>
                     <ListItemText
                       primary={`${item.nombreMateriaPrima} - ${item.cantidad} unidades`}
-                      secondary={`Precio: $${item.precioUnitario.toFixed(2)} | Subtotal: $${item.subtotal.toFixed(2)} | Desc: $${item.descuento.toFixed(2)} | Total: $${item.total.toFixed(2)}`}
+                      secondary={`Precio: $${item.precioUnitario.toFixed(3)} | Subtotal: $${item.subtotal.toFixed(3)} | Desc: $${item.descuento.toFixed(3)} | Total: $${item.total.toFixed(3)}`}
                     />
                     <ListItemSecondaryAction>
                       <IconButton edge="end" onClick={() => eliminarItem(index)}>
@@ -609,25 +641,33 @@ const ComprasPage: React.FC = () => {
                       <Typography>Subtotal:</Typography>
                     </Grid>
                     <Grid item xs={6} sx={{ textAlign: 'right' }}>
-                      <Typography>${formData.subtotal?.toFixed(2) || '0.00'}</Typography>
+                      <Typography>${formData.subtotal?.toFixed(3) || '0.000'}</Typography>
                     </Grid>
                     <Grid item xs={6}>
                       <Typography>Descuento Total:</Typography>
                     </Grid>
                     <Grid item xs={6} sx={{ textAlign: 'right' }}>
-                      <Typography>${formData.descuentoTotal?.toFixed(2) || '0.00'}</Typography>
+                      <Typography>${formData.descuentoTotal?.toFixed(3) || '0.000'}</Typography>
                     </Grid>
                     <Grid item xs={6}>
                       <TextField
                         fullWidth
                         label="IVA"
-                        type="number"
-                        value={formData.iva || 0}
-                        onChange={(e) => handleIVAChange(parseFloat(e.target.value) || 0)}
+                        type="text"
+                        value={ivaFormatted}
+                        onChange={(e) => {
+                          const formatted = formatNumberInput(e.target.value);
+                          setIvaFormatted(formatted);
+                          const numericValue = getNumericValue(formatted);
+                          handleIVAChange(numericValue);
+                        }}
+                        placeholder="Ej: 1.000,00"
+                        helperText="Formato: 1.000,50"
+                        InputProps={{ startAdornment: <Typography sx={{ mr: 0.5, color: 'text.secondary' }}>$</Typography> }}
                       />
                     </Grid>
                     <Grid item xs={6} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                      <Typography variant="h6">Total: ${formData.total?.toFixed(2) || '0.00'}</Typography>
+                      <Typography variant="h6">Total: ${formData.total?.toFixed(3) || '0.000'}</Typography>
                     </Grid>
                   </Grid>
                 </CardContent>
@@ -708,10 +748,10 @@ const ComprasPage: React.FC = () => {
                         <TableRow key={index}>
                           <TableCell>{item.nombreMateriaPrima}</TableCell>
                           <TableCell align="right">{item.cantidad}</TableCell>
-                          <TableCell align="right">${item.precioUnitario.toFixed(2)}</TableCell>
-                          <TableCell align="right">${item.subtotal.toFixed(2)}</TableCell>
-                          <TableCell align="right">${item.descuento.toFixed(2)}</TableCell>
-                          <TableCell align="right">${item.total.toFixed(2)}</TableCell>
+                          <TableCell align="right">${item.precioUnitario.toFixed(3)}</TableCell>
+                          <TableCell align="right">${item.subtotal.toFixed(3)}</TableCell>
+                          <TableCell align="right">${item.descuento.toFixed(3)}</TableCell>
+                          <TableCell align="right">${item.total.toFixed(3)}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -725,19 +765,19 @@ const ComprasPage: React.FC = () => {
                     <Grid container spacing={1}>
                       <Grid item xs={6}><Typography>Subtotal:</Typography></Grid>
                       <Grid item xs={6} sx={{ textAlign: 'right' }}>
-                        <Typography>${compraSeleccionada.subtotal.toFixed(2)}</Typography>
+                        <Typography>${compraSeleccionada.subtotal.toFixed(3)}</Typography>
                       </Grid>
                       <Grid item xs={6}><Typography>Descuento:</Typography></Grid>
                       <Grid item xs={6} sx={{ textAlign: 'right' }}>
-                        <Typography>${compraSeleccionada.descuentoTotal.toFixed(2)}</Typography>
+                        <Typography>${compraSeleccionada.descuentoTotal.toFixed(3)}</Typography>
                       </Grid>
                       <Grid item xs={6}><Typography>IVA:</Typography></Grid>
                       <Grid item xs={6} sx={{ textAlign: 'right' }}>
-                        <Typography>${compraSeleccionada.iva.toFixed(2)}</Typography>
+                        <Typography>${compraSeleccionada.iva.toFixed(3)}</Typography>
                       </Grid>
                       <Grid item xs={6}><Typography variant="h6">Total:</Typography></Grid>
                       <Grid item xs={6} sx={{ textAlign: 'right' }}>
-                        <Typography variant="h6">${compraSeleccionada.total.toFixed(2)}</Typography>
+                        <Typography variant="h6">${compraSeleccionada.total.toFixed(3)}</Typography>
                       </Grid>
                     </Grid>
                   </CardContent>

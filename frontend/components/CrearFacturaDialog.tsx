@@ -23,15 +23,24 @@ import {
   FormControl,
   InputLabel,
   Select,
-  MenuItem
+  MenuItem,
+  IconButton,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow
 } from '@mui/material';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
+import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../redux/store';
 import { fetchVentasSinFacturar } from '../redux/slices/ventasSlice';
-import { crearFacturaDesdeVentas, clearError } from '../redux/slices/facturasSlice';
-import { Venta } from '../types';
-import { formatDate, formatCurrency } from '../utils/formatters';
+import { crearFacturaDesdeVentas, crearFacturaManual, clearError } from '../redux/slices/facturasSlice';
+import { Venta, Cliente } from '../types';
+import { formatDate, formatCurrency, formatNumberInput, getNumericValue } from '../utils/formatters';
 
 interface CrearFacturaDialogProps {
   open: boolean;
@@ -72,6 +81,49 @@ const CrearFacturaDialog: React.FC<CrearFacturaDialogProps> = ({ open, onClose, 
   const [fechaDesde, setFechaDesde] = useState<string>('');
   const [fechaHasta, setFechaHasta] = useState<string>('');
 
+  // Estados para facturación manual
+  const [clienteManual, setClienteManual] = useState<Cliente | null>(null);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [loadingClientes, setLoadingClientes] = useState(false);
+  const [concepto, setConcepto] = useState<number>(1); // 1=Productos, 2=Servicios, 3=Mixto
+  const [observacionesManual, setObservacionesManual] = useState('');
+  const [items, setItems] = useState<Array<{
+    codigo: string;
+    descripcion: string;
+    cantidad: number;
+    precioUnitario: string; // Formato argentino (1.000,50)
+    alicuotaIVA: number;
+  }>>([{
+    codigo: '',
+    descripcion: '',
+    cantidad: 1,
+    precioUnitario: '',
+    alicuotaIVA: 21
+  }]);
+
+  // Cargar clientes al abrir el modal
+  useEffect(() => {
+    const cargarClientes = async () => {
+      if (open && clientes.length === 0 && !loadingClientes) {
+        setLoadingClientes(true);
+        try {
+          const api = (await import('../services/api')).default;
+          const response = await api.get('/api/clientes');
+          console.log('✅ Clientes cargados:', response.data.length);
+          console.log('Primeros 3 clientes:', response.data.slice(0, 3));
+          setClientes(response.data || []);
+        } catch (error: any) {
+          console.error('❌ Error al cargar clientes:', error);
+          console.error('Detalle del error:', error.response?.data || error.message);
+          setClientes([]);
+        } finally {
+          setLoadingClientes(false);
+        }
+      }
+    };
+    cargarClientes();
+  }, [open, clientes.length, loadingClientes]);
+
   useEffect(() => {
     if (open && tabValue === 0) {
       dispatch(fetchVentasSinFacturar());
@@ -86,6 +138,17 @@ const CrearFacturaDialog: React.FC<CrearFacturaDialogProps> = ({ open, onClose, 
       setFiltroCobranza('');
       setFechaDesde('');
       setFechaHasta('');
+      // Resetear estado de facturación manual
+      setClienteManual(null);
+      setConcepto(1);
+      setObservacionesManual('');
+      setItems([{
+        codigo: '',
+        descripcion: '',
+        cantidad: 1,
+        precioUnitario: '',
+        alicuotaIVA: 21
+      }]);
     }
   }, [open, dispatch]);
 
@@ -156,6 +219,124 @@ const CrearFacturaDialog: React.FC<CrearFacturaDialogProps> = ({ open, onClose, 
       onSuccess();
     } catch (err) {
       console.error('Error al crear factura:', err);
+    }
+  };
+
+  // ========== FUNCIONES PARA FACTURACIÓN MANUAL ==========
+
+  const agregarItem = () => {
+    setItems([...items, {
+      codigo: '',
+      descripcion: '',
+      cantidad: 1,
+      precioUnitario: '',
+      alicuotaIVA: 21
+    }]);
+  };
+
+  const eliminarItem = (index: number) => {
+    if (items.length > 1) {
+      setItems(items.filter((_, i) => i !== index));
+    }
+  };
+
+  const actualizarItem = (index: number, campo: string, valor: any) => {
+    const nuevosItems = [...items];
+    (nuevosItems[index] as any)[campo] = valor;
+    setItems(nuevosItems);
+  };
+
+  const calcularTotalesManual = () => {
+    let subtotal = 0;
+    let totalIVA = 0;
+
+    items.forEach(item => {
+      const precioUnitario = getNumericValue(item.precioUnitario);
+      const importeBruto = precioUnitario * item.cantidad;
+      const importeNeto = importeBruto; // Sin descuentos en versión inicial
+      const importeIVA = importeNeto * (item.alicuotaIVA / 100);
+      
+      subtotal += importeNeto;
+      totalIVA += importeIVA;
+    });
+
+    return {
+      subtotal,
+      iva: totalIVA,
+      total: subtotal + totalIVA
+    };
+  };
+
+  const validarFormularioManual = (): boolean => {
+    if (!clienteManual) {
+      alert('Debe seleccionar un cliente');
+      return false;
+    }
+
+    if (items.length === 0) {
+      alert('Debe agregar al menos un item');
+      return false;
+    }
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (!item.descripcion.trim()) {
+        alert(`El item ${i + 1} debe tener una descripción`);
+        return false;
+      }
+      if (item.cantidad <= 0) {
+        alert(`El item ${i + 1} debe tener una cantidad mayor a 0`);
+        return false;
+      }
+      if (getNumericValue(item.precioUnitario) <= 0) {
+        alert(`El item ${i + 1} debe tener un precio unitario mayor a 0`);
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const handleCrearFacturaManual = async () => {
+    if (!validarFormularioManual()) {
+      return;
+    }
+
+    // Convertir items a formato backend
+    const itemsFormateados = items.map(item => {
+      const precioUnitario = getNumericValue(item.precioUnitario);
+      const importeBruto = precioUnitario * item.cantidad;
+      const importeNeto = importeBruto;
+      const importeIVA = importeNeto * (item.alicuotaIVA / 100);
+
+      return {
+        codigo: item.codigo || 'MANUAL',
+        descripcion: item.descripcion,
+        cantidad: item.cantidad,
+        unidadMedida: '7', // Unidades
+        precioUnitario,
+        importeBruto,
+        importeDescuento: 0,
+        importeNeto,
+        alicuotaIVA: item.alicuotaIVA,
+        importeIVA,
+        importeTotal: importeNeto + importeIVA
+      };
+    });
+
+    try {
+      await dispatch(crearFacturaManual({
+        clienteId: clienteManual!._id!,
+        tipoComprobante: '', // El backend lo determina consultando AFIP
+        puntoVenta: 1, // Punto de venta por defecto
+        items: itemsFormateados,
+        concepto,
+        observaciones: observacionesManual || undefined
+      })).unwrap();
+      
+      onSuccess();
+    } catch (err) {
+      console.error('Error al crear factura manual:', err);
     }
   };
 
@@ -331,7 +512,7 @@ const CrearFacturaDialog: React.FC<CrearFacturaDialogProps> = ({ open, onClose, 
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs value={tabValue} onChange={handleTabChange}>
             <Tab label="Desde Ventas" id="factura-tab-0" />
-            <Tab label="Manual" id="factura-tab-1" disabled />
+            <Tab label="Manual" id="factura-tab-1" />
           </Tabs>
         </Box>
 
@@ -469,11 +650,257 @@ const CrearFacturaDialog: React.FC<CrearFacturaDialogProps> = ({ open, onClose, 
           </Box>
         </TabPanel>
 
-        {/* Tab 2: Manual (deshabilitado por ahora) */}
+        {/* Tab 2: Manual */}
         <TabPanel value={tabValue} index={1}>
-          <Alert severity="info">
-            La creación manual de facturas estará disponible próximamente.
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <Typography variant="body2">
+              <strong>Facturación manual:</strong> Crear factura sin venta previa. El sistema consultará AFIP automáticamente para determinar el tipo de factura (A, B o C) según el CUIT/DNI del cliente.
+            </Typography>
           </Alert>
+
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }} onClose={() => dispatch(clearError())}>
+              {error}
+            </Alert>
+          )}
+
+          <Grid container spacing={3}>
+            {/* Selector de cliente */}
+            <Grid item xs={12}>
+              <Autocomplete
+                options={clientes}
+                getOptionLabel={(option) => {
+                  const nombre = option.razonSocial || `${option.nombre} ${option.apellido || ''}`.trim();
+                  const estado = option.estado === 'activo' ? '' : ` [${option.estado.toUpperCase()}]`;
+                  return `${nombre} - ${option.numeroDocumento}${estado}`;
+                }}
+                value={clienteManual}
+                onChange={(_event, newValue) => {
+                  console.log('✅ Cliente seleccionado:', newValue);
+                  setClienteManual(newValue);
+                }}
+                loading={loadingClientes}
+                noOptionsText={
+                  loadingClientes 
+                    ? 'Cargando clientes...' 
+                    : clientes.length === 0 
+                      ? 'No hay clientes registrados en el sistema'
+                      : 'No se encontraron coincidencias'
+                }
+                renderInput={(params) => (
+                  <TextField 
+                    {...params} 
+                    label="Cliente *" 
+                    placeholder="Buscar por nombre, razón social o documento"
+                    helperText={
+                      loadingClientes 
+                        ? 'Cargando lista de clientes...'
+                        : clientes.length > 0
+                          ? `${clientes.length} clientes disponibles. Puede facturar a cualquier cliente sin necesidad de ventas previas.`
+                          : 'No hay clientes registrados. Primero debe crear clientes en el sistema.'
+                    }
+                    InputProps={{
+                      ...params.InputProps,
+                      endAdornment: (
+                        <>
+                          {loadingClientes ? <CircularProgress color="inherit" size={20} /> : null}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
+              />
+            </Grid>
+
+            {/* Concepto */}
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth>
+                <InputLabel>Concepto</InputLabel>
+                <Select
+                  value={concepto}
+                  label="Concepto"
+                  onChange={(e) => setConcepto(Number(e.target.value))}
+                >
+                  <MenuItem value={1}>Productos</MenuItem>
+                  <MenuItem value={2}>Servicios</MenuItem>
+                  <MenuItem value={3}>Productos y Servicios</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+
+            {/* Observaciones */}
+            <Grid item xs={12} md={6}>
+              <TextField
+                label="Observaciones"
+                value={observacionesManual}
+                onChange={(e) => setObservacionesManual(e.target.value)}
+                fullWidth
+                multiline
+                rows={1}
+                placeholder="Notas adicionales (opcional)"
+              />
+            </Grid>
+
+            {/* Tabla de items */}
+            <Grid item xs={12}>
+              <Card variant="outlined">
+                <CardContent>
+                  <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                    <Typography variant="h6">Items de Factura</Typography>
+                    <Button
+                      startIcon={<AddIcon />}
+                      onClick={agregarItem}
+                      variant="outlined"
+                      size="small"
+                    >
+                      Agregar Item
+                    </Button>
+                  </Box>
+
+                  <TableContainer component={Paper} variant="outlined">
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Código</TableCell>
+                          <TableCell>Descripción *</TableCell>
+                          <TableCell align="center">Cantidad *</TableCell>
+                          <TableCell align="right">Precio Unit. *</TableCell>
+                          <TableCell align="center">IVA %</TableCell>
+                          <TableCell align="right">Subtotal</TableCell>
+                          <TableCell align="right">IVA $</TableCell>
+                          <TableCell align="right">Total</TableCell>
+                          <TableCell align="center">Acción</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {items.map((item, index) => {
+                          const precioUnitario = getNumericValue(item.precioUnitario);
+                          const importeBruto = precioUnitario * item.cantidad;
+                          const importeNeto = importeBruto;
+                          const importeIVA = importeNeto * (item.alicuotaIVA / 100);
+                          const total = importeNeto + importeIVA;
+
+                          return (
+                            <TableRow key={index}>
+                              <TableCell>
+                                <TextField
+                                  value={item.codigo}
+                                  onChange={(e) => actualizarItem(index, 'codigo', e.target.value)}
+                                  placeholder="Código"
+                                  size="small"
+                                  sx={{ width: 100 }}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <TextField
+                                  value={item.descripcion}
+                                  onChange={(e) => actualizarItem(index, 'descripcion', e.target.value)}
+                                  placeholder="Descripción del producto/servicio"
+                                  size="small"
+                                  fullWidth
+                                  required
+                                  error={!item.descripcion.trim()}
+                                />
+                              </TableCell>
+                              <TableCell align="center">
+                                <TextField
+                                  type="number"
+                                  value={item.cantidad}
+                                  onChange={(e) => actualizarItem(index, 'cantidad', Math.max(1, Number(e.target.value)))}
+                                  size="small"
+                                  sx={{ width: 80 }}
+                                  inputProps={{ min: 1 }}
+                                />
+                              </TableCell>
+                              <TableCell align="right">
+                                <TextField
+                                  type="text"
+                                  value={item.precioUnitario}
+                                  onChange={(e) => {
+                                    const formatted = formatNumberInput(e.target.value);
+                                    actualizarItem(index, 'precioUnitario', formatted);
+                                  }}
+                                  size="small"
+                                  placeholder="1.000,50"
+                                  helperText="Ej: 1.000,50"
+                                  sx={{ width: 120 }}
+                                  InputProps={{ startAdornment: '$' }}
+                                  error={getNumericValue(item.precioUnitario) <= 0 && item.precioUnitario !== ''}
+                                />
+                              </TableCell>
+                              <TableCell align="center">
+                                <Select
+                                  value={item.alicuotaIVA}
+                                  onChange={(e) => actualizarItem(index, 'alicuotaIVA', Number(e.target.value))}
+                                  size="small"
+                                  sx={{ width: 80 }}
+                                >
+                                  <MenuItem value={0}>0%</MenuItem>
+                                  <MenuItem value={10.5}>10,5%</MenuItem>
+                                  <MenuItem value={21}>21%</MenuItem>
+                                  <MenuItem value={27}>27%</MenuItem>
+                                </Select>
+                              </TableCell>
+                              <TableCell align="right">
+                                <Typography variant="body2">
+                                  {formatCurrency(importeNeto)}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="right">
+                                <Typography variant="body2" color="text.secondary">
+                                  {formatCurrency(importeIVA)}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="right">
+                                <Typography variant="body2" fontWeight="bold">
+                                  {formatCurrency(total)}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center">
+                                <IconButton
+                                  onClick={() => eliminarItem(index)}
+                                  size="small"
+                                  disabled={items.length === 1}
+                                  color="error"
+                                >
+                                  <DeleteIcon fontSize="small" />
+                                </IconButton>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </CardContent>
+              </Card>
+            </Grid>
+
+            {/* Totales */}
+            {items.length > 0 && (
+              <Grid item xs={12}>
+                <Card sx={{ bgcolor: 'primary.light', color: 'primary.contrastText' }}>
+                  <CardContent>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} sm={4}>
+                        <Typography variant="caption">Subtotal (sin IVA)</Typography>
+                        <Typography variant="h6">{formatCurrency(calcularTotalesManual().subtotal)}</Typography>
+                      </Grid>
+                      <Grid item xs={12} sm={4}>
+                        <Typography variant="caption">IVA Total</Typography>
+                        <Typography variant="h6">{formatCurrency(calcularTotalesManual().iva)}</Typography>
+                      </Grid>
+                      <Grid item xs={12} sm={4}>
+                        <Typography variant="caption">Total Factura</Typography>
+                        <Typography variant="h6" fontWeight="bold">{formatCurrency(calcularTotalesManual().total)}</Typography>
+                      </Grid>
+                    </Grid>
+                  </CardContent>
+                </Card>
+              </Grid>
+            )}
+          </Grid>
         </TabPanel>
       </DialogContent>
 
@@ -489,6 +916,16 @@ const CrearFacturaDialog: React.FC<CrearFacturaDialogProps> = ({ open, onClose, 
             startIcon={loading ? <CircularProgress size={20} /> : null}
           >
             {loading ? 'Creando...' : 'Crear Factura'}
+          </Button>
+        )}
+        {tabValue === 1 && (
+          <Button
+            onClick={handleCrearFacturaManual}
+            variant="contained"
+            disabled={loading || !clienteManual || items.length === 0}
+            startIcon={loading ? <CircularProgress size={20} /> : null}
+          >
+            {loading ? 'Creando...' : 'Crear Factura Manual'}
           </Button>
         )}
       </DialogActions>

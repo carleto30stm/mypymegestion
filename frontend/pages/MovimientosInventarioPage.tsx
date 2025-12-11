@@ -390,13 +390,13 @@ const MovimientosInventarioPage: React.FC = () => {
                       color={mov.tipo === 'entrada' || mov.tipo === 'devolucion' ? 'success.main' : 'error.main'}
                     >
                       {mov.tipo === 'entrada' || mov.tipo === 'devolucion' ? '+' : '-'}
-                      {mov.cantidad.toFixed(2)}
+                      {mov.cantidad.toFixed(3)}
                     </Typography>
                   </TableCell>
-                  <TableCell align="right">{mov.stockAnterior.toFixed(2)}</TableCell>
+                  <TableCell align="right">{mov.stockAnterior.toFixed(3)}</TableCell>
                   <TableCell align="right">
                     <Typography variant="body2" fontWeight="bold">
-                      {mov.stockNuevo.toFixed(2)}
+                      {mov.stockNuevo.toFixed(3)}
                     </Typography>
                   </TableCell>
                   <TableCell align="right">
