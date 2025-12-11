@@ -36,6 +36,54 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
   // Ref para bloquear reentradas de submit de forma síncrona
   const submittingRef = useRef(false);
 
+  // Función para verificar si el formulario tiene los campos requeridos completos
+  const isFormValid = (): boolean => {
+    if (formData.tipoOperacion === 'transferencia') {
+      // Para transferencias: cuentas, monto y detalle son requeridos
+      const montoTransferenciaValue = Number(formData.montoTransferencia) || 0;
+      return !!(
+        formData.cuentaOrigen &&
+        formData.cuentaDestino &&
+        formData.cuentaOrigen !== formData.cuentaDestino &&
+        montoTransferenciaValue > 0 &&
+        formData.detalleGastos
+      );
+    } else if (formData.tipoOperacion === 'entrada') {
+      // Para entrada: rubro, medio de pago, detalle, banco y monto entrada
+      const entradaValue = Number(formData.entrada) || 0;
+      return !!(
+        formData.rubro &&
+        formData.medioDePago &&
+        formData.detalleGastos &&
+        (formData.medioDePago === 'CHEQUE TERCERO' || formData.banco) &&
+        entradaValue > 0
+      );
+    } else {
+      // Para salida: rubro, medio de pago, detalle, banco y monto salida
+      const salidaValue = Number(formData.salida) || 0;
+      const horasExtraValue = Number(formData.horasExtra) || 0;
+      
+      // Si es SUELDOS con hora_extra, validar horasExtra en lugar de salida
+      if (formData.rubro === 'SUELDOS' && formData.concepto === 'hora_extra') {
+        return !!(
+          formData.rubro &&
+          formData.medioDePago &&
+          formData.detalleGastos &&
+          (formData.medioDePago === 'CHEQUE TERCERO' || formData.banco) &&
+          horasExtraValue > 0
+        );
+      }
+      
+      return !!(
+        formData.rubro &&
+        formData.medioDePago &&
+        formData.detalleGastos &&
+        (formData.medioDePago === 'CHEQUE TERCERO' || formData.banco) &&
+        salidaValue > 0
+      );
+    }
+  };
+
   // Función para mostrar notificaciones
   const showNotification = (message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') => {
     setNotification({
@@ -494,35 +542,36 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
     // Marcar que se inició una operación
     setOperationCompleted(true);
 
-    // Si es creación (no edit), limpiar el formulario inmediatamente para evitar duplicados por re-click
-    if (!gastoToEdit) {
-      setFormData({
-        fecha: '',
-        rubro: '',
-        subRubro: '',
-        medioDePago: '',
-        clientes: '',
-        detalleGastos: '',
-        tipoOperacion: 'salida',
-        concepto: 'sueldo',
-        comentario: '',
-        fechaStandBy: '',
-        numeroCheque: '',
-        entrada: '',
-        salida: '',
-        banco: '',
-        cuentaOrigen: '',
-        cuentaDestino: '',
-        montoTransferencia: '',
-        horasExtra: '',
-        montoInteres: '',
-      });
-      // Limpiar formatos visuales
-      setEntradaFormatted('');
-      setSalidaFormatted('');
-      setMontoTransferenciaFormatted('');
-      setMontoInteresFormatted('');
-    }
+    // SIEMPRE limpiar el formulario inmediatamente al hacer submit para:
+    // 1. Evitar duplicados por re-click
+    // 2. Deshabilitar el botón (isFormValid() retornará false)
+    setFormData({
+      fecha: '',
+      rubro: '',
+      subRubro: '',
+      medioDePago: '',
+      clientes: '',
+      detalleGastos: '',
+      tipoOperacion: 'salida',
+      concepto: 'sueldo',
+      comentario: '',
+      fechaStandBy: '',
+      numeroCheque: '',
+      entrada: '',
+      salida: '',
+      banco: '',
+      cuentaOrigen: '',
+      cuentaDestino: '',
+      montoTransferencia: '',
+      horasExtra: '',
+      montoInteres: '',
+    });
+    // Limpiar formatos visuales
+    setEntradaFormatted('');
+    setSalidaFormatted('');
+    setMontoTransferenciaFormatted('');
+    setMontoInteresFormatted('');
+    
     // Limpiar error de validación
     setValidationError('');
   };
@@ -917,7 +966,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
               type="submit" 
               variant="contained" 
               color="primary" 
-              disabled={isSubmitting || status === 'loading'}
+              disabled={isSubmitting || status === 'loading' || !isFormValid()}
             >
               {(isSubmitting || status === 'loading') ? (
                 <>

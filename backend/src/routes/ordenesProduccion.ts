@@ -3,9 +3,11 @@ import {
   getOrdenes,
   getOrdenById,
   crearOrden,
+  editarOrden,
   iniciarProduccion,
   completarProduccion,
   cancelarOrden,
+  enviarOrdenAProveedor,
   obtenerEstadisticas
 } from '../controllers/ordenesProduccionController.js';
 
@@ -18,7 +20,9 @@ router.get('/estadisticas', obtenerEstadisticas);
 router.get('/', getOrdenes);
 router.get('/:id', getOrdenById);
 router.post('/', crearOrden);
+router.put('/:id', editarOrden);
 router.post('/:id/iniciar', iniciarProduccion);
+router.post('/:id/enviar', enviarOrdenAProveedor);
 router.post('/:id/completar', completarProduccion);
 router.post('/:id/cancelar', cancelarOrden);
 

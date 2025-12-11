@@ -4,6 +4,8 @@ import Receta from '../models/Receta.js';
 import MateriaPrima from '../models/MateriaPrima.js';
 import Producto from '../models/Producto.js';
 import MovimientoInventario from '../models/MovimientoInventario.js';
+import Proveedor from '../models/Proveedor.js';
+import MovimientoCuentaCorrienteProveedor from '../models/MovimientoCuentaCorrienteProveedor.js';
 import mongoose from 'mongoose';
 
 // Obtener todas las órdenes con filtros
@@ -24,6 +26,7 @@ export const getOrdenes = async (req: Request, res: Response) => {
     const ordenes = await OrdenProduccion.find(filtro)
       .populate('productoId', 'codigo nombre precioVenta')
       .populate('recetaId', 'version rendimiento')
+      .populate('proveedorId', 'razonSocial')
       .sort({ fecha: -1, prioridad: 1 });
 
     res.json(ordenes);
@@ -43,7 +46,8 @@ export const getOrdenById = async (req: Request, res: Response) => {
 
     const orden = await OrdenProduccion.findById(id)
       .populate('productoId', 'codigo nombre precioVenta')
-      .populate('recetaId');
+      .populate('recetaId')
+      .populate('proveedorId', 'razonSocial');
 
     if (!orden) {
       return res.status(404).json({ mensaje: 'Orden de producción no encontrada' });
@@ -127,6 +131,47 @@ export const crearOrden = async (req: Request, res: Response) => {
     // Calcular unidades a producir
     const unidadesAProducir = cantidadAProducir * receta.rendimiento;
 
+    // Verificar si es producción externa
+    const esProduccionExterna = req.body.esProduccionExterna || false;
+    const proveedorId = req.body.proveedorId;
+    const costoUnitarioManoObraExterna = req.body.costoUnitarioManoObraExterna || 0;
+
+    // Si es producción externa, RESERVAR materias primas (no consumir aún)
+    if (esProduccionExterna) {
+      for (const item of materiasPrimasOrden) {
+        const mp = await MateriaPrima.findById(item.materiaPrimaId).session(session);
+        if (!mp) continue;
+        
+        // Reservar el stock (disminuir disponible pero no consumir)
+        mp.stock -= item.cantidadNecesaria;
+        await mp.save({ session });
+
+        // Registrar movimiento de reserva
+        await MovimientoInventario.create([{
+          fecha: new Date(),
+          tipo: 'reserva_produccion_externa',
+          materiaPrimaId: mp._id,
+          codigoMateriaPrima: mp.codigo,
+          nombreMateriaPrima: mp.nombre,
+          cantidad: item.cantidadNecesaria,
+          unidadMedida: mp.unidadMedida,
+          stockAnterior: mp.stock + item.cantidadNecesaria,
+          stockNuevo: mp.stock,
+          precioUnitario: item.costo,
+          valor: item.costo * item.cantidadNecesaria,
+          documentoOrigen: 'orden_produccion_externa',
+          documentoOrigenId: null, // Se actualiza después
+          numeroDocumento: 'Pendiente',
+          observaciones: `Reserva para producción externa - ${producto.nombre}`,
+          responsable: responsable,
+          usuario: createdBy
+        }], { session });
+
+        // Marcar como reservada
+        item.cantidadReservada = item.cantidadNecesaria;
+      }
+    }
+
     // Crear orden
     const nuevaOrden = new OrdenProduccion({
       fecha: fecha || new Date(),
@@ -143,16 +188,29 @@ export const crearOrden = async (req: Request, res: Response) => {
       prioridad: prioridad || 'media',
       responsable,
       observaciones,
+      esProduccionExterna,
+      proveedorId: esProduccionExterna ? proveedorId : undefined,
+      costoUnitarioManoObraExterna: esProduccionExterna ? costoUnitarioManoObraExterna : 0,
       createdBy
     });
 
     await nuevaOrden.save({ session });
+
+    // Actualizar movimientos con el ID de la orden creada
+    if (esProduccionExterna) {
+      await MovimientoInventario.updateMany(
+        { documentoOrigenId: null, documentoOrigen: 'orden_produccion_externa' },
+        { $set: { documentoOrigenId: nuevaOrden._id, numeroDocumento: nuevaOrden.numeroOrden } },
+        { session }
+      );
+    }
     
     // Populate antes de hacer commit
     const ordenPopulada = await OrdenProduccion.findById(nuevaOrden._id)
       .session(session)
       .populate('productoId', 'codigo nombre precioVenta')
-      .populate('recetaId', 'version rendimiento');
+      .populate('recetaId', 'version rendimiento')
+      .populate('proveedorId', 'razonSocial');
 
     await session.commitTransaction();
 
@@ -162,6 +220,113 @@ export const crearOrden = async (req: Request, res: Response) => {
     console.error('Error al crear orden:', error);
     res.status(500).json({ 
       mensaje: 'Error al crear orden de producción', 
+      error: error.message 
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
+// Editar orden de producción (solo si está en estado 'planificada')
+export const editarOrden = async (req: Request, res: Response) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { id } = req.params;
+    const { 
+      cantidadAProducir,
+      prioridad,
+      responsable,
+      observaciones,
+      proveedorId,
+      costoUnitarioManoObraExterna
+    } = req.body;
+
+    const orden = await OrdenProduccion.findById(id).session(session);
+    if (!orden) {
+      await session.abortTransaction();
+      return res.status(404).json({ mensaje: 'Orden de producción no encontrada' });
+    }
+
+    if (orden.estado !== 'planificada') {
+      await session.abortTransaction();
+      return res.status(400).json({ 
+        mensaje: `Solo se pueden editar órdenes en estado 'planificada'. Estado actual: ${orden.estado}` 
+      });
+    }
+
+    // Si es producción externa y cambió la cantidad, necesitamos ajustar las reservas de MP
+    if (orden.esProduccionExterna && cantidadAProducir && cantidadAProducir !== orden.cantidadAProducir) {
+      // Liberar reservas anteriores
+      for (const item of orden.materiasPrimas) {
+        if (item.cantidadReservada > 0) {
+          const mp = await MateriaPrima.findById(item.materiaPrimaId).session(session);
+          if (mp) {
+            mp.stock += item.cantidadReservada;
+            await mp.save({ session });
+          }
+        }
+      }
+
+      // Recalcular cantidades necesarias según nueva cantidad
+      const receta = await Receta.findById(orden.recetaId).session(session);
+      if (!receta) {
+        throw new Error('Receta no encontrada');
+      }
+
+      for (const item of orden.materiasPrimas) {
+        const cantidadNecesaria = receta.materiasPrimas.find(
+          mp => mp.materiaPrimaId.toString() === item.materiaPrimaId.toString()
+        )!.cantidad * cantidadAProducir;
+
+        const mp = await MateriaPrima.findById(item.materiaPrimaId).session(session);
+        if (!mp) {
+          throw new Error(`Materia prima no encontrada: ${item.nombreMateriaPrima}`);
+        }
+
+        if (mp.stock < cantidadNecesaria) {
+          throw new Error(
+            `Stock insuficiente de ${mp.nombre}. ` +
+            `Necesario: ${cantidadNecesaria}, Disponible: ${mp.stock}`
+          );
+        }
+
+        // Reservar nuevo stock
+        mp.stock -= cantidadNecesaria;
+        await mp.save({ session });
+
+        // Actualizar cantidades en la orden
+        item.cantidadNecesaria = cantidadNecesaria;
+        item.cantidadReservada = cantidadNecesaria;
+      }
+
+      orden.cantidadAProducir = cantidadAProducir;
+    }
+
+    // Actualizar campos editables
+    if (prioridad) orden.prioridad = prioridad as any;
+    if (responsable !== undefined) orden.responsable = responsable;
+    if (observaciones !== undefined) orden.observaciones = observaciones;
+    if (orden.esProduccionExterna) {
+      if (proveedorId) orden.proveedorId = proveedorId as any;
+      if (costoUnitarioManoObraExterna !== undefined) orden.costoUnitarioManoObraExterna = costoUnitarioManoObraExterna;
+    }
+
+    await orden.save({ session });
+    await session.commitTransaction();
+
+    const ordenActualizada = await OrdenProduccion.findById(id)
+      .populate('productoId', 'codigo nombre precioVenta')
+      .populate('recetaId', 'version rendimiento')
+      .populate('proveedorId', 'razonSocial');
+
+    res.json(ordenActualizada);
+  } catch (error: any) {
+    await session.abortTransaction();
+    console.error('Error al editar orden:', error);
+    res.status(500).json({ 
+      mensaje: 'Error al editar orden de producción', 
       error: error.message 
     });
   } finally {
@@ -218,7 +383,8 @@ export const iniciarProduccion = async (req: Request, res: Response) => {
 
     const ordenActualizada = await OrdenProduccion.findById(id)
       .populate('productoId', 'codigo nombre precioVenta')
-      .populate('recetaId', 'version rendimiento');
+      .populate('recetaId', 'version rendimiento')
+      .populate('proveedorId', 'razonSocial');
 
     res.json(ordenActualizada);
   } catch (error: any) {
@@ -258,15 +424,29 @@ export const completarProduccion = async (req: Request, res: Response) => {
       return res.status(404).json({ mensaje: 'Orden de producción no encontrada' });
     }
 
-    if (orden.estado !== 'en_proceso') {
-      await session.abortTransaction();
-      return res.status(400).json({ 
-        mensaje: `No se puede completar una orden en estado: ${orden.estado}` 
-      });
+    // Validar estado según tipo de producción
+    if (orden.esProduccionExterna) {
+      // Para producción externa, debe estar 'enviada' (ya en el proveedor)
+      if (orden.estado !== 'enviada') {
+        await session.abortTransaction();
+        return res.status(400).json({ 
+          mensaje: `No se puede completar orden externa en estado: ${orden.estado}. Debe estar 'enviada'.` 
+        });
+      }
+      // Para producción externa NO consumir MP (ya se reservó al crear), solo incrementar producto terminado
+    } else {
+      // Para producción interna, debe estar 'en_proceso'
+      if (orden.estado !== 'en_proceso') {
+        await session.abortTransaction();
+        return res.status(400).json({ 
+          mensaje: `No se puede completar una orden en estado: ${orden.estado}` 
+        });
+      }
     }
 
-    // Consumir materias primas y registrar movimientos
-    for (const item of orden.materiasPrimas) {
+    // Consumir materias primas SOLO si es producción interna
+    if (!orden.esProduccionExterna) {
+      for (const item of orden.materiasPrimas) {
       const mp = await MateriaPrima.findById(item.materiaPrimaId).session(session);
       
       if (!mp) {
@@ -306,11 +486,12 @@ export const completarProduccion = async (req: Request, res: Response) => {
         usuario: completadoPor
       }], { session });
 
-      // Actualizar cantidad consumida
-      item.cantidadConsumida = item.cantidadNecesaria;
+        // Actualizar cantidad consumida
+        item.cantidadConsumida = item.cantidadNecesaria;
+      }
     }
 
-    // Actualizar el producto (incrementar stock)
+    // Actualizar el producto (incrementar stock - aplica para ambos tipos)
     const producto = await Producto.findById(orden.productoId).session(session);
     if (!producto) {
       throw new Error(`Producto no encontrado: ${orden.nombreProducto}`);
@@ -327,11 +508,14 @@ export const completarProduccion = async (req: Request, res: Response) => {
     orden.unidadesProducidas = unidadesProducidas;
     await orden.save({ session });
 
+    // NO registrar en CC proveedor aquí - ya se registró al enviar la orden
+
     await session.commitTransaction();
 
     const ordenCompletada = await OrdenProduccion.findById(id)
       .populate('productoId', 'codigo nombre precioVenta stock')
-      .populate('recetaId', 'version rendimiento');
+      .populate('recetaId', 'version rendimiento')
+      .populate('proveedorId', 'razonSocial');
 
     res.json(ordenCompletada);
   } catch (error: any) {
@@ -376,7 +560,43 @@ export const cancelarOrden = async (req: Request, res: Response) => {
       return res.status(400).json({ mensaje: 'La orden ya está cancelada' });
     }
 
-    // Si la orden estaba en proceso, liberar reservas (no se hace nada físicamente, solo cambio de estado)
+    // Si es producción externa y hay MP reservadas, LIBERAR el stock
+    if (orden.esProduccionExterna && orden.estado === 'planificada') {
+      for (const item of orden.materiasPrimas) {
+        if (item.cantidadReservada > 0) {
+          const mp = await MateriaPrima.findById(item.materiaPrimaId).session(session);
+          if (!mp) continue;
+
+          // Devolver stock reservado
+          const stockAnterior = mp.stock;
+          mp.stock += item.cantidadReservada;
+          await mp.save({ session });
+
+          // Registrar movimiento de liberación
+          await MovimientoInventario.create([{
+            fecha: new Date(),
+            tipo: 'liberacion_reserva',
+            materiaPrimaId: mp._id,
+            codigoMateriaPrima: mp.codigo,
+            nombreMateriaPrima: mp.nombre,
+            cantidad: item.cantidadReservada,
+            unidadMedida: mp.unidadMedida,
+            stockAnterior,
+            stockNuevo: mp.stock,
+            precioUnitario: item.costo,
+            valor: item.costo * item.cantidadReservada,
+            documentoOrigen: 'cancelacion_orden_externa',
+            documentoOrigenId: orden._id,
+            numeroDocumento: orden.numeroOrden,
+            observaciones: `Liberación por cancelación - ${orden.nombreProducto}. Motivo: ${motivoCancelacion}`,
+            responsable: orden.responsable,
+            usuario: req.body.canceladoPor || 'sistema'
+          }], { session });
+        }
+      }
+    }
+
+    // Si la orden ya estaba en proceso y consumió MP, NO devolver (ya está consumido)
     orden.estado = 'cancelada';
     orden.motivoCancelacion = motivoCancelacion;
     await orden.save({ session });
@@ -385,7 +605,8 @@ export const cancelarOrden = async (req: Request, res: Response) => {
 
     const ordenCancelada = await OrdenProduccion.findById(id)
       .populate('productoId', 'codigo nombre precioVenta')
-      .populate('recetaId', 'version rendimiento');
+      .populate('recetaId', 'version rendimiento')
+      .populate('proveedorId', 'razonSocial');
 
     res.json(ordenCancelada);
   } catch (error: any) {
@@ -393,6 +614,110 @@ export const cancelarOrden = async (req: Request, res: Response) => {
     console.error('Error al cancelar orden:', error);
     res.status(500).json({ 
       mensaje: 'Error al cancelar orden', 
+      error: error.message 
+    });
+  } finally {
+    session.endSession();
+  }
+};
+
+// Enviar orden a proveedor externo (registra deuda en cuenta corriente)
+export const enviarOrdenAProveedor = async (req: Request, res: Response) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { id } = req.params;
+    const { enviadoPor } = req.body;
+
+    if (!enviadoPor) {
+      await session.abortTransaction();
+      return res.status(400).json({ mensaje: 'El usuario que envía es obligatorio' });
+    }
+
+    const orden = await OrdenProduccion.findById(id).session(session);
+    if (!orden) {
+      await session.abortTransaction();
+      return res.status(404).json({ mensaje: 'Orden de producción no encontrada' });
+    }
+
+    if (!orden.esProduccionExterna) {
+      await session.abortTransaction();
+      return res.status(400).json({ mensaje: 'Solo se pueden enviar órdenes de producción externa' });
+    }
+
+    if (orden.estado !== 'planificada') {
+      await session.abortTransaction();
+      return res.status(400).json({ mensaje: `No se puede enviar una orden en estado: ${orden.estado}` });
+    }
+
+    if (!orden.proveedorId) {
+      await session.abortTransaction();
+      return res.status(400).json({ mensaje: 'La orden no tiene proveedor asignado' });
+    }
+
+    if (!orden.costoUnitarioManoObraExterna || orden.costoUnitarioManoObraExterna <= 0) {
+      await session.abortTransaction();
+      return res.status(400).json({ mensaje: 'La orden debe tener un costo unitario de mano de obra externa' });
+    }
+
+    // Calcular costo total de mano de obra externa
+    const costoTotalManoObraExterna = orden.costoUnitarioManoObraExterna * orden.cantidadAProducir;
+
+    const proveedor = await Proveedor.findById(orden.proveedorId).session(session);
+    if (!proveedor) {
+      await session.abortTransaction();
+      return res.status(404).json({ mensaje: 'Proveedor no encontrado' });
+    }
+
+    // Obtener el último saldo del proveedor
+    const ultimoMovimiento = await MovimientoCuentaCorrienteProveedor
+      .findOne({ proveedorId: orden.proveedorId, anulado: false })
+      .sort({ fecha: -1, _id: -1 })
+      .session(session);
+
+    const saldoAnterior = ultimoMovimiento ? ultimoMovimiento.saldo : 0;
+    const nuevoSaldo = saldoAnterior + costoTotalManoObraExterna; // Aumenta deuda (debemos al proveedor)
+
+    // Crear movimiento en cuenta corriente del proveedor
+    await MovimientoCuentaCorrienteProveedor.create([{
+      proveedorId: orden.proveedorId,
+      fecha: new Date(),
+      tipo: 'servicio_procesamiento',
+      documentoTipo: 'ORDEN_PRODUCCION',
+      documentoNumero: orden.numeroOrden,
+      documentoId: orden._id,
+      concepto: `Procesamiento externo - ${orden.nombreProducto} (${orden.cantidadAProducir} unidades) - $${orden.costoUnitarioManoObraExterna}/u`,
+      observaciones: `Orden enviada a proveedor. Costo unitario: $${orden.costoUnitarioManoObraExterna}, Cantidad: ${orden.cantidadAProducir}, Total: $${costoTotalManoObraExterna}`,
+      debe: 0,
+      haber: costoTotalManoObraExterna, // Aumenta deuda
+      saldo: nuevoSaldo,
+      creadoPor: enviadoPor,
+      anulado: false
+    }], { session });
+
+    // Actualizar saldo del proveedor
+    proveedor.saldoCuenta = nuevoSaldo;
+    await proveedor.save({ session });
+
+    // Cambiar estado de la orden a 'enviada'
+    orden.estado = 'enviada';
+    orden.fechaEnvio = new Date();
+    await orden.save({ session });
+
+    await session.commitTransaction();
+
+    const ordenActualizada = await OrdenProduccion.findById(id)
+      .populate('productoId', 'codigo nombre precioVenta')
+      .populate('recetaId', 'version rendimiento')
+      .populate('proveedorId', 'razonSocial');
+
+    res.json(ordenActualizada);
+  } catch (error: any) {
+    await session.abortTransaction();
+    console.error('Error al enviar orden a proveedor:', error);
+    res.status(500).json({ 
+      mensaje: 'Error al enviar orden a proveedor', 
       error: error.message 
     });
   } finally {

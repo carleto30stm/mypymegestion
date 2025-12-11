@@ -530,8 +530,18 @@ export const ordenesProduccionAPI = {
     return response.data;
   },
 
+  editar: async (id: string, datos: any) => {
+    const response = await api.put(`/api/ordenes-produccion/${id}`, datos);
+    return response.data;
+  },
+
   iniciar: async (id: string) => {
     const response = await api.post(`/api/ordenes-produccion/${id}/iniciar`);
+    return response.data;
+  },
+
+  enviar: async (id: string, enviadoPor: string) => {
+    const response = await api.post(`/api/ordenes-produccion/${id}/enviar`, { enviadoPor });
     return response.data;
   },
 
@@ -540,8 +550,8 @@ export const ordenesProduccionAPI = {
     return response.data;
   },
 
-  cancelar: async (id: string, motivoCancelacion: string) => {
-    const response = await api.post(`/api/ordenes-produccion/${id}/cancelar`, { motivoCancelacion });
+  cancelar: async (id: string, motivoCancelacion: string, canceladoPor: string) => {
+    const response = await api.post(`/api/ordenes-produccion/${id}/cancelar`, { motivoCancelacion, canceladoPor });
     return response.data;
   },
 

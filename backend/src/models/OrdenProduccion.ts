@@ -28,11 +28,16 @@ export interface IOrdenProduccion extends Document {
   costoManoObra: number;
   costoIndirecto: number;
   costoTotal: number;
-  estado: 'planificada' | 'en_proceso' | 'completada' | 'cancelada';
+  estado: 'planificada' | 'enviada' | 'en_proceso' | 'en_transito' | 'completada' | 'cancelada';
   prioridad: 'baja' | 'media' | 'alta' | 'urgente';
   responsable: string;
   observaciones?: string;
   motivoCancelacion?: string;
+  // Producción externa
+  esProduccionExterna?: boolean;
+  proveedorId?: mongoose.Types.ObjectId;
+  costoUnitarioManoObraExterna?: number; // Costo unitario del servicio de procesamiento externo
+  fechaEnvio?: Date; // Fecha de envío a proveedor externo
   createdBy: string;
   fechaCreacion: Date;
   fechaActualizacion: Date;
@@ -154,7 +159,7 @@ const OrdenProduccionSchema = new Schema<IOrdenProduccion>({
   estado: {
     type: String,
     enum: {
-      values: ['planificada', 'en_proceso', 'completada', 'cancelada'],
+      values: ['planificada', 'enviada', 'en_proceso', 'en_transito', 'completada', 'cancelada'],
       message: 'Estado inválido: {VALUE}'
     },
     default: 'planificada'
@@ -179,6 +184,23 @@ const OrdenProduccionSchema = new Schema<IOrdenProduccion>({
   motivoCancelacion: {
     type: String,
     trim: true
+  },
+  // Producción externa
+  esProduccionExterna: {
+    type: Boolean,
+    default: false
+  },
+  proveedorId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Proveedor'
+  },
+  costoUnitarioManoObraExterna: {
+    type: Number,
+    default: 0,
+    min: [0, 'El costo unitario de mano de obra externa no puede ser negativo']
+  },
+  fechaEnvio: {
+    type: Date
   },
   createdBy: {
     type: String,
@@ -229,7 +251,9 @@ OrdenProduccionSchema.pre('save', async function(next) {
       this.costoMateriasPrimas = 0;
     }
 
-    this.costoTotal = this.costoMateriasPrimas + this.costoManoObra + this.costoIndirecto;
+    // Incluir costo de mano de obra externa si aplica (costo unitario * cantidad)
+    const costoMOExterna = (this.costoUnitarioManoObraExterna || 0) * this.cantidadAProducir;
+    this.costoTotal = this.costoMateriasPrimas + this.costoManoObra + this.costoIndirecto + costoMOExterna;
 
     next();
   } catch (error: any) {

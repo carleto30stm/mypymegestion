@@ -39,7 +39,7 @@ import {
   Edit as EditIcon,
   Info as InfoIcon
 } from '@mui/icons-material';
-import { formatCurrency, formatDate } from '../utils/formatters';
+import { formatCurrency, formatDate, formatCurrencyDecimals } from '../utils/formatters';
 
 const HistorialVentasPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -285,10 +285,10 @@ const HistorialVentasPage: React.FC = () => {
                   />
                 </TableCell>
                 <TableCell align="right">
-                  <Typography fontWeight="bold">{formatCurrency(venta.total)}</Typography>
+                  <Typography fontWeight="bold">{formatCurrencyDecimals(venta.total, 3)}</Typography>
                   {venta.aplicaIVA && (
                     <Typography variant="caption" color="textSecondary" display="block">
-                      IVA: {formatCurrency(venta.iva || 0)}
+                      IVA: {formatCurrencyDecimals(venta.iva || 0, 3)}
                     </Typography>
                   )}
                 </TableCell>
@@ -507,11 +507,11 @@ const HistorialVentasPage: React.FC = () => {
                           <Typography variant="body2">{item.nombreProducto}</Typography>
                         </TableCell>
                         <TableCell align="center">{item.cantidad}</TableCell>
-                        <TableCell align="right">{formatCurrency(item.precioUnitario)}</TableCell>
+                        <TableCell align="right">{formatCurrencyDecimals(item.precioUnitario, 3)}</TableCell>
                         <TableCell align="center">
                           {item.porcentajeDescuento ? `${item.porcentajeDescuento}%` : '-'}
                         </TableCell>
-                        <TableCell align="right">{formatCurrency(item.subtotal)}</TableCell>
+                        <TableCell align="right">{formatCurrencyDecimals(item.subtotal, 3)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -521,17 +521,17 @@ const HistorialVentasPage: React.FC = () => {
               <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                   <Typography variant="body2">Subtotal:</Typography>
-                  <Typography variant="body2">{formatCurrency(ventaDetalle.subtotal)}</Typography>
+                  <Typography variant="body2">{formatCurrencyDecimals(ventaDetalle.subtotal, 3)}</Typography>
                 </Box>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                   <Typography variant="body2">
                     IVA {ventaDetalle.aplicaIVA ? '(21%)' : '(Exento)'}:
                   </Typography>
-                  <Typography variant="body2">{formatCurrency(ventaDetalle.iva || 0)}</Typography>
+                  <Typography variant="body2">{formatCurrencyDecimals(ventaDetalle.iva || 0, 3)}</Typography>
                 </Box>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 1, borderTop: '1px solid', borderColor: 'grey.300' }}>
                   <Typography variant="h6">TOTAL:</Typography>
-                  <Typography variant="h6" color="primary">{formatCurrency(ventaDetalle.total)}</Typography>
+                  <Typography variant="h6" color="primary">{formatCurrencyDecimals(ventaDetalle.total, 3)}</Typography>
                 </Box>
               </Box>
             </>
@@ -642,7 +642,7 @@ const HistorialVentasPage: React.FC = () => {
                             type="number"
                             value={item.precioUnitario}
                             onChange={(e) => {
-                              const nuevoPrecio = parseFloat(e.target.value) || 0;
+                              const nuevoPrecio = Math.round((parseFloat(e.target.value) || 0) * 1000) / 1000;
                               if (nuevoPrecio < 0) return;
                               const nuevosItems = [...ventaEditar.items];
                               const descuento = (item.cantidad * nuevoPrecio) * ((item.porcentajeDescuento || 0) / 100);
@@ -703,7 +703,7 @@ const HistorialVentasPage: React.FC = () => {
                         </TableCell>
                         <TableCell align="right">
                           <Typography variant="body2" fontWeight="bold">
-                            {formatCurrency(item.subtotal)}
+                            {formatCurrencyDecimals(item.subtotal, 3)}
                           </Typography>
                         </TableCell>
                       </TableRow>
@@ -716,13 +716,13 @@ const HistorialVentasPage: React.FC = () => {
               <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
                 <Box sx={{ textAlign: 'right' }}>
                   <Typography variant="body2">
-                    Subtotal: <strong>{formatCurrency(ventaEditar.subtotal)}</strong>
+                    Subtotal: <strong>{formatCurrencyDecimals(ventaEditar.subtotal, 3)}</strong>
                   </Typography>
                   <Typography variant="body2">
-                    IVA ({ventaEditar.aplicaIVA !== false ? '21%' : '0%'}): <strong>{formatCurrency(ventaEditar.iva)}</strong>
+                    IVA ({ventaEditar.aplicaIVA !== false ? '21%' : '0%'}): <strong>{formatCurrencyDecimals(ventaEditar.iva, 3)}</strong>
                   </Typography>
                   <Typography variant="h6" color="primary">
-                    Total: {formatCurrency(ventaEditar.total)}
+                    Total: {formatCurrencyDecimals(ventaEditar.total, 3)}
                   </Typography>
                 </Box>
               </Box>
@@ -902,7 +902,7 @@ const HistorialVentasPage: React.FC = () => {
                       mt: 1
                     }}
                   >
-                    <strong>Total:</strong> {formatCurrency(ventaConfirmar.total)}
+                    <strong>Total:</strong> {formatCurrencyDecimals(ventaConfirmar.total, 3)}
                   </Typography>
                 </Box>
               </>

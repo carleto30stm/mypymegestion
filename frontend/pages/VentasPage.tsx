@@ -46,7 +46,7 @@ import {
   Info as InfoIcon,
   ArrowBack as ArrowBackIcon
 } from '@mui/icons-material';
-import { formatCurrency, formatNumberInput, getNumericValue } from '../utils/formatters';
+import { formatCurrency, formatNumberInput, getNumericValue, formatCurrencyDecimals } from '../utils/formatters';
 
 const VentasPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -385,7 +385,7 @@ const VentasPage: React.FC = () => {
                           }}
                         />
                       </TableCell>
-                      <TableCell align="right">{formatCurrency(item.subtotal)}</TableCell>
+                      <TableCell align="right">{formatCurrencyDecimals(item.subtotal, 3)}</TableCell>
                       <TableCell align="center">
                         <IconButton size="small" color="error" onClick={() => eliminarDelCarrito(item.productoId)}>
                           <DeleteIcon fontSize="small" />
@@ -432,18 +432,18 @@ const VentasPage: React.FC = () => {
 
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
               <Typography>Subtotal:</Typography>
-              <Typography>{formatCurrency(totales.subtotal)}</Typography>
+              <Typography>{formatCurrencyDecimals(totales.subtotal, 3)}</Typography>
             </Box>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
               <Typography>
                 IVA {totales.aplicaIVA ? '(21%)' : '(0% - Exento)'}:
               </Typography>
-              <Typography>{formatCurrency(totales.iva)}</Typography>
+              <Typography>{formatCurrencyDecimals(totales.iva, 3)}</Typography>
             </Box>
             <Divider sx={{ my: 1 }} />
             <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
               <Typography variant="h6">TOTAL:</Typography>
-              <Typography variant="h6" color="primary">{formatCurrency(totales.total)}</Typography>
+              <Typography variant="h6" color="primary">{formatCurrencyDecimals(totales.total, 3)}</Typography>
             </Box>
           </Paper>
 

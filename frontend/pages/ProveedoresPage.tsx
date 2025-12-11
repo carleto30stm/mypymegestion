@@ -285,16 +285,27 @@ const ProveedoresPage: React.FC = () => {
     const deudas = proveedores
       .filter(p => p.saldoCuenta > 0)
       .map(p => {
-        // Calcular días desde última compra o fecha de creación
-        const fechaRef = p.ultimaCompra || p.fechaCreacion || new Date().toISOString();
-        const diasDeuda = Math.floor(
-          (new Date().getTime() - new Date(fechaRef).getTime()) / (1000 * 60 * 60 * 24)
+        // Calcular días desde última compra + días de pago acordados
+        const fechaCompra = p.ultimaCompra || p.fechaCreacion || new Date().toISOString();
+        const diasPago = p.diasPago || 30; // Días de pago acordados (default 30)
+        
+        // Calcular fecha de vencimiento (fecha compra + días de pago)
+        const fechaVencimiento = new Date(fechaCompra);
+        fechaVencimiento.setDate(fechaVencimiento.getDate() + diasPago);
+        
+        // Calcular días transcurridos desde el vencimiento
+        const diasDesdeVencimiento = Math.floor(
+          (new Date().getTime() - fechaVencimiento.getTime()) / (1000 * 60 * 60 * 24)
         );
+        
+        // Si es negativo, la deuda aún no venció (días restantes para vencer)
+        const diasDeuda = Math.max(0, diasDesdeVencimiento);
         
         return {
           proveedor: p,
           diasDeuda,
-          monto: p.saldoCuenta
+          monto: p.saldoCuenta,
+          fechaVencimiento: fechaVencimiento.toISOString()
         };
       });
 
@@ -490,8 +501,8 @@ const ProveedoresPage: React.FC = () => {
                   <TableCell>Tipo</TableCell>
                   <TableCell>Documento</TableCell>
                   <TableCell align="right">Deuda Total</TableCell>
-                  <TableCell>Desde</TableCell>
-                  <TableCell align="center">Días de Deuda</TableCell>
+                  <TableCell>Fecha Vencimiento</TableCell>
+                  <TableCell align="center">Días Vencidos</TableCell>
                   <TableCell>Estado</TableCell>
                   <TableCell align="right">Límite Crédito</TableCell>
                   <TableCell align="center">Acciones</TableCell>
@@ -555,12 +566,15 @@ const ProveedoresPage: React.FC = () => {
                     </TableCell>
                     <TableCell>
                       <Typography variant="body2">
-                        {new Date(deuda.proveedor.ultimaCompra || deuda.proveedor.fechaCreacion || '').toLocaleDateString()}
+                        {new Date(deuda.fechaVencimiento).toLocaleDateString()}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        (Vencimiento)
                       </Typography>
                     </TableCell>
                     <TableCell align="center">
                       <Chip
-                        label={`${deuda.diasDeuda} días`}
+                        label={deuda.diasDeuda === 0 ? 'Al día' : `${deuda.diasDeuda} días`}
                         size="small"
                         color={getColorDeuda(deuda.diasDeuda)}
                       />
