@@ -120,11 +120,19 @@ export const facturasAPI = {
     clienteId: string;
     tipoComprobante: string;
     puntoVenta: number;
+    concepto?: number;
     items: Array<{
+      codigo: string;
       descripcion: string;
       cantidad: number;
+      unidadMedida: string;
       precioUnitario: number;
+      importeBruto: number;
+      importeDescuento: number;
+      importeNeto: number;
       alicuotaIVA: number;
+      importeIVA: number;
+      importeTotal: number;
     }>;
     observaciones?: string;
   }) => {

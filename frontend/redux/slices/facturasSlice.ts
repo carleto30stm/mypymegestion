@@ -205,17 +205,26 @@ export const crearFacturaManual = createAsyncThunk(
     clienteId: string;
     tipoComprobante: string;
     puntoVenta: number;
+    concepto?: number;
     items: Array<{
+      codigo: string;
       descripcion: string;
       cantidad: number;
+      unidadMedida: string;
       precioUnitario: number;
+      importeBruto: number;
+      importeDescuento: number;
+      importeNeto: number;
       alicuotaIVA: number;
+      importeIVA: number;
+      importeTotal: number;
     }>;
     observaciones?: string;
   }, { rejectWithValue }) => {
     try {
       const response = await facturasAPI.crearManual(datos);
-      return response.data.factura;
+      // response ya es { message, factura } porque facturasAPI.crearManual devuelve response.data
+      return response.factura;
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.error || 'Error al crear factura');
     }
