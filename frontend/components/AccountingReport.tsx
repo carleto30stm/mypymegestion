@@ -3,6 +3,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { AppDispatch, RootState } from '../redux/store';
 import { fetchGastos } from '../redux/slices/gastosSlice';
 import { fetchVentas } from '../redux/slices/ventasSlice';
+import { fetchRecibos } from '../redux/slices/recibosSlice';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -35,7 +36,7 @@ import {
   GetApp as ExportIcon,
   Assessment as ReportIcon
 } from '@mui/icons-material';
-import { Gasto, Venta } from '../types';
+import { Gasto, Venta, ReciboPago } from '../types';
 
 // Interfaces para el reporte contable
 interface AccountingCategory {
@@ -83,7 +84,8 @@ const AccountingReport: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { items: gastos, status, error } = useSelector((state: RootState) => state.gastos);
   const { items: ventas, status: ventasStatus } = useSelector((state: RootState) => state.ventas);
-  const loading = status === 'loading' || ventasStatus === 'loading';
+  const { items: recibos, loading: recibosLoading } = useSelector((state: RootState) => state.recibos);
+  const loading = status === 'loading' || ventasStatus === 'loading' || recibosLoading;
   const [reportPeriod, setReportPeriod] = useState<'month' | 'quarter' | 'year'>('month');
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
@@ -96,6 +98,7 @@ const AccountingReport: React.FC = () => {
     // Reporte Contable necesita todos los períodos para análisis histórico
     dispatch(fetchGastos({ todosPeriodos: true }));
     dispatch(fetchVentas());
+    dispatch(fetchRecibos());
   }, [dispatch]);
 
   useEffect(() => {
@@ -103,7 +106,7 @@ const AccountingReport: React.FC = () => {
     if (gastos.length > 0) {
       generateReport();
     }
-  }, [gastos, ventas, reportPeriod, selectedMonth, selectedYear]);
+  }, [gastos, ventas, recibos, reportPeriod, selectedMonth, selectedYear]);
 
   const generateReport = () => {
     const filteredGastos = filterGastosByPeriod();
@@ -172,6 +175,39 @@ const AccountingReport: React.FC = () => {
     });
   };
 
+  const filterRecibosByPeriod = (): ReciboPago[] => {
+    // Si no hay recibos, retornar array vacío
+    if (!recibos || recibos.length === 0) {
+      return [];
+    }
+    
+    return recibos.filter(recibo => {
+      // Solo recibos activos
+      if (recibo.estadoRecibo !== 'activo') return false;
+      
+      const reciboDate = new Date(recibo.fecha);
+      const currentDate = new Date();
+
+      switch (reportPeriod) {
+        case 'month':
+          const [year, month] = selectedMonth.split('-').map(Number);
+          return reciboDate.getFullYear() === year && reciboDate.getMonth() + 1 === month;
+        
+        case 'quarter':
+          const selectedYearNum = parseInt(selectedYear);
+          const currentQuarter = Math.floor(currentDate.getMonth() / 3) + 1;
+          const reciboQuarter = Math.floor(reciboDate.getMonth() / 3) + 1;
+          return reciboDate.getFullYear() === selectedYearNum && reciboQuarter === currentQuarter;
+        
+        case 'year':
+          return reciboDate.getFullYear() === parseInt(selectedYear);
+        
+        default:
+          return true;
+      }
+    });
+  };
+
   const calculateAccountingSummary = (filteredGastos: Gasto[]): AccountingSummary => {
     // ===== PASO 1: CALCULAR VENTAS NETAS (DISCRIMINANDO IVA) =====
     
@@ -203,10 +239,14 @@ const AccountingReport: React.FC = () => {
     // Total ventas netas (sin IVA incluido)
     const ventasNetas = ventasNetasConIVA + ventasNetasSinIVA + ventasLegacy;
     
-    // Devoluciones: obtener de gastos con subRubro DEVOLUCION (son NEGATIVAS)
+    // Devoluciones: obtener de gastos con subRubro DEVOLUCION (son SALIDAS que reducen ventas)
+    // CORRECCIÓN CONTABLE: Las devoluciones deben ser tipoOperacion='salida' con salida negativa
     const devolucionesGastos = filteredGastos
-      .filter(g => g.tipoOperacion === 'entrada' && g.subRubro === 'DEVOLUCION')
-      .reduce((sum, g) => sum + (g.entrada || 0), 0);
+      .filter(g => g.subRubro === 'DEVOLUCION')
+      .reduce((sum, g) => {
+        // Si por error están como 'entrada', restarlas; si están bien como 'salida', también restarlas
+        return sum + (g.tipoOperacion === 'entrada' ? (g.entrada || 0) : (g.salida || 0));
+      }, 0);
     
     const ventasNetasFinales = ventasNetas - devolucionesGastos;
 
@@ -241,20 +281,43 @@ const AccountingReport: React.FC = () => {
     let totalEgresos = 0;
     let flujoCobros = 0;
 
+    // ===== CORRECCIÓN #1 y #4: CALCULAR FLUJO DE COBROS SIN DUPLICAR =====
+    // Fuente 1: Ventas confirmadas con medioPago físico (excluir vacíos que son a crédito)
+    const cobrosVentasConfirmadas = ventasConfirmadas
+      .filter(v => v.medioPago !== '')
+      .reduce((sum, v) => sum + v.total, 0);
+    flujoCobros += cobrosVentasConfirmadas;
+
+    // Fuente 2: ReciboPago (cobros posteriores de ventas a crédito)
+    const recibosPeriodo = filterRecibosByPeriod();
+    const cobrosRecibos = recibosPeriodo
+      .filter(r => r.estadoRecibo === 'activo')
+      .reduce((sum, r) => sum + r.totales.totalCobrado, 0);
+    flujoCobros += cobrosRecibos;
+
+    // Fuente 3: Gastos tipo entrada que NO son ventas legacy (evitar duplicar)
+    // Solo contar entradas que NO están relacionadas con ventas ya contabilizadas
+    const cobrosSueltos = filteredGastos
+      .filter(g => 
+        g.tipoOperacion === 'entrada' && 
+        g.rubro !== 'COBRO.VENTA' // Excluir ventas legacy para evitar duplicar con ventas confirmadas
+      )
+      .reduce((sum, g) => sum + (g.entrada || 0), 0);
+    flujoCobros += cobrosSueltos;
+
     // Procesar cada gasto
     filteredGastos.forEach(gasto => {
       const amount = gasto.tipoOperacion === 'entrada' ? (gasto.entrada || 0) : (gasto.salida || 0);
       
       if (gasto.tipoOperacion === 'entrada') {
-        // SEPARAR: Ingresos operacionales vs Ventas legacy vs Flujo de cobranzas
+        // SEPARAR: Ingresos operacionales vs Ventas legacy (NO tocar, es para pagos en negro)
         if (gasto.rubro === 'COBRO.VENTA' && ['FLETE', 'COMISION', 'AJUSTE'].includes(gasto.subRubro)) {
           // Ingresos operacionales (accesorios de ventas)
           totalIngresosOperacionales += amount;
           addToConceptMap(conceptMaps.ingresosOperacionales, getOperationalIncomeCategory(gasto), amount, gasto.rubro);
         } else if (gasto.rubro === 'COBRO.VENTA' && (gasto.subRubro === 'COBRO' || gasto.subRubro === 'ADEUDADO')) {
-          // COBRO/ADEUDADO en COBRO.VENTA → Son ventas legacy (ya contadas arriba)
-          // NO contar en flujo de cobros para evitar duplicación
-          // (Ya están incluidas en ventasLegacy)
+          // VENTAS LEGACY: No tocar, se usa para registrar pagos en negro
+          // Ya están contadas en ventasNetas, NO duplicar en flujoCobros
         } else if (gasto.rubro === 'BANCO' && (gasto.subRubro === 'AJUSTE DE BANCO' || gasto.subRubro === 'AJUSTE CAJA' || gasto.subRubro === 'AJUSTE')) {
           // Ajustes bancarios/caja son ingresos operacionales
           totalIngresosOperacionales += amount;
@@ -332,20 +395,29 @@ const AccountingReport: React.FC = () => {
       return sum + item.amount;
     }, 0);
 
-    // ===== CALCULOS FINALES (USANDO VENTAS SIN IVA) =====
+    // ===== CALCULOS FINALES (USANDO VENTAS SIN IVA) - CORRECCIONES CONTABLES =====
     // IMPORTANTE: Todos los cálculos deben usar ventasNetasFinales (sin IVA incluido)
-    const totalIngresos = ventasNetasFinales + totalIngresosOperacionales;
     const costoVentas = totalGastosVariables; // Simplificación: gastos variables = costo de ventas
     const utilidadBruta = ventasNetasFinales - costoVentas;
-    const gastosOperacionalesCombinados = totalGastosFijos + totalGastosPersonal + totalGastosAdministrativos + totalGastosOperacionales;
-    const EBITDA = utilidadBruta - gastosOperacionalesCombinados;
-    const resultadoNeto = EBITDA - totalGastosFinancieros + totalIngresosOperacionales;
     
-    // Métricas financieras (calculadas sobre ventas NETAS sin IVA)
+    // CORRECCIÓN #2: Otros ingresos operacionales van ANTES del EBITDA (no después)
+    const ingresosBrutosOperacionales = utilidadBruta + totalIngresosOperacionales;
+    const gastosOperacionalesCombinados = totalGastosFijos + totalGastosPersonal + totalGastosAdministrativos + totalGastosOperacionales;
+    const EBITDA = ingresosBrutosOperacionales - gastosOperacionalesCombinados;
+    const resultadoNeto = EBITDA - totalGastosFinancieros;
+    
+    const totalIngresos = ventasNetasFinales + totalIngresosOperacionales;
+    
+    // CORRECCIÓN #6: Métricas financieras TODAS sobre la misma base (ventasNetasFinales)
     const margenBruto = ventasNetasFinales > 0 ? (utilidadBruta / ventasNetasFinales) * 100 : 0;
     const margenOperacional = ventasNetasFinales > 0 ? (EBITDA / ventasNetasFinales) * 100 : 0;
-    const margenNeto = totalIngresos > 0 ? (resultadoNeto / totalIngresos) * 100 : 0;
-    const puntoEquilibrio = totalGastosFijos + totalGastosPersonal;
+    const margenNeto = ventasNetasFinales > 0 ? (resultadoNeto / ventasNetasFinales) * 100 : 0;
+    
+    // CORRECCIÓN #5: Punto de Equilibrio con fórmula correcta (Gastos Fijos / Margen de Contribución)
+    const margenContribucion = ventasNetasFinales > 0 ? ((ventasNetasFinales - costoVentas) / ventasNetasFinales) : 0;
+    const puntoEquilibrio = margenContribucion > 0 
+      ? (totalGastosFijos + totalGastosPersonal + totalGastosAdministrativos + totalGastosOperacionales) / margenContribucion
+      : totalGastosFijos + totalGastosPersonal + totalGastosAdministrativos + totalGastosOperacionales;
 
     return {
       period: getPeriodDescription(),
@@ -894,6 +966,7 @@ const AccountingReport: React.FC = () => {
       ['Costo de Ventas', reportData.gastosVariables.total],
       [],
       ['UTILIDAD BRUTA', reportData.ventasNetas.total - reportData.gastosVariables.total],
+      ['(+) Otros Ingresos Operacionales', reportData.ingresosOperacionales.total],
       ['Margen Bruto (%)', reportData.margenBruto.toFixed(2)],
       [],
       ['C. GASTOS OPERACIONALES'],
@@ -902,7 +975,7 @@ const AccountingReport: React.FC = () => {
       ['Gastos Operacionales', reportData.gastosOperacionales.total],
       ['Gastos Administrativos', reportData.gastosAdministrativos.total],
       [],
-      ['EBITDA', reportData.ventasNetas.total - reportData.gastosVariables.total - reportData.gastosPersonal.total - reportData.gastosFijos.total - reportData.gastosOperacionales.total - reportData.gastosAdministrativos.total],
+      ['EBITDA', reportData.ventasNetas.total - reportData.gastosVariables.total + reportData.ingresosOperacionales.total - reportData.gastosPersonal.total - reportData.gastosFijos.total - reportData.gastosOperacionales.total - reportData.gastosAdministrativos.total],
       ['Margen Operacional (%)', reportData.margenOperacional.toFixed(2)],
       [],
       ['D. GASTOS FINANCIEROS'],
@@ -1103,6 +1176,13 @@ const AccountingReport: React.FC = () => {
         <>
           {/* Resumen Ejecutivo */}
           <Paper sx={{ p: 3, mb: 3 }}>
+            <Alert severity="info" sx={{ mb: 2 }}>
+              <Typography variant="body2">
+                <strong>📊 Reporte Contable Profesional</strong> - Este reporte aplica principios contables correctos: 
+                discrimina IVA, calcula EBITDA incluyendo otros ingresos operacionales, 
+                punto de equilibrio con margen de contribución, y flujo de caja sin duplicaciones.
+              </Typography>
+            </Alert>
             <Typography variant="h5" gutterBottom>
               Resumen Ejecutivo - {reportData.period}
             </Typography>
@@ -1258,6 +1338,21 @@ const AccountingReport: React.FC = () => {
             </Typography>
           </Paper>
 
+          {/* OTROS INGRESOS OPERACIONALES */}
+          {reportData.ingresosOperacionales.total > 0 && (
+            <Paper sx={{ p: 2, mb: 3, bgcolor: 'success.light' }}>
+              <Box display="flex" justifyContent="space-between" alignItems="center">
+                <Typography variant="h6">(+) Otros Ingresos Operacionales</Typography>
+                <Typography variant="h5" fontWeight="bold" color="success.dark">
+                  {formatCurrency(reportData.ingresosOperacionales.total)}
+                </Typography>
+              </Box>
+              <Typography variant="caption" color="textSecondary">
+                Fletes, comisiones y otros ingresos accesorios
+              </Typography>
+            </Paper>
+          )}
+
           {/* GASTOS OPERACIONALES */}
           <Typography variant="h6" sx={{ mt: 3, mb: 2, color: 'warning.main' }}>
             C. GASTOS OPERACIONALES
@@ -1273,7 +1368,8 @@ const AccountingReport: React.FC = () => {
               <Typography variant="h5" fontWeight="bold">
                 {formatCurrency(
                   reportData.ventasNetas.total - 
-                  reportData.gastosVariables.total - 
+                  reportData.gastosVariables.total +
+                  reportData.ingresosOperacionales.total -
                   reportData.gastosPersonal.total -
                   reportData.gastosFijos.total -
                   reportData.gastosOperacionales.total -
@@ -1345,9 +1441,10 @@ const AccountingReport: React.FC = () => {
                   🚨 Ventas por debajo del punto de equilibrio
                 </Typography>
                 <Typography variant="body2">
-                  Las ventas ({formatCurrency(reportData.ventasNetas.total)}) no cubren los costos fijos + personal ({formatCurrency(reportData.puntoEquilibrio)}). 
+                  Las ventas ({formatCurrency(reportData.ventasNetas.total)}) no alcanzan el punto de equilibrio ({formatCurrency(reportData.puntoEquilibrio)}). 
                   Déficit: {formatCurrency(reportData.puntoEquilibrio - reportData.ventasNetas.total)}. 
-                  Acción urgente: aumentar ventas o reducir costos fijos.
+                  El punto de equilibrio se calcula como: Gastos Fijos ÷ Margen de Contribución. 
+                  Acción urgente: aumentar ventas, mejorar margen o reducir costos fijos.
                 </Typography>
               </Alert>
             )}
