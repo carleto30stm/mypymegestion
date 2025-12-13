@@ -1,0 +1,97 @@
+name: CI - Build & Deploy (Main Only)
+
+on:
+  push:
+    branches:
+      - main
+      - ventas
+  pull_request:
+    branches:
+      - main
+      - ventas
+
+jobs:
+  backend:
+    name: Backend - Build & Typecheck
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Cache backend dependencies
+        uses: actions/cache@v4
+        with:
+          path: backend/node_modules
+          key: backend-node-${{ hashFiles('backend/package.json') }}
+          restore-keys: |
+            backend-node-
+
+      - name: Install backend dependencies
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+      - name: Build backend
+        run: npm run build
+
+  frontend:
+    name: Frontend - Build & Typecheck
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Cache frontend dependencies
+        uses: actions/cache@v4
+        with:
+          path: frontend/node_modules
+          key: frontend-node-${{ hashFiles('frontend/package.json') }}
+          restore-keys: |
+            frontend-node-
+
+      - name: Install frontend dependencies
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+      - name: Build frontend
+        run: npm run build
+
+  deploy:
+    name: Deploy to Railway (Production)
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy Backend (Production)
+        run: railway up --service backend_prod --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Deploy Frontend (Production)
+        run: railway up --service frontend_prod --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
