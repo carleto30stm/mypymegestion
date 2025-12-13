@@ -86,7 +86,7 @@ const AccountingReport: React.FC = () => {
   const { items: ventas, status: ventasStatus } = useSelector((state: RootState) => state.ventas);
   const { items: recibos, loading: recibosLoading } = useSelector((state: RootState) => state.recibos);
   const loading = status === 'loading' || ventasStatus === 'loading' || recibosLoading;
-  const [reportPeriod, setReportPeriod] = useState<'month' | 'quarter' | 'year'>('month');
+  const [reportPeriod, setReportPeriod] = useState<'month' | 'quarter' | 'year' | 'total'>('month');
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -135,6 +135,9 @@ const AccountingReport: React.FC = () => {
         case 'year':
           return gastoDate.getFullYear() === parseInt(selectedYear);
         
+        case 'total':
+          return true; // Todos los gastos
+        
         default:
           return true;
       }
@@ -169,6 +172,9 @@ const AccountingReport: React.FC = () => {
         case 'year':
           return ventaDate.getFullYear() === parseInt(selectedYear);
         
+        case 'total':
+          return true; // Todas las ventas
+        
         default:
           return true;
       }
@@ -202,6 +208,9 @@ const AccountingReport: React.FC = () => {
         case 'year':
           return reciboDate.getFullYear() === parseInt(selectedYear);
         
+        case 'total':
+          return true; // Todos los recibos
+        
         default:
           return true;
       }
@@ -228,13 +237,13 @@ const AccountingReport: React.FC = () => {
     
     // 1B. Ventas legacy: registradas manualmente como gastos COBRO.VENTA (antes del módulo de ventas)
     // IMPORTANTE: Estas ventas legacy se asumen SIN desglose de IVA (sistema antiguo)
-    const ventasLegacy = filteredGastos
-      .filter(g => 
-        g.tipoOperacion === 'entrada' && 
-        g.rubro === 'COBRO.VENTA' && 
-        (g.subRubro === 'COBRO' || g.subRubro === 'ADEUDADO')
-      )
-      .reduce((sum, g) => sum + (g.entrada || 0), 0);
+    const gastosVentasLegacy = filteredGastos.filter(g => 
+      g.tipoOperacion === 'entrada' && 
+      g.rubro === 'COBRO.VENTA' && 
+      (g.subRubro === 'COBRO' || g.subRubro === 'ADEUDADO')
+    );
+    const ventasLegacy = gastosVentasLegacy.reduce((sum, g) => sum + (g.entrada || 0), 0);
+    const cantidadVentasLegacy = gastosVentasLegacy.length;
     
     // Total ventas netas (sin IVA incluido)
     const ventasNetas = ventasNetasConIVA + ventasNetasSinIVA + ventasLegacy;
@@ -264,17 +273,18 @@ const AccountingReport: React.FC = () => {
 
     // Agregar ventas discriminadas por tipo a conceptMaps
     if (ventasNetasConIVA > 0) {
-      addToConceptMap(conceptMaps.ventasNetas, `Ventas con IVA (${ventasConIVA.length} ops)`, ventasNetasConIVA, 'VENTAS');
-      addToConceptMap(conceptMaps.ventasNetas, '  → IVA Débito Fiscal', totalIVADebito, 'IVA_DEBITO');
+      addToConceptMap(conceptMaps.ventasNetas, `Ventas con IVA (${ventasConIVA.length} ops)`, ventasNetasConIVA, 'VENTAS', ventasConIVA.length);
+      addToConceptMap(conceptMaps.ventasNetas, '  → IVA Débito Fiscal', totalIVADebito, 'IVA_DEBITO', ventasConIVA.length);
     }
     if (ventasNetasSinIVA > 0) {
-      addToConceptMap(conceptMaps.ventasNetas, `Ventas sin IVA (${ventasSinIVA.length} ops)`, ventasNetasSinIVA, 'VENTAS_EXENTAS');
+      addToConceptMap(conceptMaps.ventasNetas, `Ventas sin IVA (${ventasSinIVA.length} ops)`, ventasNetasSinIVA, 'VENTAS_EXENTAS', ventasSinIVA.length);
     }
     if (ventasLegacy > 0) {
-      addToConceptMap(conceptMaps.ventasNetas, 'Ventas (Registros Manuales Legacy)', ventasLegacy, 'COBRO.VENTA');
+      addToConceptMap(conceptMaps.ventasNetas, `Ventas Legacy (${cantidadVentasLegacy} ops)`, ventasLegacy, 'COBRO.VENTA', cantidadVentasLegacy);
     }
     if (devolucionesGastos > 0) {
-      addToConceptMap(conceptMaps.ventasNetas, 'Devoluciones', -devolucionesGastos, 'COBRO.VENTA');
+      const cantidadDevoluciones = filteredGastos.filter(g => g.subRubro === 'DEVOLUCION').length;
+      addToConceptMap(conceptMaps.ventasNetas, 'Devoluciones', -devolucionesGastos, 'COBRO.VENTA', cantidadDevoluciones);
     }
 
     let totalIngresosOperacionales = 0;
@@ -282,14 +292,23 @@ const AccountingReport: React.FC = () => {
     let flujoCobros = 0;
 
     // ===== CORRECCIÓN #1 y #4: CALCULAR FLUJO DE COBROS SIN DUPLICAR =====
-    // Fuente 1: Ventas confirmadas con medioPago físico (excluir vacíos que son a crédito)
-    const cobrosVentasConfirmadas = ventasConfirmadas
-      .filter(v => v.medioPago !== '')
-      .reduce((sum, v) => sum + v.total, 0);
-    flujoCobros += cobrosVentasConfirmadas;
-
-    // Fuente 2: ReciboPago (cobros posteriores de ventas a crédito)
+    // Obtener ReciboPago primero para identificar ventas ya cobradas
     const recibosPeriodo = filterRecibosByPeriod();
+    const ventasConReciboIds = new Set<string>();
+    recibosPeriodo.forEach(r => {
+      if (r.ventasRelacionadas && Array.isArray(r.ventasRelacionadas)) {
+        r.ventasRelacionadas.forEach(vr => ventasConReciboIds.add(vr.ventaId));
+      }
+    });
+
+    // Fuente 1: Ventas confirmadas con medioPago físico QUE NO TENGAN ReciboPago
+    // (para evitar contar dos veces la misma venta)
+    const cobrosVentasSinRecibo = ventasConfirmadas
+      .filter(v => v.medioPago !== '' && v._id && !ventasConReciboIds.has(v._id))
+      .reduce((sum, v) => sum + v.total, 0);
+    flujoCobros += cobrosVentasSinRecibo;
+
+    // Fuente 2: ReciboPago (incluye cobros de ventas a crédito Y ventas con medio de pago que generaron recibo)
     const cobrosRecibos = recibosPeriodo
       .filter(r => r.estadoRecibo === 'activo')
       .reduce((sum, r) => sum + r.totales.totalCobrado, 0);
@@ -496,15 +515,16 @@ const AccountingReport: React.FC = () => {
     map: Map<string, { amount: number; count: number; rubros: Set<string> }>,
     concept: string,
     amount: number,
-    rubro: string
+    rubro: string,
+    customCount?: number // Cantidad personalizada de operaciones
   ) => {
     if (map.has(concept)) {
       const existing = map.get(concept)!;
       existing.amount += amount;
-      existing.count += 1;
+      existing.count += customCount !== undefined ? customCount : 1;
       existing.rubros.add(rubro);
     } else {
-      map.set(concept, { amount, count: 1, rubros: new Set([rubro]) });
+      map.set(concept, { amount, count: customCount !== undefined ? customCount : 1, rubros: new Set([rubro]) });
     }
   };
 
@@ -693,6 +713,8 @@ const AccountingReport: React.FC = () => {
         return `Q${currentQuarter} ${selectedYear}`;
       case 'year':
         return selectedYear;
+      case 'total':
+        return 'Histórico Total';
       default:
         return '';
     }
@@ -1113,12 +1135,13 @@ const AccountingReport: React.FC = () => {
               <InputLabel>Período</InputLabel>
               <Select
                 value={reportPeriod}
-                onChange={(e) => setReportPeriod(e.target.value as 'month' | 'quarter' | 'year')}
+                onChange={(e) => setReportPeriod(e.target.value as 'month' | 'quarter' | 'year' | 'total')}
                 label='Período'
               >
                 <MenuItem value="month">Mensual</MenuItem>
                 <MenuItem value="quarter">Trimestral</MenuItem>
                 <MenuItem value="year">Anual</MenuItem>
+                <MenuItem value="total">Total (Histórico)</MenuItem>
               </Select>
             </FormControl>
           </Grid>

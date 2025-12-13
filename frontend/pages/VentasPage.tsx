@@ -334,7 +334,8 @@ const VentasPage: React.FC = () => {
                         <Typography variant="body2">{item.nombreProducto}</Typography>
                         <Typography variant="caption" color="textSecondary">{item.codigoProducto}</Typography>
                       </TableCell>
-                      <TableCell align="right">
+                      <TableCell align="right">{formatCurrency(item.precioUnitario)}</TableCell>
+                      {/* <TableCell align="right">
                         <TextField
                             size="small"
                             value={formatNumberInput(String(item.precioUnitario).replace('.', ','))}
@@ -363,7 +364,7 @@ const VentasPage: React.FC = () => {
                           }}
                           type="text"
                         />
-                      </TableCell>
+                      </TableCell> */}
                       <TableCell align="center">{item.cantidad}</TableCell>
                       <TableCell align="right">
                         <TextField
