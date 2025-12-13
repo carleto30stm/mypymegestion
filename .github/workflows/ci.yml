@@ -73,7 +73,7 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-  deploy:
+    deploy:
     name: Deploy to Railway (Production)
     runs-on: ubuntu-latest
     needs: [backend, frontend]
@@ -91,7 +91,7 @@ jobs:
         run: npm install -g @railway/cli
 
       - name: Deploy Backend (Production)
-        run: railway up --project $RAILWAY_PROJECT_ID --service backend_prod --detach
+        run: railway up --service backend_prod --detach
 
       - name: Deploy Frontend (Production)
-        run: railway up --project $RAILWAY_PROJECT_ID --service frontend_prod --detach
+        run: railway up --service frontend_prod --detach
