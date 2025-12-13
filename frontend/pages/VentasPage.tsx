@@ -335,36 +335,6 @@ const VentasPage: React.FC = () => {
                         <Typography variant="caption" color="textSecondary">{item.codigoProducto}</Typography>
                       </TableCell>
                       <TableCell align="right">{formatCurrency(item.precioUnitario)}</TableCell>
-                      {/* <TableCell align="right">
-                        <TextField
-                            size="small"
-                            value={formatNumberInput(String(item.precioUnitario).replace('.', ','))}
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              const formatted = formatNumberInput(raw);
-                              const precio = getNumericValue(formatted);
-                              if (!isNaN(precio) && precio >= 0) {
-                                setCarrito(carrito.map(i =>
-                                  i.productoId === item.productoId
-                                    ? {
-                                        ...i,
-                                        precioUnitario: precio,
-                                        subtotal: (precio * i.cantidad) * (1 - ((i.porcentajeDescuento || 0) / 100)),
-                                        total: (precio * i.cantidad) * (1 - ((i.porcentajeDescuento || 0) / 100)),
-                                        descuento: (precio * i.cantidad) * ((i.porcentajeDescuento || 0) / 100)
-                                      }
-                                    : i
-                                ));
-                              }
-                            }}
-                          variant="outlined"
-                          sx={{ width: '100px' }}
-                          inputProps={{
-                            style: { textAlign: 'right', fontSize: '0.875rem' }
-                          }}
-                          type="text"
-                        />
-                      </TableCell> */}
                       <TableCell align="center">{item.cantidad}</TableCell>
                       <TableCell align="right">
                         <TextField
