@@ -1,4 +1,4 @@
-name: CI - Build & Deploy (Main Only)
+name: CI - Build & Typecheck
 
 on:
   push:
@@ -20,24 +20,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 18
-
-      - uses: actions/cache@v4
-        with:
-          path: backend/node_modules
-          key: backend-node-${{ hashFiles('backend/package.json') }}
-          restore-keys: |
-            backend-node-
-
-      - name: Install backend dependencies
-        run: |
-          if [ -f package-lock.json ]; then npm ci; else npm install; fi
-
-      - name: Build backend
-        run: npm run build
+      - run: npm ci
+      - run: npm run build
 
   frontend:
     name: Frontend - Build & Typecheck
@@ -48,45 +35,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 18
-
-      - uses: actions/cache@v4
-        with:
-          path: frontend/node_modules
-          key: frontend-node-${{ hashFiles('frontend/package.json') }}
-          restore-keys: |
-            frontend-node-
-
-      - name: Install frontend dependencies
-        run: |
-          if [ -f package-lock.json ]; then npm ci; else npm install; fi
-
-      - name: Build frontend
-        run: npm run build
-
-  deploy:
-    name: Deploy to Railway (Production)
-    runs-on: ubuntu-latest
-    needs:
-      - backend
-      - frontend
-    if: github.ref == 'refs/heads/main'
-
-    env:
-      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-      RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
-      - name: Deploy Backend (Production)
-        run: railway up --service backend_prod --detach
-
-      - name: Deploy Frontend (Production)
-        run: railway up --service frontend_prod --detach
+      - run: npm ci
+      - run: npm run build
