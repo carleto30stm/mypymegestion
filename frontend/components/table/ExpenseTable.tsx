@@ -27,6 +27,8 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RestoreIcon from '@mui/icons-material/Restore';
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
+import LockIcon from '@mui/icons-material/Lock';
+import InfoIcon from '@mui/icons-material/Info';
 import ExpenseForm from '../form/ExpenseForm';
 import { formatDate, formatCurrencyWithSymbol } from '../../utils/formatters';
 import { useAuthDebug } from '../../hooks/useAuthDebug';
@@ -66,6 +68,9 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
   const [reactivateConfirmOpen, setReactivateConfirmOpen] = useState(false);
   const [gastoToReactivate, setGastoToReactivate] = useState<Gasto | null>(null);
   const [comentarioReactivacion, setComentarioReactivacion] = useState('');
+  // Estado para modal de gasto bloqueado
+  const [blockedDialogOpen, setBlockedDialogOpen] = useState(false);
+  const [blockedGasto, setBlockedGasto] = useState<Gasto | null>(null);
   
   // Estados de filtros locales
   const [searchText, setSearchText] = useState('');
@@ -105,6 +110,12 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
   
 
   const handleEditClick = (gasto: Gasto) => {
+    // Verificar si el gasto está vinculado a un recibo (bloqueado)
+    if (gasto.reciboRelacionadoId) {
+      setBlockedGasto(gasto);
+      setBlockedDialogOpen(true);
+      return;
+    }
     setGastoToEdit(gasto);
     setIsModalOpen(true);
   };
@@ -235,6 +246,18 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
             color="error" 
             size="small" 
             variant="filled"
+          />;
+        }
+        
+        // Mostrar indicador de bloqueo si está vinculado a un recibo
+        if (gasto.reciboRelacionadoId) {
+          return <Chip 
+            icon={<LockIcon />} 
+            label="BLOQUEADO" 
+            color="warning" 
+            size="small" 
+            variant="filled"
+            title="Este gasto está vinculado a un recibo y no puede editarse directamente"
           />;
         }
         
@@ -796,6 +819,59 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
               autoFocus
             >
               Reactivar registro
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Modal informativo para gastos bloqueados (vinculados a recibos) */}
+        <Dialog
+          open={blockedDialogOpen}
+          onClose={() => { setBlockedDialogOpen(false); setBlockedGasto(null); }}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <LockIcon color="warning" />
+            Gasto Bloqueado
+          </DialogTitle>
+          <DialogContent>
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'flex-start', 
+              gap: 2, 
+              p: 2, 
+              backgroundColor: 'warning.light', 
+              borderRadius: 1,
+              mb: 2
+            }}>
+              <InfoIcon color="warning" />
+              <Typography>
+                Este gasto está vinculado a un <strong>recibo de pago confirmado</strong> y no puede editarse directamente.
+              </Typography>
+            </Box>
+            
+            {blockedGasto && (
+              <Box sx={{ p: 2, backgroundColor: 'grey.100', borderRadius: 1, mb: 2 }}>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  <strong>Detalle:</strong> {blockedGasto.detalleGastos}
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  <strong>Monto:</strong> {formatCurrencyWithSymbol(blockedGasto.entrada || blockedGasto.salida || 0)}
+                </Typography>
+              </Box>
+            )}
+            
+            <Typography variant="body2" color="text.secondary">
+              Para corregir el monto de este cobro, use la opción <strong>"Corregir Monto"</strong> desde la página de <strong>Cobranzas</strong>.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button 
+              onClick={() => { setBlockedDialogOpen(false); setBlockedGasto(null); }} 
+              color="primary"
+              variant="contained"
+            >
+              Entendido
             </Button>
           </DialogActions>
         </Dialog>

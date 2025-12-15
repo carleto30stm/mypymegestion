@@ -9,10 +9,10 @@ import Gasto from '../models/Gasto.js';
 export const getGastos = async (req: ExpressRequest, res: ExpressResponse) => {
     try {
         const { desde, hasta, limite } = req.query;
-        
+
         // Construir query de filtrado
         let query: any = {};
-        
+
         // Si hay rango de fechas, filtrar
         if (desde || hasta) {
             query.fecha = {};
@@ -30,16 +30,16 @@ export const getGastos = async (req: ExpressRequest, res: ExpressResponse) => {
             }
         }
         // Si no hay filtros de fecha, traer TODOS los registros (para filtro "Total")
-        
+
         // Aplicar límite si se especifica (por defecto sin límite para mantener compatibilidad)
         let queryBuilder = Gasto.find(query).sort({ fecha: -1 });
-        
+
         if (limite) {
             queryBuilder = queryBuilder.limit(Number(limite));
         }
-        
+
         const gastos = await queryBuilder;
-        
+
         // Opcional: incluir metadata para debugging
         const metadata = {
             count: gastos.length,
@@ -49,7 +49,7 @@ export const getGastos = async (req: ExpressRequest, res: ExpressResponse) => {
                 limite: limite || 'sin límite'
             }
         };
-        
+
         res.json(gastos);
     } catch (error) {
         res.status(500).json({ message: 'Error en el servidor' });
@@ -70,7 +70,7 @@ export const createGasto = async (req: ExpressRequest, res: ExpressResponse) => 
             fecha: fechaParsed,
             creadoPor: req.user?.username // Guardar username en lugar de id
         };
-        
+
         const nuevoGasto = new Gasto(datosGasto);
         const gastoGuardado = await nuevoGasto.save();
         res.status(201).json(gastoGuardado);
@@ -87,12 +87,21 @@ export const updateGasto = async (req: ExpressRequest, res: ExpressResponse) => 
     try {
         const gasto = await Gasto.findById(req.params.id);
 
-        if (gasto) {
-            const gastoActualizado = await Gasto.findByIdAndUpdate(req.params.id, req.body, { new: true });
-            res.json(gastoActualizado);
-        } else {
-            res.status(404).json({ message: 'Gasto no encontrado' });
+        if (!gasto) {
+            return res.status(404).json({ message: 'Gasto no encontrado' });
         }
+
+        // Bloquear edición de gastos vinculados a recibos
+        if (gasto.reciboRelacionadoId) {
+            return res.status(403).json({
+                message: 'Este gasto está vinculado a un recibo de pago. Use "Corregir Monto" desde la página de Cobranzas.',
+                reciboId: gasto.reciboRelacionadoId,
+                bloqueado: true
+            });
+        }
+
+        const gastoActualizado = await Gasto.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.json(gastoActualizado);
     } catch (error) {
         res.status(500).json({ message: 'Error en el servidor' });
     }
@@ -113,61 +122,61 @@ export const deleteGasto = async (req: ExpressRequest, res: ExpressResponse) => 
         // Si es un adelanto, revertir el monto en la liquidación
         if (gasto.concepto === 'adelanto') {
             const { default: LiquidacionPeriodo } = await import('../models/LiquidacionPeriodo.js');
-            
+
             // Buscar el periodo que contiene este gasto en gastosRelacionados
             const periodo = await LiquidacionPeriodo.findOne({
                 'liquidaciones.gastosRelacionados': gasto._id
             });
-            
+
             if (periodo) {
                 // Verificar que el periodo no esté cerrado
                 if (periodo.estado === 'cerrado') {
-                    return res.status(400).json({ 
-                        message: 'No se puede eliminar un adelanto de un período cerrado' 
+                    return res.status(400).json({
+                        message: 'No se puede eliminar un adelanto de un período cerrado'
                     });
                 }
-                
+
                 // Encontrar la liquidación específica que contiene este gasto
                 const liquidacion = periodo.liquidaciones.find((liq: any) =>
-                    liq.gastosRelacionados.some((id: any) => 
+                    liq.gastosRelacionados.some((id: any) =>
                         id.toString() === gasto._id.toString()
                     )
                 );
-                
+
                 if (liquidacion) {
                     // Revertir el adelanto
                     liquidacion.adelantos -= gasto.salida;
-                    
+
                     // Remover el gasto de gastosRelacionados
                     liquidacion.gastosRelacionados = liquidacion.gastosRelacionados.filter(
                         (id: any) => id.toString() !== gasto._id.toString()
                     );
-                    
+
                     // Recalcular totalAPagar
-                    liquidacion.totalAPagar = 
+                    liquidacion.totalAPagar =
                         liquidacion.sueldoBase +
                         liquidacion.totalHorasExtra +
                         liquidacion.aguinaldos +
                         liquidacion.bonus -
                         liquidacion.adelantos -
                         liquidacion.descuentos;
-                    
+
                     // Guardar el periodo actualizado
                     await periodo.save();
-                    
+
                     console.log(`✅ Adelanto revertido: $${gasto.salida} restado de ${liquidacion.empleadoApellido}, ${liquidacion.empleadoNombre}`);
                 }
             }
         }
-        
+
         // Eliminar el gasto
         await Gasto.findByIdAndDelete(req.params.id);
-        
-        res.json({ 
+
+        res.json({
             message: 'Gasto eliminado correctamente',
             adelantoRevertido: gasto.concepto === 'adelanto'
         });
-        
+
     } catch (error) {
         console.error('Error al eliminar gasto:', error);
         res.status(500).json({ message: 'Error en el servidor' });
