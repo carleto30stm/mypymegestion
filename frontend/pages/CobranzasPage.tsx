@@ -42,7 +42,8 @@ import {
   MonetizationOn as MoneyIcon,
   AccountBalance as AccountBalanceIcon,
   LocalShipping as LocalShippingIcon,
-  Warning as WarningIcon
+  Warning as WarningIcon,
+  Edit as EditIcon
 } from '@mui/icons-material';
 import { AppDispatch, RootState } from '../redux/store';
 import { fetchVentas } from '../redux/slices/ventasSlice';
@@ -59,9 +60,9 @@ import { generarRemitoDesdeVenta } from '../redux/slices/remitosSlice';
 import FormaPagoModal from '../components/FormaPagoModal';
 import CuentaCorrienteDetalle from '../components/CuentaCorrienteDetalle';
 import InteresesPunitoriosPage from './InteresesPunitoriosPage';
-import { formatCurrency, formatDate } from '../utils/formatters';
+import { formatCurrency, formatDate, formatNumberInput, getNumericValue } from '../utils/formatters';
 import { generarPDFRecibo, generarPDFRemito } from '../utils/pdfGenerator';
-import { Venta, Cliente, ReciboPago, FormaPago, ESTADOS_RECIBO, Remito } from '../types';
+import { Venta, Cliente, ReciboPago, FormaPago, ESTADOS_RECIBO, Remito, MOTIVOS_CORRECCION, MOTIVOS_CORRECCION_LABELS } from '../types';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -142,6 +143,19 @@ const CobranzasPage: React.FC = () => {
     observaciones: ''
   });
   const [generandoRemito, setGenerandoRemito] = useState(false);
+
+  // Estados para corrección de monto
+  const [modalCorreccionOpen, setModalCorreccionOpen] = useState(false);
+  const [reciboACorregir, setReciboACorregir] = useState<ReciboPago | null>(null);
+  const [datosCorreccion, setDatosCorreccion] = useState({
+    montoOriginal: 0,
+    montoCorrecto: 0,
+    motivo: '' as typeof MOTIVOS_CORRECCION[number] | '',
+    observaciones: '',
+    banco: 'EFECTIVO' as string
+  });
+  const [montoCorrectoFormatted, setMontoCorrectoFormatted] = useState('');
+  const [corrigiendoMonto, setCorrigiendoMonto] = useState(false);
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -431,6 +445,66 @@ const CobranzasPage: React.FC = () => {
       alert(err.message || 'Error al generar remito');
     } finally {
       setGenerandoRemito(false);
+    }
+  };
+
+  // Handler para abrir modal de corrección de monto
+  const handleAbrirModalCorreccion = (recibo: ReciboPago) => {
+    setReciboACorregir(recibo);
+    const montoInicial = recibo.totales.totalCobrado;
+    setDatosCorreccion({
+      montoOriginal: montoInicial,
+      montoCorrecto: montoInicial,
+      motivo: '',
+      observaciones: '',
+      banco: 'EFECTIVO'
+    });
+    // Inicializar el valor formateado 
+    setMontoCorrectoFormatted(formatCurrency(montoInicial));
+    setModalCorreccionOpen(true);
+  };
+
+  // Handler para confirmar corrección de monto
+  const handleConfirmarCorreccion = async () => {
+    if (!reciboACorregir || !datosCorreccion.motivo) return;
+
+    setCorrigiendoMonto(true);
+    try {
+      const response = await fetch(`/api/recibos/${reciboACorregir._id}/corregir-monto`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          montoOriginal: datosCorreccion.montoOriginal,
+          montoCorrecto: datosCorreccion.montoCorrecto,
+          motivo: datosCorreccion.motivo,
+          observaciones: datosCorreccion.observaciones,
+          banco: datosCorreccion.banco
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Error al corregir monto');
+      }
+
+      const result = await response.json();
+      alert(`✅ ${result.message}`);
+
+      // Recargar datos
+      dispatch(fetchRecibos());
+      dispatch(fetchEstadisticasCobranza());
+      dispatch(fetchVentas());
+
+      setModalCorreccionOpen(false);
+      setReciboACorregir(null);
+    } catch (err: any) {
+      console.error('Error al corregir monto:', err);
+      alert(err.message || 'Error al corregir monto');
+    } finally {
+      setCorrigiendoMonto(false);
     }
   };
 
@@ -841,6 +915,16 @@ const CobranzasPage: React.FC = () => {
                         <IconButton size="small" onClick={() => handleImprimirRecibo(recibo)} title="Imprimir" >
                           <PrintIcon />
                         </IconButton>
+                        {recibo.estadoRecibo === 'activo' && (user?.userType === 'admin' || user?.userType === 'oper_ad') && (
+                          <IconButton
+                            size="small"
+                            color="primary"
+                            onClick={() => handleAbrirModalCorreccion(recibo)}
+                            title="Corregir Monto"
+                          >
+                            <EditIcon />
+                          </IconButton>
+                        )}
                         {recibo.estadoRecibo === 'activo' && canEdit && user?.userType === 'admin' && (
                           <IconButton
                             size="small"
@@ -1454,6 +1538,126 @@ const CobranzasPage: React.FC = () => {
             disabled={!datosRemito.direccionEntrega || generandoRemito}
           >
             {generandoRemito ? 'Generando...' : 'Generar Remito'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog de Corrección de Monto */}
+      <Dialog open={modalCorreccionOpen} onClose={() => setModalCorreccionOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Corregir Monto del Recibo</DialogTitle>
+        <DialogContent>
+          {reciboACorregir && (
+            <>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                <Typography variant="body2">
+                  <strong>Recibo:</strong> {reciboACorregir.numeroRecibo} | 
+                  <strong> Cliente:</strong> {reciboACorregir.nombreCliente}
+                </Typography>
+              </Alert>
+
+              <Grid container spacing={2}>
+                <Grid item xs={6}>
+                  <TextField
+                    fullWidth
+                    label="Monto Original"
+                    type="text"
+                    value={formatCurrency(datosCorreccion.montoOriginal)}
+                    disabled
+                    InputProps={{
+                      startAdornment: <Typography sx={{ mr: 1 }}>$</Typography>
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={6}>
+                  <TextField
+                    fullWidth
+                    label="Monto Correcto"
+                    type="text"
+                    value={montoCorrectoFormatted}
+                    onChange={(e) => {
+                      const formatted = formatNumberInput(e.target.value);
+                      setMontoCorrectoFormatted(formatted);
+                      const numericValue = getNumericValue(formatted);
+                      setDatosCorreccion(prev => ({
+                        ...prev,
+                        montoCorrecto: numericValue
+                      }));
+                    }}
+                    placeholder="Ej: 350.000,00"
+                    helperText="Formato: 1.000,50 (coma para decimales)"
+                    InputProps={{
+                      startAdornment: <Typography sx={{ mr: 1 }}>$</Typography>
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <FormControl fullWidth>
+                    <InputLabel>Motivo de Corrección *</InputLabel>
+                    <Select
+                      value={datosCorreccion.motivo}
+                      label="Motivo de Corrección *"
+                      onChange={(e) => setDatosCorreccion({
+                        ...datosCorreccion,
+                        motivo: e.target.value as typeof MOTIVOS_CORRECCION[number]
+                      })}
+                    >
+                      {MOTIVOS_CORRECCION.map((motivo) => (
+                        <MenuItem key={motivo} value={motivo}>
+                          {MOTIVOS_CORRECCION_LABELS[motivo]}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={2}
+                    label="Observaciones"
+                    value={datosCorreccion.observaciones}
+                    onChange={(e) => setDatosCorreccion({
+                      ...datosCorreccion,
+                      observaciones: e.target.value
+                    })}
+                    placeholder="Detalles adicionales..."
+                  />
+                </Grid>
+              </Grid>
+
+              {/* Preview de la operación */}
+              {datosCorreccion.montoCorrecto !== datosCorreccion.montoOriginal && (
+                <Alert 
+                  severity={datosCorreccion.montoCorrecto < datosCorreccion.montoOriginal ? 'warning' : 'success'}
+                  sx={{ mt: 2 }}
+                >
+                  <Typography variant="body2">
+                    <strong>Operación:</strong>{' '}
+                    {datosCorreccion.montoCorrecto < datosCorreccion.montoOriginal 
+                      ? `Devolución de $${(datosCorreccion.montoOriginal - datosCorreccion.montoCorrecto).toFixed(2)}`
+                      : `Cobro adicional de $${(datosCorreccion.montoCorrecto - datosCorreccion.montoOriginal).toFixed(2)}`
+                    }
+                  </Typography>
+                </Alert>
+              )}
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setModalCorreccionOpen(false)} disabled={corrigiendoMonto}>
+            Cancelar
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleConfirmarCorreccion}
+            disabled={
+              !datosCorreccion.motivo || 
+              datosCorreccion.montoCorrecto === datosCorreccion.montoOriginal ||
+              datosCorreccion.montoCorrecto <= 0 ||
+              corrigiendoMonto
+            }
+          >
+            {corrigiendoMonto ? 'Procesando...' : 'Aplicar Corrección'}
           </Button>
         </DialogActions>
       </Dialog>

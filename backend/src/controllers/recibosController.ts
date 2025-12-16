@@ -6,17 +6,18 @@ import Gasto from '../models/Gasto.js';
 import Cliente from '../models/Cliente.js';
 import MovimientoCuentaCorriente from '../models/MovimientoCuentaCorriente.js';
 import Factura from '../models/Factura.js'; // Para facturación automática (Fase 2)
+import { MOTIVOS_CORRECCION } from '../Types/Types.js';
 
 // @desc    Obtener todos los recibos con filtros
 // @route   GET /api/recibos
 // @access  Private
 export const getRecibos = async (req: ExpressRequest, res: ExpressResponse) => {
   try {
-    const { 
-      clienteId, 
-      estadoRecibo, 
+    const {
+      clienteId,
+      estadoRecibo,
       momentoCobro,
-      fechaInicio, 
+      fechaInicio,
       fechaFin,
       medioPago
     } = req.query;
@@ -161,11 +162,11 @@ export const crearRecibo = async (req: ExpressRequest, res: ExpressResponse) => 
       // Solo validar y distribuir si hay ventas específicas
       for (const venta of ventas) {
         const saldoAnterior = venta.saldoPendiente;
-        
+
         if (saldoAnterior <= 0) {
           await session.abortTransaction();
-          return res.status(400).json({ 
-            message: `La venta ${venta.numeroVenta} no tiene saldo pendiente` 
+          return res.status(400).json({
+            message: `La venta ${venta.numeroVenta} no tiene saldo pendiente`
           });
         }
 
@@ -183,26 +184,26 @@ export const crearRecibo = async (req: ExpressRequest, res: ExpressResponse) => 
 
       // Distribuir el pago entre las ventas
       let montoPendienteDistribuir = totalFormasPago;
-      
+
       for (let i = 0; i < ventasRelacionadas.length; i++) {
         const ventaRel = ventasRelacionadas[i];
         const venta = ventas[i];
-        
+
         if (!ventaRel || !venta) continue;
         if (montoPendienteDistribuir <= 0) break;
-        
+
         const montoCobrado = Math.min(ventaRel.saldoAnterior, montoPendienteDistribuir);
         ventaRel.montoCobrado = montoCobrado;
         ventaRel.saldoRestante = ventaRel.saldoAnterior - montoCobrado;
-        
+
         montoPendienteDistribuir -= montoCobrado;
-      
+
         // Actualizar venta
         // Evitar sobrepago accidental: cap al total de la venta
         const nuevoMontoCobrado = Math.min(venta.montoCobrado + montoCobrado, venta.total);
         venta.montoCobrado = nuevoMontoCobrado;
         venta.saldoPendiente = ventaRel.saldoRestante;
-        
+
         // Actualizar estado de cobranza y estadoGranular
         if (venta.saldoPendiente === 0) {
           venta.estadoCobranza = 'cobrado';
@@ -213,7 +214,7 @@ export const crearRecibo = async (req: ExpressRequest, res: ExpressResponse) => 
         } else if (venta.montoCobrado > 0) {
           venta.estadoCobranza = 'parcialmente_cobrado';
         }
-        
+
         await venta.save({ session });
       }
     }
@@ -227,7 +228,7 @@ export const crearRecibo = async (req: ExpressRequest, res: ExpressResponse) => 
 
     const nombreCliente = cliente.razonSocial || `${cliente.apellido || ''} ${cliente.nombre}`.trim();
     const documentoCliente = cliente.numeroDocumento;
-    
+
     // Calcular totales correctos para el recibo
     // totalACobrar: para regularizaciones = totalFormasPago, para cobros de ventas = suma de montoCobrado en ventasRelacionadas
     const totalCobradoEnVentas = ventasRelacionadas.reduce((sum, vr) => sum + (vr.montoCobrado || 0), 0);
@@ -307,7 +308,7 @@ export const crearRecibo = async (req: ExpressRequest, res: ExpressResponse) => 
 
       // Determinar el banco/caja según el medio de pago
       let bancoDestino = 'EFECTIVO'; // Por defecto efectivo
-      
+
       if (formaPago.medioPago === 'TRANSFERENCIA' || formaPago.medioPago === 'CHEQUE') {
         // Si tiene banco especificado, usar ese banco
         bancoDestino = formaPago.banco || 'PROVINCIA';
@@ -332,6 +333,7 @@ export const crearRecibo = async (req: ExpressRequest, res: ExpressResponse) => 
       }
 
       // Crear un Gasto de tipo entrada (ingreso) en la tabla de gastos
+      // Vincular con el recibo para bloquear edición directa
       await Gasto.create([{
         fecha: new Date(),
         rubro: 'COBRO.VENTA',
@@ -346,7 +348,8 @@ export const crearRecibo = async (req: ExpressRequest, res: ExpressResponse) => 
         confirmado: true,
         entrada: formaPago.monto,
         salida: 0,
-        banco: bancoDestino
+        banco: bancoDestino,
+        reciboRelacionadoId: reciboGuardado._id // Vincular con recibo para bloquear edición
       }], { session })
     }
 
@@ -367,10 +370,10 @@ export const crearRecibo = async (req: ExpressRequest, res: ExpressResponse) => 
     // Intentar generar facturas automáticamente para ventas sin facturar
     if (cliente.facturacionAutomatica && cliente.requiereFacturaAFIP && !esRegularizacion) {
       const ventasSinFacturar = ventas.filter(v => !v.facturada && !v.facturaId);
-      
+
       if (ventasSinFacturar.length > 0) {
         console.log(`[Facturación Automática] Cliente ${nombreCliente} tiene ${ventasSinFacturar.length} ventas sin facturar`);
-        
+
         for (const venta of ventasSinFacturar) {
           try {
             // Crear factura en borrador automáticamente
@@ -388,7 +391,7 @@ export const crearRecibo = async (req: ExpressRequest, res: ExpressResponse) => 
             });
 
             const facturaGuardada = await facturaAutomatica.save({ session });
-            
+
             // Asociar factura a la venta
             venta.facturaId = facturaGuardada._id as mongoose.Types.ObjectId;
             venta.facturada = true; // Marcar como facturada (aunque esté en borrador)
@@ -416,9 +419,9 @@ export const crearRecibo = async (req: ExpressRequest, res: ExpressResponse) => 
   } catch (error: any) {
     await session.abortTransaction();
     console.error('Error al crear recibo:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Error al crear recibo',
-      error: error.message 
+      error: error.message
     });
   } finally {
     session.endSession();
@@ -455,19 +458,19 @@ export const anularRecibo = async (req: ExpressRequest, res: ExpressResponse) =>
     // Revertir los pagos en las ventas relacionadas
     for (const ventaRel of recibo.ventasRelacionadas) {
       const venta = await Venta.findById(ventaRel.ventaId).session(session);
-      
+
       if (venta) {
         // Revertir monto cobrado
         venta.montoCobrado -= ventaRel.montoCobrado;
         venta.saldoPendiente += ventaRel.montoCobrado;
-        
+
         // Actualizar estado de cobranza
         if (venta.montoCobrado === 0) {
           venta.estadoCobranza = 'sin_cobrar';
         } else if (venta.saldoPendiente > 0) {
           venta.estadoCobranza = 'parcialmente_cobrado';
         }
-        
+
         // Remover referencia al recibo
         if (venta.recibosRelacionados) {
           const reciboIdStr = (recibo._id as mongoose.Types.ObjectId).toString();
@@ -475,7 +478,7 @@ export const anularRecibo = async (req: ExpressRequest, res: ExpressResponse) =>
             (r: any) => r.toString() !== reciboIdStr
           );
         }
-        
+
         await venta.save({ session });
       }
     }
@@ -498,9 +501,9 @@ export const anularRecibo = async (req: ExpressRequest, res: ExpressResponse) =>
   } catch (error: any) {
     await session.abortTransaction();
     console.error('Error al anular recibo:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       message: 'Error al anular recibo',
-      error: error.message 
+      error: error.message
     });
   } finally {
     session.endSession();
@@ -544,12 +547,12 @@ export const getEstadisticasCobranza = async (req: ExpressRequest, res: ExpressR
 
     // Ventas pendientes de cobro
     const ventasPendientes = await Venta.aggregate([
-      { 
-        $match: { 
+      {
+        $match: {
           estado: 'confirmada',
           estadoCobranza: { $in: ['sin_cobrar', 'parcialmente_cobrado'] },
           saldoPendiente: { $gt: 0 }
-        } 
+        }
       },
       {
         $group: {
@@ -564,11 +567,11 @@ export const getEstadisticasCobranza = async (req: ExpressRequest, res: ExpressR
     const chequesPendientes = await ReciboPago.aggregate([
       { $match: { estadoRecibo: 'activo' } },
       { $unwind: '$formasPago' },
-      { 
-        $match: { 
+      {
+        $match: {
           'formasPago.medioPago': 'CHEQUE',
           'formasPago.datosCheque.estadoCheque': { $in: ['pendiente', 'en_cartera'] }
-        } 
+        }
       },
       {
         $group: {
@@ -605,7 +608,7 @@ export const getRecibosPorCliente = async (req: ExpressRequest, res: ExpressResp
   try {
     const { clienteId } = req.params;
 
-    const recibos = await ReciboPago.find({ 
+    const recibos = await ReciboPago.find({
       clienteId,
       estadoRecibo: 'activo'
     })
@@ -617,5 +620,157 @@ export const getRecibosPorCliente = async (req: ExpressRequest, res: ExpressResp
   } catch (error) {
     console.error('Error al obtener recibos por cliente:', error);
     res.status(500).json({ message: 'Error al obtener recibos del cliente' });
+  }
+};
+
+// @desc    Corregir monto de un recibo (sin AFIP - solo registro interno)
+// @route   PATCH /api/recibos/:id/corregir-monto
+// @access  Private (admin/oper_ad)
+export const corregirMonto = async (req: ExpressRequest, res: ExpressResponse) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { id } = req.params;
+    const {
+      montoOriginal,
+      montoCorrecto,
+      motivo,
+      observaciones,
+      banco
+    } = req.body;
+
+    const username = req.user?.username;
+    const userType = req.user?.userType;
+
+    // Validar permisos
+    if (userType !== 'admin' && userType !== 'oper_ad') {
+      await session.abortTransaction();
+      return res.status(403).json({ message: 'No tiene permisos para corregir montos' });
+    }
+
+    // Validaciones básicas
+    if (typeof montoOriginal !== 'number' || typeof montoCorrecto !== 'number') {
+      await session.abortTransaction();
+      return res.status(400).json({ message: 'Monto original y monto correcto son obligatorios' });
+    }
+
+    if (montoCorrecto <= 0) {
+      await session.abortTransaction();
+      return res.status(400).json({ message: 'El monto correcto debe ser mayor a cero' });
+    }
+
+    if (montoOriginal === montoCorrecto) {
+      await session.abortTransaction();
+      return res.status(400).json({ message: 'No hay diferencia para corregir' });
+    }
+
+    if (!motivo) {
+      await session.abortTransaction();
+      return res.status(400).json({ message: 'El motivo es obligatorio' });
+    }
+
+    // Validar motivo
+    if (!MOTIVOS_CORRECCION.includes(motivo)) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        message: `Motivo inválido. Motivos válidos: ${MOTIVOS_CORRECCION.join(', ')}`
+      });
+    }
+
+    // Obtener recibo
+    const recibo = await ReciboPago.findById(id).session(session);
+    if (!recibo) {
+      await session.abortTransaction();
+      return res.status(404).json({ message: 'Recibo no encontrado' });
+    }
+
+    if (recibo.estadoRecibo === 'anulado') {
+      await session.abortTransaction();
+      return res.status(400).json({ message: 'No se puede corregir un recibo anulado' });
+    }
+
+    // Obtener cliente
+    const cliente = await Cliente.findById(recibo.clienteId).session(session);
+    if (!cliente) {
+      await session.abortTransaction();
+      return res.status(404).json({ message: 'Cliente no encontrado' });
+    }
+
+    const nombreCliente = cliente.razonSocial || `${cliente.apellido || ''} ${cliente.nombre}`.trim();
+    const diferencia = montoCorrecto - montoOriginal;
+    const esDevolucion = diferencia < 0;
+    const montoAjuste = Math.abs(diferencia);
+    const bancoDestino = banco || 'EFECTIVO';
+
+    // Crear gasto compensatorio
+    const gastoCorreccion = await Gasto.create([{
+      fecha: new Date(),
+      rubro: esDevolucion ? 'DEVOLUCION' : 'COBRO.VENTA',
+      subRubro: esDevolucion ? 'DEVOLUCION A CLIENTE' : 'AJUSTE',
+      medioDePago: 'EFECTIVO',
+      clientes: nombreCliente,
+      detalleGastos: `Corrección - Recibo ${recibo.numeroRecibo || id} - ${esDevolucion ? 'Devolución' : 'Cobro'} $${montoAjuste.toFixed(2)} - ${motivo}`,
+      tipoOperacion: esDevolucion ? 'salida' : 'entrada',
+      comentario: `${observaciones || ''} (Corrección: $${montoOriginal} → $${montoCorrecto})`,
+      estado: 'activo',
+      confirmado: true,
+      entrada: esDevolucion ? 0 : montoAjuste,
+      salida: esDevolucion ? montoAjuste : 0,
+      banco: bancoDestino,
+      creadoPor: username
+    }], { session });
+
+    // Actualizar cuenta corriente
+    const ultimoMov = await MovimientoCuentaCorriente.findOne({
+      clienteId: recibo.clienteId,
+      anulado: false
+    }).sort({ fecha: -1, createdAt: -1 }).session(session);
+
+    const saldoAnterior = ultimoMov?.saldo || 0;
+    const nuevoSaldo = saldoAnterior + (esDevolucion ? montoAjuste : -montoAjuste);
+
+    await MovimientoCuentaCorriente.create([{
+      clienteId: recibo.clienteId,
+      fecha: new Date(),
+      tipo: esDevolucion ? 'nota_credito' : 'ajuste_descuento',
+      documentoTipo: 'CORRECCION',
+      documentoNumero: `CORR-${recibo.numeroRecibo || id}`,
+      documentoId: gastoCorreccion[0]?._id,
+      concepto: `Corrección monto - Recibo ${recibo.numeroRecibo || 'PENDIENTE'} - ${motivo}`,
+      debe: esDevolucion ? montoAjuste : 0,
+      haber: esDevolucion ? 0 : montoAjuste,
+      saldo: nuevoSaldo,
+      creadoPor: username,
+      anulado: false
+    }], { session });
+
+    await Cliente.findByIdAndUpdate(
+      recibo.clienteId,
+      { saldoCuenta: nuevoSaldo },
+      { session }
+    );
+
+    await session.commitTransaction();
+
+    res.json({
+      message: `Corrección aplicada. ${esDevolucion ? 'Devolución' : 'Cobro adicional'} de $${montoAjuste.toFixed(2)}`,
+      correccion: {
+        reciboId: recibo._id,
+        numeroRecibo: recibo.numeroRecibo,
+        montoOriginal,
+        montoCorrecto,
+        diferencia,
+        tipo: esDevolucion ? 'devolucion' : 'cobro_adicional',
+        gastoId: gastoCorreccion[0]?._id,
+        nuevoSaldoCliente: nuevoSaldo
+      }
+    });
+  } catch (error: any) {
+    await session.abortTransaction();
+    console.error('Error al corregir monto:', error);
+    res.status(500).json({ message: 'Error al corregir monto', error: error.message });
+  } finally {
+    session.endSession();
   }
 };

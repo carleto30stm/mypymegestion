@@ -5,7 +5,8 @@ import {
   crearRecibo,
   anularRecibo,
   getEstadisticasCobranza,
-  getRecibosPorCliente
+  getRecibosPorCliente,
+  corregirMonto
 } from '../controllers/recibosController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
@@ -43,5 +44,10 @@ router.post('/', crearRecibo);
 // @desc    Anular recibo de pago
 // @access  Private (admin only - se valida en el controlador)
 router.patch('/:id/anular', anularRecibo);
+
+// @route   PATCH /api/recibos/:id/corregir-monto
+// @desc    Corregir monto de un recibo (crea gasto compensatorio)
+// @access  Private (admin/oper_ad - se valida en el controlador)
+router.patch('/:id/corregir-monto', protect, corregirMonto);
 
 export default router;

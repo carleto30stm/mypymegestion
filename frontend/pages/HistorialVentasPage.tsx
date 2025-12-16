@@ -40,6 +40,7 @@ import {
   Info as InfoIcon
 } from '@mui/icons-material';
 import { formatCurrency, formatDate, formatCurrencyDecimals } from '../utils/formatters';
+import ConfirmDialog from '../components/modal/ConfirmDialog';
 
 const HistorialVentasPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -607,10 +608,12 @@ const HistorialVentasPage: React.FC = () => {
                         <TableCell align="center">
                           <TextField
                             size="small"
-                            type="number"
-                            value={item.cantidad}
+                            type="text"
+                            value={String(item.cantidad)}
                             onChange={(e) => {
-                              const nuevaCantidad = parseInt(e.target.value) || 0;
+                              // Permitir edición fácil: solo dígitos
+                              const raw = e.target.value.replace(/\D/g, '');
+                              const nuevaCantidad = raw === '' ? 0 : parseInt(raw, 10);
                               if (nuevaCantidad < 0) return;
                               const nuevosItems = [...ventaEditar.items];
                               const descuento = (nuevaCantidad * item.precioUnitario) * ((item.porcentajeDescuento || 0) / 100);
@@ -632,49 +635,32 @@ const HistorialVentasPage: React.FC = () => {
                                 total: nuevoSubtotal + nuevoIVA
                               });
                             }}
-                            inputProps={{ min: 0, style: { textAlign: 'center' } }}
+                            inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', style: { textAlign: 'center' } }}
                             sx={{ width: 80 }}
                           />
                         </TableCell>
                         <TableCell align="right">
                           <TextField
                             size="small"
-                            type="number"
-                            value={item.precioUnitario}
-                            onChange={(e) => {
-                              const nuevoPrecio = Math.round((parseFloat(e.target.value) || 0) * 1000) / 1000;
-                              if (nuevoPrecio < 0) return;
-                              const nuevosItems = [...ventaEditar.items];
-                              const descuento = (item.cantidad * nuevoPrecio) * ((item.porcentajeDescuento || 0) / 100);
-                              nuevosItems[index] = {
-                                ...item,
-                                precioUnitario: nuevoPrecio,
-                                subtotal: (item.cantidad * nuevoPrecio) - descuento,
-                                total: (item.cantidad * nuevoPrecio) - descuento,
-                                descuento
-                              };
-                              // Recalcular totales
-                              const nuevoSubtotal = nuevosItems.reduce((sum, i) => sum + i.subtotal, 0);
-                              const nuevoIVA = ventaEditar.aplicaIVA !== false ? nuevoSubtotal * 0.21 : 0;
-                              setVentaEditar({
-                                ...ventaEditar,
-                                items: nuevosItems,
-                                subtotal: nuevoSubtotal,
-                                iva: nuevoIVA,
-                                total: nuevoSubtotal + nuevoIVA
-                              });
-                            }}
-                            inputProps={{ min: 0, step: 0.001, style: { textAlign: 'right' } }}
+                            value={formatCurrencyDecimals(item.precioUnitario, 3)}
+                            disabled
+                            inputProps={{ style: { textAlign: 'right' } }}
                             sx={{ width: 100 }}
                           />
                         </TableCell>
                         <TableCell align="center">
                           <TextField
                             size="small"
-                            type="number"
-                            value={item.porcentajeDescuento || 0}
+                            type="text"
+                            value={String(item.porcentajeDescuento ?? '')}
                             onChange={(e) => {
-                              const nuevoPorcentaje = parseFloat(e.target.value) || 0;
+                              // Permitir coma o punto como separador decimal y solo dígitos
+                              let raw = e.target.value.replace(/[^0-9,\.]/g, '');
+                              raw = raw.replace(',', '.');
+                              // Mantener solo un punto
+                              const parts = raw.split('.');
+                              if (parts.length > 2) raw = parts[0] + '.' + parts.slice(1).join('');
+                              const nuevoPorcentaje = raw === '' ? 0 : parseFloat(raw);
                               if (nuevoPorcentaje < 0 || nuevoPorcentaje > 100) return;
                               const nuevosItems = [...ventaEditar.items];
                               const descuento = (item.cantidad * item.precioUnitario) * (nuevoPorcentaje / 100);
@@ -696,7 +682,7 @@ const HistorialVentasPage: React.FC = () => {
                                 total: nuevoSubtotal + nuevoIVA
                               });
                             }}
-                            inputProps={{ min: 0, max: 100, step: 0.5, style: { textAlign: 'center' } }}
+                            inputProps={{ inputMode: 'decimal', style: { textAlign: 'center' }, placeholder: '0' }}
                             sx={{ width: 80 }}
                             InputProps={{ endAdornment: <Typography variant="caption">%</Typography> }}
                           />
@@ -818,128 +804,26 @@ const HistorialVentasPage: React.FC = () => {
       </Dialog>
 
       {/* Dialog Confirmar Venta */}
-      <Dialog
+      {/* Reemplazado por ConfirmDialog reutilizable */}
+      <ConfirmDialog
         open={openConfirmar}
         onClose={() => setOpenConfirmar(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <CheckCircleIcon color="success" />
-          Confirmar Venta
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" gutterBottom sx={{ mb: 2 }}>
-            ¿Estás seguro de que deseas confirmar la venta <strong>{ventaConfirmar?.numeroVenta}</strong>?
-          </Typography>
-          <Typography variant="caption" color="textSecondary" gutterBottom>
-            Esta acción confirmará la venta, actualizará el stock de productos y afectará el saldo del cliente.
-          </Typography>
-
-          {ventaConfirmar && (() => {
-            const validacion = puedeConfirmar(ventaConfirmar);
-            return (
-              <>
-                {/* Alerta de validación si NO puede confirmar */}
-                {!validacion.puede && (
-                  <Box sx={{ mt: 2, mb: 2 }}>
-                    <Typography 
-                      variant="body2" 
-                      sx={{ 
-                        bgcolor: 'error.light', 
-                        color: 'error.contrastText',
-                        p: 2, 
-                        borderRadius: 1,
-                        border: '1px solid',
-                        borderColor: 'error.main'
-                      }}
-                    >
-                      ⚠️ <strong>No se puede confirmar:</strong> {validacion.razon}
-                    </Typography>
-                  </Box>
-                )}
-
-                {/* Detalle de la venta */}
-                <Box sx={{
-                  bgcolor: 'background.default',
-                  p: 2,
-                  borderRadius: 1,
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  mt: 2
-                }}>
-                  <Typography variant="body2" gutterBottom>
-                    <strong>Cliente:</strong> {ventaConfirmar.nombreCliente}
-                  </Typography>
-                  <Typography variant="body2" gutterBottom>
-                    <strong>Fecha:</strong> {formatDate(ventaConfirmar.fecha)}
-                  </Typography>
-                  <Typography variant="body2" gutterBottom>
-                    <strong>Items:</strong> {ventaConfirmar.items.length}
-                  </Typography>
-                  <Typography variant="body2" gutterBottom>
-                    <strong>Medio de Pago:</strong> {ventaConfirmar.medioPago}
-                  </Typography>
-                  {ventaConfirmar.momentoCobro && (
-                    <Typography variant="body2" gutterBottom>
-                      <strong>Momento de Cobro:</strong> {
-                        ventaConfirmar.momentoCobro === 'anticipado' ? '📥 Anticipado' :
-                        ventaConfirmar.momentoCobro === 'contra_entrega' ? '🚚 Contra Entrega' :
-                        '💳 Diferido (A crédito)'
-                      }
-                    </Typography>
-                  )}
-                  <Typography variant="body2" gutterBottom>
-                    <strong>Estado Cobro:</strong> {ventaConfirmar.estadoCobranza || 'pendiente'}
-                  </Typography>
-                  <Typography variant="body2" gutterBottom>
-                    <strong>Estado Entrega:</strong> {ventaConfirmar.estadoEntrega || 'pendiente'}
-                  </Typography>
-                  <Typography
-                    variant="h6"
-                    sx={{
-                      color: 'success.main',
-                      mt: 1
-                    }}
-                  >
-                    <strong>Total:</strong> {formatCurrencyDecimals(ventaConfirmar.total, 3)}
-                  </Typography>
-                </Box>
-              </>
-            );
-          })()}
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button
-            onClick={() => setOpenConfirmar(false)}
-            variant="outlined"
-            color="inherit"
-          >
-            Cancelar
-          </Button>
-          <Button
-            onClick={handleConfirmConfirmar}
-            variant="contained"
-            color="success"
-            startIcon={<CheckCircleIcon />}
-            disabled={
-              confirmandoVenta === ventaConfirmar?._id || 
-              !ventaConfirmar ||
-              !puedeConfirmar(ventaConfirmar).puede
-            }
-            autoFocus
-          >
-            {confirmandoVenta === ventaConfirmar?._id ? (
-              <>
-                <CircularProgress size={20} sx={{ mr: 1 }} />
-                Confirmando...
-              </>
-            ) : (
-              'Confirmar Venta'
-            )}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        onConfirm={handleConfirmConfirmar}
+        title={`Confirmar Venta ${ventaConfirmar?.numeroVenta || ''}`}
+        message={ventaConfirmar ? (
+          `Cliente: ${ventaConfirmar.nombreCliente}\n` +
+          `Fecha: ${formatDate(ventaConfirmar.fecha)}\n` +
+          `Items: ${ventaConfirmar.items.length}\n` +
+          `Medio de Pago: ${ventaConfirmar.medioPago || '-'}\n` +
+          (ventaConfirmar.momentoCobro ? `Momento de Cobro: ${ventaConfirmar.momentoCobro}` : '') +
+          `\nEstado Cobro: ${ventaConfirmar.estadoCobranza || 'pendiente'}\nEstado Entrega: ${ventaConfirmar.estadoEntrega || 'pendiente'}\n\nTotal: ${formatCurrencyDecimals(ventaConfirmar.total, 3)}`
+        ) : 'Confirmar esta venta'}
+        confirmText={confirmandoVenta === ventaConfirmar?._id ? 'Confirmando...' : 'Confirmar Venta'}
+        confirmColor="success"
+        severity={puedeConfirmar(ventaConfirmar || ({} as Venta)).puede ? 'question' : 'warning'}
+        showAlert={true}
+        confirmDisabled={confirmandoVenta === ventaConfirmar?._id || !ventaConfirmar || !puedeConfirmar(ventaConfirmar || ({} as Venta)).puede}
+      />
     </Box>
   );
 };

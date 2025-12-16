@@ -57,6 +57,23 @@ export const MOMENTO_COBRO = ['anticipado', 'contra_entrega', 'diferido'] as con
 // Estados de recibo de pago
 export const ESTADOS_RECIBO = ['activo', 'anulado'] as const;
 
+// Motivos de corrección de monto (para errores en cobros)
+export const MOTIVOS_CORRECCION = [
+  'ERROR_TIPEO',
+  'DESCUENTO_NO_APLICADO',
+  'RECARGO_NO_APLICADO',
+  'ERROR_CALCULO',
+  'OTRO'
+] as const;
+
+export const MOTIVOS_CORRECCION_LABELS: Record<typeof MOTIVOS_CORRECCION[number], string> = {
+  ERROR_TIPEO: 'Error de tipeo',
+  DESCUENTO_NO_APLICADO: 'Descuento no aplicado',
+  RECARGO_NO_APLICADO: 'Recargo no aplicado',
+  ERROR_CALCULO: 'Error de cálculo',
+  OTRO: 'Otro'
+};
+
 // Interface para categorías de empleados (para mano de obra en recetas)
 export interface Category {
   _id?: string;
@@ -284,7 +301,7 @@ export interface LiquidacionEmpleado {
   empleadoSindicato?: string;
   empleadoAntiguedad?: number;
   empleadoModalidad?: 'formal' | 'informal'; // formal = con aportes, informal = en mano
-  
+
   // Haberes - Conceptos remunerativos
   sueldoBase: number;
   horasExtra: HoraExtraResumen[];
@@ -297,32 +314,32 @@ export interface LiquidacionEmpleado {
   bonus: number;
   incentivos: number;
   totalRemunerativo: number;
-  
+
   // Conceptos no remunerativos
   viaticos: number;
   otrosNoRemunerativos: number;
   totalNoRemunerativo: number;
-  
+
   // Total bruto
   totalBruto: number;
-  
+
   // Deducciones del empleado
   adelantos: number;
   descuentos: number;
-  
+
   // Aportes del empleado (retenciones)
   aporteJubilacion: number;
   aporteObraSocial: number;
   aportePami: number;
   aporteSindicato: number;
   totalAportes: number;
-  
+
   // Total deducciones
   totalDeducciones: number;
-  
+
   // Neto a cobrar
   totalAPagar: number;
-  
+
   // Contribuciones patronales (informativo)
   contribJubilacion?: number;
   contribObraSocial?: number;
@@ -331,7 +348,7 @@ export interface LiquidacionEmpleado {
   contribSeguroVida?: number;
   totalContribuciones?: number;
   costoTotal?: number; // Costo total para la empresa
-  
+
   estado: 'pendiente' | 'pagado' | 'cancelado';
   gastosRelacionados: string[];
   reciboGenerado?: string;
@@ -401,6 +418,8 @@ export interface Gasto {
   cuentaDestino?: typeof BANCOS[number];
   montoTransferencia?: number;
   banco: typeof BANCOS[number];
+  // Campo para bloqueo de edición (vinculado a recibo)
+  reciboRelacionadoId?: string;
 }
 
 // ========== SISTEMA DE VENTAS E INVENTARIO ==========

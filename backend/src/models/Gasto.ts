@@ -4,46 +4,47 @@ import { CAJAS, MEDIO_PAGO, subRubrosByRubro } from '../Types/Types.js';
 
 const gastoSchema = new mongoose.Schema({
   fecha: { type: Date, required: true },
-  rubro: { 
-    type: String, 
-    required: function(this: any) {
+  rubro: {
+    type: String,
+    required: function (this: any) {
       return this.tipoOperacion !== 'transferencia';
     },
-    enum: 
-    ['COBRO.VENTA', 'SERVICIOS', 'PROOV.MATERIA.PRIMA', 
-     'PROOVMANO.DE.OBRA', 'BANCO', 'ARCA','GASTOS.ADMIN',
-     'GASTOS ADMINISTRATIVOS', 'MANT.MAQ','MANT.EMPRESA','SUELDOS','MOVILIDAD','DEVOLUCION','IMPUESTOS'
-    ] },
-  subRubro: { 
+    enum:
+      ['COBRO.VENTA', 'SERVICIOS', 'PROOV.MATERIA.PRIMA',
+        'PROOVMANO.DE.OBRA', 'BANCO', 'ARCA', 'GASTOS.ADMIN',
+        'GASTOS ADMINISTRATIVOS', 'MANT.MAQ', 'MANT.EMPRESA', 'SUELDOS', 'MOVILIDAD', 'DEVOLUCION', 'IMPUESTOS'
+      ]
+  },
+  subRubro: {
     type: String,
     validate: {
-      validator: function(this: any, value: string) {
+      validator: function (this: any, value: string) {
         if (!value) return true; // Optional field
-        
+
         // Para transferencias, no validar subRubro
         if (this.tipoOperacion === 'transferencia') {
           return true;
         }
-        
+
         // Para el rubro SUELDOS, permitir cualquier valor (nombres de empleados)
         if (this.rubro === 'SUELDOS') {
           return true;
         }
-        
+
         // Para otros rubros, usar la validación desde la constante importada
         const validSubRubros = subRubrosByRubro[this.rubro] || [];
         return validSubRubros.includes(value);
       },
-      message: function(this: any) {
+      message: function (this: any) {
         // Mensaje dinámico que muestra los subRubros válidos para el rubro actual
         const validSubRubros = subRubrosByRubro[this.rubro] || [];
         return `SubRubro '${this.value}' no es válido para el rubro '${this.rubro}'. Valores válidos: ${validSubRubros.join(', ')}`;
       }
     }
   },
-  medioDePago: { 
+  medioDePago: {
     type: String,
-    required: function(this: any) {
+    required: function (this: any) {
       return this.tipoOperacion !== 'transferencia';
     },
     enum: MEDIO_PAGO
@@ -56,7 +57,7 @@ const gastoSchema = new mongoose.Schema({
     enum: ['entrada', 'salida', 'transferencia'],
     default: 'salida'
   },
-  concepto: { 
+  concepto: {
     type: String,
     enum: ['sueldo', 'adelanto', 'hora_extra', 'aguinaldo', 'bonus', 'otro'],
     default: 'sueldo'
@@ -68,9 +69,9 @@ const gastoSchema = new mongoose.Schema({
     enum: ['activo', 'cancelado'],
     default: 'activo'
   },
-  confirmado: { 
+  confirmado: {
     type: Boolean,
-    default: function(this: any) {
+    default: function (this: any) {
       // Para cheques (tanto terceros como propios), default es false
       // Para otros medios de pago, default es true
       if (!this.medioDePago) return true;
@@ -88,41 +89,47 @@ const gastoSchema = new mongoose.Schema({
   estadoCheque: {
     type: String,
     enum: ['recibido', 'depositado', 'pagado_proveedor', 'endosado'],
-    default: function(this: any) {
+    default: function (this: any) {
       // Para cheques terceros, estado inicial es 'recibido'
       // Para cheques propios, no se setea estado (undefined) ya que se emiten
       return this.medioDePago === 'CHEQUE TERCERO' ? 'recibido' : undefined;
     }
   },
-  chequeRelacionadoId: { 
-    type: mongoose.Schema.Types.ObjectId, 
+  chequeRelacionadoId: {
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'Gasto',
     default: null // Se usa para vincular el movimiento de salida con la entrada original
+  },
+  // Campo para vincular con ReciboPago (bloquea edición directa)
+  reciboRelacionadoId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ReciboPago',
+    default: null // Se llena al crear gasto desde un recibo de pago
   },
   entrada: { type: Number, default: 0 },
   salida: { type: Number, default: 0 },
   // Campos específicos para transferencias
-  cuentaOrigen: { 
+  cuentaOrigen: {
     type: String,
     enum: CAJAS,
-    required: function(this: any) {
+    required: function (this: any) {
       return this.tipoOperacion === 'transferencia';
     }
   },
-  cuentaDestino: { 
+  cuentaDestino: {
     type: String,
     enum: CAJAS,
-    required: function(this: any) {
+    required: function (this: any) {
       return this.tipoOperacion === 'transferencia';
     }
   },
   montoTransferencia: {
     type: Number,
-    required: function(this: any) {
+    required: function (this: any) {
       return this.tipoOperacion === 'transferencia';
     },
     validate: {
-      validator: function(this: any, value: number) {
+      validator: function (this: any, value: number) {
         // Solo validar si es una transferencia
         if (this.tipoOperacion === 'transferencia') {
           return value && value > 0;
@@ -132,9 +139,9 @@ const gastoSchema = new mongoose.Schema({
       message: 'El monto de transferencia debe ser mayor a 0'
     }
   },
-  banco: { 
-    type: String, 
-    required: function(this: any) {
+  banco: {
+    type: String,
+    required: function (this: any) {
       // Para transferencias, no es requerido (usan cuentaOrigen/cuentaDestino)
       if (this.tipoOperacion === 'transferencia') {
         return false;
@@ -147,7 +154,7 @@ const gastoSchema = new mongoose.Schema({
       return true;
     },
     validate: {
-      validator: function(this: any, value: string) {
+      validator: function (this: any, value: string) {
         // Si el valor está vacío, solo validar si es requerido
         if (!value || value === '') {
           // Para transferencias, permitir vacío
@@ -161,7 +168,7 @@ const gastoSchema = new mongoose.Schema({
           // Para otros casos, no permitir vacío
           return false;
         }
-        
+
         // Si tiene valor, debe ser uno de los valores válidos
         return (CAJAS as readonly string[]).includes(value);
       },
@@ -169,7 +176,7 @@ const gastoSchema = new mongoose.Schema({
     }
   },
   // Campo para auditoría: usuario que creó el registro
-  creadoPor: { 
+  creadoPor: {
     type: String, // Username del usuario que creó el registro
     required: false // Opcional para compatibilidad con registros antiguos
   }
