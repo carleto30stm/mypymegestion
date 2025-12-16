@@ -607,10 +607,12 @@ const HistorialVentasPage: React.FC = () => {
                         <TableCell align="center">
                           <TextField
                             size="small"
-                            type="number"
-                            value={item.cantidad}
+                            type="text"
+                            value={String(item.cantidad)}
                             onChange={(e) => {
-                              const nuevaCantidad = parseInt(e.target.value) || 0;
+                              // Permitir edición fácil: solo dígitos
+                              const raw = e.target.value.replace(/\D/g, '');
+                              const nuevaCantidad = raw === '' ? 0 : parseInt(raw, 10);
                               if (nuevaCantidad < 0) return;
                               const nuevosItems = [...ventaEditar.items];
                               const descuento = (nuevaCantidad * item.precioUnitario) * ((item.porcentajeDescuento || 0) / 100);
@@ -632,49 +634,32 @@ const HistorialVentasPage: React.FC = () => {
                                 total: nuevoSubtotal + nuevoIVA
                               });
                             }}
-                            inputProps={{ min: 0, style: { textAlign: 'center' } }}
+                            inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', style: { textAlign: 'center' } }}
                             sx={{ width: 80 }}
                           />
                         </TableCell>
                         <TableCell align="right">
                           <TextField
                             size="small"
-                            type="number"
-                            value={item.precioUnitario}
-                            onChange={(e) => {
-                              const nuevoPrecio = Math.round((parseFloat(e.target.value) || 0) * 1000) / 1000;
-                              if (nuevoPrecio < 0) return;
-                              const nuevosItems = [...ventaEditar.items];
-                              const descuento = (item.cantidad * nuevoPrecio) * ((item.porcentajeDescuento || 0) / 100);
-                              nuevosItems[index] = {
-                                ...item,
-                                precioUnitario: nuevoPrecio,
-                                subtotal: (item.cantidad * nuevoPrecio) - descuento,
-                                total: (item.cantidad * nuevoPrecio) - descuento,
-                                descuento
-                              };
-                              // Recalcular totales
-                              const nuevoSubtotal = nuevosItems.reduce((sum, i) => sum + i.subtotal, 0);
-                              const nuevoIVA = ventaEditar.aplicaIVA !== false ? nuevoSubtotal * 0.21 : 0;
-                              setVentaEditar({
-                                ...ventaEditar,
-                                items: nuevosItems,
-                                subtotal: nuevoSubtotal,
-                                iva: nuevoIVA,
-                                total: nuevoSubtotal + nuevoIVA
-                              });
-                            }}
-                            inputProps={{ min: 0, step: 0.001, style: { textAlign: 'right' } }}
+                            value={formatCurrencyDecimals(item.precioUnitario, 3)}
+                            disabled
+                            inputProps={{ style: { textAlign: 'right' } }}
                             sx={{ width: 100 }}
                           />
                         </TableCell>
                         <TableCell align="center">
                           <TextField
                             size="small"
-                            type="number"
-                            value={item.porcentajeDescuento || 0}
+                            type="text"
+                            value={String(item.porcentajeDescuento ?? '')}
                             onChange={(e) => {
-                              const nuevoPorcentaje = parseFloat(e.target.value) || 0;
+                              // Permitir coma o punto como separador decimal y solo dígitos
+                              let raw = e.target.value.replace(/[^0-9,\.]/g, '');
+                              raw = raw.replace(',', '.');
+                              // Mantener solo un punto
+                              const parts = raw.split('.');
+                              if (parts.length > 2) raw = parts[0] + '.' + parts.slice(1).join('');
+                              const nuevoPorcentaje = raw === '' ? 0 : parseFloat(raw);
                               if (nuevoPorcentaje < 0 || nuevoPorcentaje > 100) return;
                               const nuevosItems = [...ventaEditar.items];
                               const descuento = (item.cantidad * item.precioUnitario) * (nuevoPorcentaje / 100);
@@ -696,7 +681,7 @@ const HistorialVentasPage: React.FC = () => {
                                 total: nuevoSubtotal + nuevoIVA
                               });
                             }}
-                            inputProps={{ min: 0, max: 100, step: 0.5, style: { textAlign: 'center' } }}
+                            inputProps={{ inputMode: 'decimal', style: { textAlign: 'center' }, placeholder: '0' }}
                             sx={{ width: 80 }}
                             InputProps={{ endAdornment: <Typography variant="caption">%</Typography> }}
                           />

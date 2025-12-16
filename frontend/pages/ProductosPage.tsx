@@ -50,7 +50,7 @@ import {
   AddCircle as AddCircleIcon,
   RemoveCircle as RemoveCircleIcon
 } from '@mui/icons-material';
-import { formatCurrency, formatCurrencyDecimals } from '../utils/formatters';
+import { formatCurrency, formatCurrencyDecimals, formatNumberInput, getNumericValue } from '../utils/formatters';
 
 const ProductosPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -80,6 +80,10 @@ const ProductosPage: React.FC = () => {
     estado: 'activo'
   });
 
+  // Estados formateados para inputs de moneda (patrón obligatorio)
+  const [precioCompraFormatted, setPrecioCompraFormatted] = useState<string>('');
+  const [precioVentaFormatted, setPrecioVentaFormatted] = useState<string>('');
+
   useEffect(() => {
     dispatch(fetchProductos());
     dispatch(fetchProductosStockBajo());
@@ -89,6 +93,9 @@ const ProductosPage: React.FC = () => {
     if (producto) {
       setProductoEdit(producto);
       setFormData(producto);
+      // Inicializar formatos para inputs de moneda
+      setPrecioCompraFormatted(formatCurrencyDecimals(producto.precioCompra || 0, 3));
+      setPrecioVentaFormatted(formatCurrencyDecimals(producto.precioVenta || 0, 3));
     } else {
       setProductoEdit(null);
       setFormData({
@@ -104,6 +111,8 @@ const ProductosPage: React.FC = () => {
         proveedor: '',
         estado: 'activo'
       });
+      setPrecioCompraFormatted('');
+      setPrecioVentaFormatted('');
     }
     setOpenForm(true);
   };
@@ -428,20 +437,34 @@ const ProductosPage: React.FC = () => {
               <TextField
                 fullWidth
                 label="Costo *"
-                type="number"
-                value={formData.precioCompra}
-                onChange={(e) => setFormData({ ...formData, precioCompra: Math.round((parseFloat(e.target.value) || 0) * 1000) / 1000 })}
-                inputProps={{ min: 0, step: 0.001 }}
+                type="text"
+                value={precioCompraFormatted}
+                onChange={(e) => {
+                  const formatted = formatNumberInput(e.target.value);
+                  setPrecioCompraFormatted(formatted);
+                  const numeric = Math.round(getNumericValue(formatted) * 1000) / 1000;
+                  setFormData({ ...formData, precioCompra: numeric });
+                }}
+                placeholder="Ej: 1.000,50"
+                inputProps={{ style: { textAlign: 'right' } }}
+                helperText="Formato: 1.000,50 (coma para decimales)"
               />
             </Grid>
             <Grid item xs={12} md={4}>
               <TextField
                 fullWidth
                 label="Precio Venta *"
-                type="number"
-                value={formData.precioVenta}
-                onChange={(e) => setFormData({ ...formData, precioVenta: Math.round((parseFloat(e.target.value) || 0) * 1000) / 1000 })}
-                inputProps={{ min: 0, step: 0.001 }}
+                type="text"
+                value={precioVentaFormatted}
+                onChange={(e) => {
+                  const formatted = formatNumberInput(e.target.value);
+                  setPrecioVentaFormatted(formatted);
+                  const numeric = Math.round(getNumericValue(formatted) * 1000) / 1000;
+                  setFormData({ ...formData, precioVenta: numeric });
+                }}
+                placeholder="Ej: 1.000,50"
+                inputProps={{ style: { textAlign: 'right' } }}
+                helperText="Formato: 1.000,50 (coma para decimales)"
               />
             </Grid>
             <Grid item xs={12} md={4}>
