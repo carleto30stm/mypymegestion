@@ -47,6 +47,7 @@ import {
   ArrowBack as ArrowBackIcon
 } from '@mui/icons-material';
 import { formatCurrency, formatNumberInput, getNumericValue, formatCurrencyDecimals } from '../utils/formatters';
+import { ConfirmDialog } from '../components/modal';
 
 const VentasPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -70,6 +71,15 @@ const VentasPage: React.FC = () => {
   const [aplicaIVAVenta, setAplicaIVAVenta] = useState<boolean>(true);
   // Estado para momento de cobro
   const [momentoCobro, setMomentoCobro] = useState<'anticipado' | 'contra_entrega' | 'diferido'>('diferido');
+  // Diálogos de confirmación
+  const [openConfirmVenta, setOpenConfirmVenta] = useState(false);
+  const [openConfirmCancelar, setOpenConfirmCancelar] = useState(false);
+  // Estados para diálogos de resultado
+  const [openSuccessDialog, setOpenSuccessDialog] = useState(false);
+  const [successDialogMessage, setSuccessDialogMessage] = useState<string>('');
+  const [navigateAfterSuccess, setNavigateAfterSuccess] = useState(false);
+  const [openErrorDialog, setOpenErrorDialog] = useState(false);
+  const [errorDialogMessage, setErrorDialogMessage] = useState<string>('');
 
   useEffect(() => {
     dispatch(fetchProductos());
@@ -189,7 +199,7 @@ const VentasPage: React.FC = () => {
     return { subtotal, iva, total, aplicaIVA: aplicaIVAVenta, clienteSeleccionado };
   };
 
-  const handleConfirmarVenta = async () => {
+  const handleConfirmarVenta = () => {
     if (carrito.length === 0) {
       setError('Debe agregar al menos un producto');
       return;
@@ -200,6 +210,11 @@ const VentasPage: React.FC = () => {
       return;
     }
 
+    // Abrir diálogo de confirmación
+    setOpenConfirmVenta(true);
+  };
+
+  const submitVenta = async () => {
     const totales = calcularTotales();
 
     const nuevaVenta: any = {
@@ -211,39 +226,57 @@ const VentasPage: React.FC = () => {
       total: totales.total,
       observaciones: observaciones || undefined,
       vendedor: user?.username || 'sistema',
-      // Enviar decisión de IVA específica para esta venta
       aplicaIVA: aplicaIVAVenta,
-      momentoCobro: momentoCobro, // Nuevo campo crítico
+      momentoCobro: momentoCobro,
       requiereFacturaAFIP: totales.clienteSeleccionado?.requiereFacturaAFIP || false
     };
 
     try {
       if (esEdicion && ventaParaEditar) {
-        // Actualizar venta existente
         await dispatch(updateVenta({ id: ventaParaEditar._id!, ventaData: nuevaVenta })).unwrap();
-        
-        // Navegar de regreso al historial
-        navigate('/historial-ventas');
-        
+        // Mostrar diálogo de éxito y navegar al cerrar
+        setSuccessDialogMessage('Venta actualizada exitosamente');
+        setNavigateAfterSuccess(true);
+        setOpenSuccessDialog(true);
         return;
       } else {
-        // Crear nueva venta
         await dispatch(createVenta(nuevaVenta)).unwrap();
-        
-        // Mostrar mensaje de éxito
-        alert('Venta registrada exitosamente. Puede facturarla desde la página de Facturas.');
-        
+        // Mostrar diálogo de éxito (permite al usuario decidir si navegar o permanecer)
+        setSuccessDialogMessage('Venta registrada exitosamente. Puede facturarla desde la página de Facturas.');
+        setNavigateAfterSuccess(false);
+        setOpenSuccessDialog(true);
+
         // Limpiar formulario
         setCarrito([]);
         setClienteId('');
         setObservaciones('');
-        setAplicaIVAVenta(true); // Resetear a true por defecto
-        setMomentoCobro('diferido'); // Resetear a diferido por defecto
+        setAplicaIVAVenta(true);
+        setMomentoCobro('diferido');
         setError('');
-        dispatch(fetchProductos()); // Actualizar stock
+        dispatch(fetchProductos());
       }
     } catch (err: any) {
-      setError(err.message || 'Error al registrar la venta');
+      const msg = err?.message || 'Error al registrar la venta';
+      setError(msg);
+      setErrorDialogMessage(msg);
+      setOpenErrorDialog(true);
+    }
+  };
+
+  const handleCancelar = () => {
+    const hasChanges = carrito.length > 0 || clienteId !== '' || observaciones !== '';
+    if (hasChanges || esEdicion) {
+      setOpenConfirmCancelar(true);
+      return;
+    }
+
+    if (esEdicion) {
+      navigate('/historial-ventas');
+    } else {
+      setCarrito([]);
+      setClienteId('');
+      setObservaciones('');
+      setError('');
     }
   };
 
@@ -547,16 +580,7 @@ const VentasPage: React.FC = () => {
               <Button
                 fullWidth
                 color="secondary"
-                onClick={() => {
-                  if (esEdicion) {
-                    navigate('/historial-ventas');
-                  } else {
-                    setCarrito([]);
-                    setClienteId('');
-                    setObservaciones('');
-                    setError('');
-                  }
-                }}
+                onClick={() => handleCancelar()}
               >
                 {esEdicion ? 'Cancelar Edición' : 'Cancelar'}
               </Button>
@@ -569,6 +593,71 @@ const VentasPage: React.FC = () => {
                 {esEdicion ? 'Guardar Cambios' : 'Confirmar Venta'}
               </Button>
             </Box>
+
+            {/* Diálogos de confirmación */}
+            <ConfirmDialog
+              open={openConfirmVenta}
+              onClose={() => setOpenConfirmVenta(false)}
+              onConfirm={async () => { await submitVenta(); setOpenConfirmVenta(false); }}
+              title={esEdicion ? 'Guardar cambios' : 'Confirmar venta'}
+              message={esEdicion ? '¿Desea guardar los cambios de esta venta?' : '¿Confirmar y registrar la venta?'}
+              confirmText={esEdicion ? 'Guardar cambios' : 'Confirmar venta'}
+              cancelText="Cancelar"
+              severity="info"
+              confirmColor="primary"
+            />
+
+            <ConfirmDialog
+              open={openConfirmCancelar}
+              onClose={() => setOpenConfirmCancelar(false)}
+              onConfirm={() => {
+                setOpenConfirmCancelar(false);
+                if (esEdicion) {
+                  navigate('/historial-ventas');
+                } else {
+                  setCarrito([]);
+                  setClienteId('');
+                  setObservaciones('');
+                  setError('');
+                }
+              }}
+              title="Cancelar"
+              message="Hay cambios sin guardar. ¿Desea cancelar y perder los cambios?"
+              confirmText="Sí, cancelar"
+              cancelText="No"
+              severity="warning"
+              confirmColor="error"
+            />
+
+            {/* Diálogos de resultado: éxito y error */}
+            <ConfirmDialog
+              open={openSuccessDialog}
+              onClose={() => setOpenSuccessDialog(false)}
+              onConfirm={() => {
+                setOpenSuccessDialog(false);
+                if (navigateAfterSuccess) {
+                  navigate('/historial-ventas');
+                }
+              }}
+              title="Operación exitosa"
+              message={successDialogMessage}
+              confirmText="Aceptar"
+              cancelText={undefined}
+              severity="info"
+              confirmColor="success"
+            />
+
+            <ConfirmDialog
+              open={openErrorDialog}
+              onClose={() => setOpenErrorDialog(false)}
+              onConfirm={() => setOpenErrorDialog(false)}
+              title="Error"
+              message={errorDialogMessage}
+              confirmText="Aceptar"
+              cancelText={undefined}
+              severity="error"
+              confirmColor="error"
+            />
           </Paper>
         </Grid>
       </Grid>

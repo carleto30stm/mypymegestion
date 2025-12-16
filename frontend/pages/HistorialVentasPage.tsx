@@ -40,6 +40,7 @@ import {
   Info as InfoIcon
 } from '@mui/icons-material';
 import { formatCurrency, formatDate, formatCurrencyDecimals } from '../utils/formatters';
+import ConfirmDialog from '../components/modal/ConfirmDialog';
 
 const HistorialVentasPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -803,128 +804,26 @@ const HistorialVentasPage: React.FC = () => {
       </Dialog>
 
       {/* Dialog Confirmar Venta */}
-      <Dialog
+      {/* Reemplazado por ConfirmDialog reutilizable */}
+      <ConfirmDialog
         open={openConfirmar}
         onClose={() => setOpenConfirmar(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <CheckCircleIcon color="success" />
-          Confirmar Venta
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" gutterBottom sx={{ mb: 2 }}>
-            ¿Estás seguro de que deseas confirmar la venta <strong>{ventaConfirmar?.numeroVenta}</strong>?
-          </Typography>
-          <Typography variant="caption" color="textSecondary" gutterBottom>
-            Esta acción confirmará la venta, actualizará el stock de productos y afectará el saldo del cliente.
-          </Typography>
-
-          {ventaConfirmar && (() => {
-            const validacion = puedeConfirmar(ventaConfirmar);
-            return (
-              <>
-                {/* Alerta de validación si NO puede confirmar */}
-                {!validacion.puede && (
-                  <Box sx={{ mt: 2, mb: 2 }}>
-                    <Typography 
-                      variant="body2" 
-                      sx={{ 
-                        bgcolor: 'error.light', 
-                        color: 'error.contrastText',
-                        p: 2, 
-                        borderRadius: 1,
-                        border: '1px solid',
-                        borderColor: 'error.main'
-                      }}
-                    >
-                      ⚠️ <strong>No se puede confirmar:</strong> {validacion.razon}
-                    </Typography>
-                  </Box>
-                )}
-
-                {/* Detalle de la venta */}
-                <Box sx={{
-                  bgcolor: 'background.default',
-                  p: 2,
-                  borderRadius: 1,
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  mt: 2
-                }}>
-                  <Typography variant="body2" gutterBottom>
-                    <strong>Cliente:</strong> {ventaConfirmar.nombreCliente}
-                  </Typography>
-                  <Typography variant="body2" gutterBottom>
-                    <strong>Fecha:</strong> {formatDate(ventaConfirmar.fecha)}
-                  </Typography>
-                  <Typography variant="body2" gutterBottom>
-                    <strong>Items:</strong> {ventaConfirmar.items.length}
-                  </Typography>
-                  <Typography variant="body2" gutterBottom>
-                    <strong>Medio de Pago:</strong> {ventaConfirmar.medioPago}
-                  </Typography>
-                  {ventaConfirmar.momentoCobro && (
-                    <Typography variant="body2" gutterBottom>
-                      <strong>Momento de Cobro:</strong> {
-                        ventaConfirmar.momentoCobro === 'anticipado' ? '📥 Anticipado' :
-                        ventaConfirmar.momentoCobro === 'contra_entrega' ? '🚚 Contra Entrega' :
-                        '💳 Diferido (A crédito)'
-                      }
-                    </Typography>
-                  )}
-                  <Typography variant="body2" gutterBottom>
-                    <strong>Estado Cobro:</strong> {ventaConfirmar.estadoCobranza || 'pendiente'}
-                  </Typography>
-                  <Typography variant="body2" gutterBottom>
-                    <strong>Estado Entrega:</strong> {ventaConfirmar.estadoEntrega || 'pendiente'}
-                  </Typography>
-                  <Typography
-                    variant="h6"
-                    sx={{
-                      color: 'success.main',
-                      mt: 1
-                    }}
-                  >
-                    <strong>Total:</strong> {formatCurrencyDecimals(ventaConfirmar.total, 3)}
-                  </Typography>
-                </Box>
-              </>
-            );
-          })()}
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button
-            onClick={() => setOpenConfirmar(false)}
-            variant="outlined"
-            color="inherit"
-          >
-            Cancelar
-          </Button>
-          <Button
-            onClick={handleConfirmConfirmar}
-            variant="contained"
-            color="success"
-            startIcon={<CheckCircleIcon />}
-            disabled={
-              confirmandoVenta === ventaConfirmar?._id || 
-              !ventaConfirmar ||
-              !puedeConfirmar(ventaConfirmar).puede
-            }
-            autoFocus
-          >
-            {confirmandoVenta === ventaConfirmar?._id ? (
-              <>
-                <CircularProgress size={20} sx={{ mr: 1 }} />
-                Confirmando...
-              </>
-            ) : (
-              'Confirmar Venta'
-            )}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        onConfirm={handleConfirmConfirmar}
+        title={`Confirmar Venta ${ventaConfirmar?.numeroVenta || ''}`}
+        message={ventaConfirmar ? (
+          `Cliente: ${ventaConfirmar.nombreCliente}\n` +
+          `Fecha: ${formatDate(ventaConfirmar.fecha)}\n` +
+          `Items: ${ventaConfirmar.items.length}\n` +
+          `Medio de Pago: ${ventaConfirmar.medioPago || '-'}\n` +
+          (ventaConfirmar.momentoCobro ? `Momento de Cobro: ${ventaConfirmar.momentoCobro}` : '') +
+          `\nEstado Cobro: ${ventaConfirmar.estadoCobranza || 'pendiente'}\nEstado Entrega: ${ventaConfirmar.estadoEntrega || 'pendiente'}\n\nTotal: ${formatCurrencyDecimals(ventaConfirmar.total, 3)}`
+        ) : 'Confirmar esta venta'}
+        confirmText={confirmandoVenta === ventaConfirmar?._id ? 'Confirmando...' : 'Confirmar Venta'}
+        confirmColor="success"
+        severity={puedeConfirmar(ventaConfirmar || ({} as Venta)).puede ? 'question' : 'warning'}
+        showAlert={true}
+        confirmDisabled={confirmandoVenta === ventaConfirmar?._id || !ventaConfirmar || !puedeConfirmar(ventaConfirmar || ({} as Venta)).puede}
+      />
     </Box>
   );
 };

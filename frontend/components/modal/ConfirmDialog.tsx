@@ -22,6 +22,7 @@ interface ConfirmDialogProps {
   severity?: 'warning' | 'error' | 'info' | 'question';
   confirmColor?: 'primary' | 'secondary' | 'error' | 'warning' | 'info' | 'success';
   showAlert?: boolean;
+  confirmDisabled?: boolean;
 }
 
 const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
@@ -34,7 +35,8 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   cancelText = 'Cancelar',
   severity = 'warning',
   confirmColor = 'primary',
-  showAlert = true
+  showAlert = true,
+  confirmDisabled = false
 }) => {
   const handleConfirm = () => {
     onConfirm();
@@ -98,6 +100,7 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           variant="contained"
           color={confirmColor}
           autoFocus
+          disabled={confirmDisabled}
         >
           {confirmText}
         </Button>
