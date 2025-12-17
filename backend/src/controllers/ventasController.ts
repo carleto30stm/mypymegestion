@@ -12,10 +12,41 @@ import mongoose from 'mongoose';
 // @access  Private
 export const getVentas = async (req: ExpressRequest, res: ExpressResponse) => {
     try {
-        const ventas = await Venta.find()
-            .populate('clienteId', 'nombreCompleto numeroDocumento')
-            .sort({ fecha: -1 });
-        res.json(ventas);
+        const { page, limit, fechaInicio, fechaFin, all, estado } = req.query;
+
+        const filter: any = {};
+        if (fechaInicio || fechaFin) {
+            filter.fecha = {};
+            if (fechaInicio) filter.fecha.$gte = new Date(String(fechaInicio));
+            if (fechaFin) filter.fecha.$lte = new Date(String(fechaFin));
+        }
+
+        if (estado && String(estado).toLowerCase() !== 'todos') {
+            filter.estado = String(estado);
+        }
+
+        // Si se solicita 'all=true' devolver todas las ventas sin paginar (compatibilidad)
+        if (String(all) === 'true') {
+            const ventas = await Venta.find(filter)
+                .populate('clienteId', 'nombreCompleto numeroDocumento')
+                .sort({ fecha: -1 });
+            return res.json({ ventas, total: ventas.length });
+        }
+
+        const pageNum = Math.max(1, parseInt(String(page || '1'), 10));
+        const lim = Math.max(1, parseInt(String(limit || '50'), 10));
+        const skip = (pageNum - 1) * lim;
+
+        const [ventas, total] = await Promise.all([
+            Venta.find(filter)
+                .populate('clienteId', 'nombreCompleto numeroDocumento')
+                .sort({ fecha: -1 })
+                .skip(skip)
+                .limit(lim),
+            Venta.countDocuments(filter)
+        ]);
+
+        res.json({ ventas, total, page: pageNum, limit: lim });
     } catch (error) {
         res.status(500).json({ message: 'Error en el servidor' });
     }

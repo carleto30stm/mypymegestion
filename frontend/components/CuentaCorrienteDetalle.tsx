@@ -86,7 +86,7 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
       dispatch(fetchMovimientos({ clienteId: cliente._id, incluirAnulados: false }));
       dispatch(fetchResumen(cliente._id));
       dispatch(fetchAntiguedad(cliente._id));
-      dispatch(fetchVentas()); // Cargar ventas para poder identificar cuáles están pendientes
+      dispatch(fetchVentas({})); // Cargar ventas para poder identificar cuáles están pendientes
       if (incluirIntereses) {
         dispatch(fetchInteresesPorCliente({ clienteId: cliente._id }));
       }
@@ -194,7 +194,7 @@ const CuentaCorrienteDetalle: React.FC<CuentaCorrienteDetalleProps> = ({ cliente
       dispatch(fetchMovimientos({ clienteId: cliente._id, incluirAnulados: false }));
       dispatch(fetchResumen(cliente._id));
       dispatch(fetchAntiguedad(cliente._id));
-      dispatch(fetchVentas()); // Refrescar ventas para actualizar estado de cobranza
+      dispatch(fetchVentas({})); // Refrescar ventas para actualizar estado de cobranza
 
       // Limpiar y cerrar modal
       setObservacionesPago('');

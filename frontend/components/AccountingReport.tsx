@@ -97,7 +97,7 @@ const AccountingReport: React.FC = () => {
   useEffect(() => {
     // Reporte Contable necesita todos los períodos para análisis histórico
     dispatch(fetchGastos({ todosPeriodos: true }));
-    dispatch(fetchVentas());
+    dispatch(fetchVentas({}));
     dispatch(fetchRecibos());
   }, [dispatch]);
 

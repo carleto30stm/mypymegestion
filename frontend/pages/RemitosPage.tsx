@@ -155,7 +155,7 @@ const RemitosPage: React.FC = () => {
 
       setShowGenerarDialog(false);
       dispatch(fetchRemitos());
-      dispatch(fetchVentas()); // Actualizar lista de ventas para reflejar cambios
+      dispatch(fetchVentas({})); // Actualizar lista de ventas para reflejar cambios
       dispatch(fetchEstadisticasRemitos());
     } catch (err) {
       console.error('Error al generar remito:', err);
