@@ -159,7 +159,7 @@ const CobranzasPage: React.FC = () => {
 
   // Cargar datos iniciales
   useEffect(() => {
-    dispatch(fetchVentas());
+    dispatch(fetchVentas({}));
     dispatch(fetchClientes());
     dispatch(fetchRecibos());
     dispatch(fetchEstadisticasCobranza());
@@ -318,7 +318,7 @@ const CobranzasPage: React.FC = () => {
       console.log('✅ Recibo creado exitosamente');
 
       // Recargar datos
-      dispatch(fetchVentas());
+      dispatch(fetchVentas({}));
       dispatch(fetchRecibos());
       dispatch(fetchEstadisticasCobranza());
 
@@ -362,7 +362,7 @@ const CobranzasPage: React.FC = () => {
       ).unwrap();
 
       // Recargar datos
-      dispatch(fetchVentas());
+      dispatch(fetchVentas({}));
       dispatch(fetchRecibos());
       dispatch(fetchEstadisticasCobranza());
 
@@ -430,7 +430,7 @@ const CobranzasPage: React.FC = () => {
       ).unwrap();
 
       // Recargar ventas para actualizar estado de entrega
-      dispatch(fetchVentas());
+      dispatch(fetchVentas({}));
 
       setModalRemitoOpen(false);
       setVentaParaRemito(null);
@@ -496,7 +496,7 @@ const CobranzasPage: React.FC = () => {
       // Recargar datos
       dispatch(fetchRecibos());
       dispatch(fetchEstadisticasCobranza());
-      dispatch(fetchVentas());
+      dispatch(fetchVentas({}));
 
       setModalCorreccionOpen(false);
       setReciboACorregir(null);

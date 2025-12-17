@@ -4,6 +4,7 @@ import { Venta, EstadisticasVentas } from '../../types';
 
 interface VentasState {
   items: Venta[];
+  total: number; // total de registros disponibles en el servidor
   sinFacturar: Venta[]; // Ventas confirmadas que requieren facturación
   estadisticas: EstadisticasVentas | null;
   status: 'idle' | 'loading' | 'succeeded' | 'failed';
@@ -12,6 +13,7 @@ interface VentasState {
 
 const initialState: VentasState = {
   items: [],
+  total: 0,
   sinFacturar: [],
   estadisticas: null,
   status: 'idle',
@@ -19,9 +21,20 @@ const initialState: VentasState = {
 };
 
 // Thunks
-export const fetchVentas = createAsyncThunk('ventas/fetchVentas', async (_, { rejectWithValue }) => {
+export const fetchVentas = createAsyncThunk('ventas/fetchVentas', async (params: { page?: number; limit?: number; fechaInicio?: string; fechaFin?: string; all?: boolean; estado?: string } | undefined, { rejectWithValue }) => {
   try {
-    const response = await api.get('/api/ventas');
+    const p = params || {};
+    const search = new URLSearchParams();
+    if (p.page) search.append('page', String(p.page));
+    if (p.limit) search.append('limit', String(p.limit));
+    if (p.fechaInicio) search.append('fechaInicio', String(p.fechaInicio));
+    if (p.fechaFin) search.append('fechaFin', String(p.fechaFin));
+    if (p.all) search.append('all', 'true');
+    if (p.estado) search.append('estado', String(p.estado));
+
+    const qs = search.toString() ? `?${search.toString()}` : '';
+    const response = await api.get(`/api/ventas${qs}`);
+    // response.data -> { ventas, total, page, limit } or { ventas } for compatibility
     return response.data;
   } catch (error: any) {
     return rejectWithValue(error.response?.data?.message || 'Error al cargar ventas');
@@ -137,9 +150,16 @@ const ventasSlice = createSlice({
       .addCase(fetchVentas.pending, (state) => {
         state.status = 'loading';
       })
-      .addCase(fetchVentas.fulfilled, (state, action: PayloadAction<Venta[]>) => {
+      .addCase(fetchVentas.fulfilled, (state, action: PayloadAction<any>) => {
         state.status = 'succeeded';
-        state.items = action.payload;
+        // payload may be { ventas, total } or ventas[] (legacy)
+        if (Array.isArray(action.payload)) {
+          state.items = action.payload;
+          state.total = action.payload.length;
+        } else {
+          state.items = action.payload.ventas || [];
+          state.total = action.payload.total ?? state.items.length;
+        }
       })
       .addCase(fetchVentas.rejected, (state, action) => {
         state.status = 'failed';

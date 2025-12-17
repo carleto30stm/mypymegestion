@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { AppDispatch, RootState } from '../redux/store';
-import { fetchVentas, anularVenta, confirmarVenta, updateVenta } from '../redux/slices/ventasSlice';
+import { fetchVentas, fetchVentasByRango, anularVenta, confirmarVenta, updateVenta } from '../redux/slices/ventasSlice';
 import { crearFacturaDesdeVenta, fetchFacturas } from '../redux/slices/facturasSlice';
 import { Venta } from '../types';
 import {
@@ -29,7 +29,8 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Alert
+  Alert,
+  TablePagination
 } from '@mui/material';
 import {
   Receipt as ReceiptIcon,
@@ -45,7 +46,7 @@ import ConfirmDialog from '../components/modal/ConfirmDialog';
 const HistorialVentasPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
-  const { items: ventas, status } = useSelector((state: RootState) => state.ventas);
+  const { items: ventas, status, total } = useSelector((state: RootState) => state.ventas);
   const { items: facturas } = useSelector((state: RootState) => state.facturas);
   const { user } = useSelector((state: RootState) => state.auth);
 
@@ -61,10 +62,28 @@ const HistorialVentasPage: React.FC = () => {
   const [openConfirmar, setOpenConfirmar] = useState(false);
   const [ventaConfirmar, setVentaConfirmar] = useState<Venta | null>(null);
 
+  // Pagination & range
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [mostrarTodo, setMostrarTodo] = useState(false);
+  const [fechaInicio, setFechaInicio] = useState<string | null>(null);
+  const [fechaFin, setFechaFin] = useState<string | null>(null);
+  const [estadoFiltro, setEstadoFiltro] = useState<string>('');
+
   useEffect(() => {
-    dispatch(fetchVentas());
+    // Default: load current month
+    const now = new Date();
+    const inicio = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+    const fin = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    const inicioISO = inicio.toISOString();
+    const finISO = fin.toISOString();
+    setFechaInicio(inicioISO);
+    setFechaFin(finISO);
+    setMostrarTodo(false);
+    // fetch first page of current month
+    dispatch(fetchVentas({ page: 1, limit: rowsPerPage, fechaInicio: inicioISO, fechaFin: finISO, ...(estadoFiltro ? { estado: estadoFiltro } : {}) }));
     dispatch(fetchFacturas({}));
-  }, [dispatch]);
+  }, [dispatch, estadoFiltro]);
 
   const handleVerDetalle = (venta: Venta) => {
     setVentaDetalle(venta);
@@ -81,6 +100,16 @@ const HistorialVentasPage: React.FC = () => {
     setOpenConfirmar(true);
   };
 
+  const refreshVentas = () => {
+    if (mostrarTodo) {
+      dispatch(fetchVentas({ all: true, page: page + 1, limit: rowsPerPage, ...(estadoFiltro ? { estado: estadoFiltro } : {}) }));
+    } else if (fechaInicio && fechaFin) {
+      dispatch(fetchVentas({ page: page + 1, limit: rowsPerPage, fechaInicio, fechaFin, ...(estadoFiltro ? { estado: estadoFiltro } : {}) }));
+    } else {
+      dispatch(fetchVentas({ page: page + 1, limit: rowsPerPage, ...(estadoFiltro ? { estado: estadoFiltro } : {}) }));
+    }
+  };
+
   const handleConfirmAnular = async () => {
     if (!ventaAnular || !motivoAnulacion.trim()) {
       alert('Debe ingresar un motivo');
@@ -91,7 +120,7 @@ const HistorialVentasPage: React.FC = () => {
     setOpenAnular(false);
     setVentaAnular(null);
     setMotivoAnulacion('');
-    dispatch(fetchVentas());
+    refreshVentas();
   };
 
   const handleConfirmarVenta = async (ventaId: string) => {
@@ -103,7 +132,8 @@ const HistorialVentasPage: React.FC = () => {
     setConfirmandoVenta(ventaId);
     try {
       await dispatch(confirmarVenta({ id: ventaId, usuarioConfirmacion: user.username })).unwrap();
-      dispatch(fetchVentas());
+      // After confirming, ensure we refetch the current page
+      refreshVentas();
     } catch (err: any) {
       alert(err.message || 'Error al confirmar la venta');
     } finally {
@@ -117,7 +147,7 @@ const HistorialVentasPage: React.FC = () => {
     setConfirmandoVenta(ventaConfirmar._id!);
     try {
       await dispatch(confirmarVenta({ id: ventaConfirmar._id!, usuarioConfirmacion: user.username })).unwrap();
-      dispatch(fetchVentas());
+      refreshVentas();
       setOpenConfirmar(false);
       setVentaConfirmar(null);
     } catch (err: any) {
@@ -179,7 +209,7 @@ const HistorialVentasPage: React.FC = () => {
       
       setOpenEditar(false);
       setVentaEditar(null);
-      dispatch(fetchVentas());
+      refreshVentas();
       alert('Venta actualizada exitosamente');
     } catch (err: any) {
       alert(err.message || 'Error al actualizar la venta');
@@ -239,6 +269,74 @@ const HistorialVentasPage: React.FC = () => {
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
         <ReceiptIcon sx={{ mr: 2, fontSize: 32, color: 'primary.main' }} />
         <Typography variant="h4">Historial de Ventas</Typography>
+      </Box>
+
+      {/* Toolbar: periodo */}
+      <Box sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center' }}>
+        <Button
+          variant={!mostrarTodo ? 'contained' : 'outlined'}
+          onClick={() => {
+            // establecer mes actual
+            const now = new Date();
+            const inicio = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+            const fin = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+            const inicioISO = inicio.toISOString();
+            const finISO = fin.toISOString();
+            setFechaInicio(inicioISO);
+            setFechaFin(finISO);
+            setMostrarTodo(false);
+            setPage(0);
+            dispatch(fetchVentas({ page: 1, limit: rowsPerPage, fechaInicio: inicioISO, fechaFin: finISO, ...(estadoFiltro ? { estado: estadoFiltro } : {}) }));
+          }}
+        >
+          Mes actual
+        </Button>
+        <Button
+          variant={mostrarTodo ? 'contained' : 'outlined'}
+          onClick={() => {
+            setMostrarTodo(true);
+            setPage(0);
+            setFechaInicio(null);
+            setFechaFin(null);
+            dispatch(fetchVentas({ all: true, page: 1, limit: rowsPerPage, ...(estadoFiltro ? { estado: estadoFiltro } : {}) }));
+          }}
+        >
+          Mostrar todo
+        </Button>
+        <FormControl size="small" sx={{ minWidth: 160 }}>
+          <InputLabel>Estado</InputLabel>
+          <Select
+            value={estadoFiltro}
+            label="Estado"
+            onChange={(e) => {
+              const val = e.target.value as string;
+              setEstadoFiltro(val);
+              setPage(0);
+              // Fetch first page with selected estado
+              if (val === '') {
+                if (mostrarTodo) dispatch(fetchVentas({ all: true, page: 1, limit: rowsPerPage }));
+                else if (fechaInicio && fechaFin) dispatch(fetchVentas({ page: 1, limit: rowsPerPage, fechaInicio, fechaFin }));
+                else dispatch(fetchVentas({ page: 1, limit: rowsPerPage }));
+              } else {
+                if (mostrarTodo) dispatch(fetchVentas({ all: true, page: 1, limit: rowsPerPage, estado: val }));
+                else if (fechaInicio && fechaFin) dispatch(fetchVentas({ page: 1, limit: rowsPerPage, fechaInicio, fechaFin, estado: val }));
+                else dispatch(fetchVentas({ page: 1, limit: rowsPerPage, estado: val }));
+              }
+            }}
+          >
+            <MenuItem value="">Todos</MenuItem>
+            <MenuItem value="pendiente">Pendiente</MenuItem>
+            <MenuItem value="confirmada">Confirmada</MenuItem>
+            <MenuItem value="facturada">Facturada</MenuItem>
+            <MenuItem value="entregada">Entregada</MenuItem>
+            <MenuItem value="anulada">Anulada</MenuItem>
+          </Select>
+        </FormControl>
+        <Box sx={{ ml: 'auto', color: 'text.secondary' }}>
+          {fechaInicio && fechaFin && (
+            <Typography variant="caption">Periodo: {formatDate(fechaInicio)} — {formatDate(fechaFin)}</Typography>
+          )}
+        </Box>
       </Box>
 
       <TableContainer component={Paper}>
@@ -407,6 +505,34 @@ const HistorialVentasPage: React.FC = () => {
           </TableBody>
         </Table>
       </TableContainer>
+
+      <TablePagination
+        component="div"
+        count={total}
+        page={page}
+        onPageChange={(_e, newPage) => {
+          setPage(newPage);
+          // Fetch new page
+          if (mostrarTodo) {
+            dispatch(fetchVentas({ all: true, page: newPage + 1, limit: rowsPerPage, ...(estadoFiltro ? { estado: estadoFiltro } : {}) }));
+          } else if (fechaInicio && fechaFin) {
+            dispatch(fetchVentas({ page: newPage + 1, limit: rowsPerPage, fechaInicio, fechaFin, ...(estadoFiltro ? { estado: estadoFiltro } : {}) }));
+          } else {
+            dispatch(fetchVentas({ page: newPage + 1, limit: rowsPerPage, ...(estadoFiltro ? { estado: estadoFiltro } : {}) }));
+          }
+        }}
+        rowsPerPage={rowsPerPage}
+        onRowsPerPageChange={(e) => { const newLimit = parseInt((e.target as HTMLInputElement).value, 10); setRowsPerPage(newLimit); setPage(0);
+          if (mostrarTodo) {
+            dispatch(fetchVentas({ all: true, page: 1, limit: newLimit, ...(estadoFiltro ? { estado: estadoFiltro } : {}) }));
+          } else if (fechaInicio && fechaFin) {
+            dispatch(fetchVentas({ page: 1, limit: newLimit, fechaInicio, fechaFin, ...(estadoFiltro ? { estado: estadoFiltro } : {}) }));
+          } else {
+            dispatch(fetchVentas({ page: 1, limit: newLimit, ...(estadoFiltro ? { estado: estadoFiltro } : {}) }));
+          }
+        }}
+        rowsPerPageOptions={[5,10,25,50]}
+      />
 
       {/* Dialog Detalle */}
       <Dialog open={openDetalle} onClose={() => setOpenDetalle(false)} maxWidth="md" fullWidth>
