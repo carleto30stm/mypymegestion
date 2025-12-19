@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -7,14 +7,15 @@ import {
   DialogActions,
   Button,
   Box,
-  Alert
+  Alert,
+  CircularProgress
 } from '@mui/material';
 import { Warning, Error, Info, HelpOutline } from '@mui/icons-material';
 
 interface ConfirmDialogProps {
   open: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   title: string;
   message: string;
   confirmText?: string;
@@ -38,9 +39,20 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   showAlert = true,
   confirmDisabled = false
 }) => {
-  const handleConfirm = () => {
-    onConfirm();
-    onClose();
+  const [loading, setLoading] = useState(false);
+
+  const handleConfirm = async () => {
+    if (confirmDisabled || loading) return;
+    try {
+      setLoading(true);
+      await onConfirm();
+    } catch (err) {
+      // allow caller to handle errors
+      console.error('Error en onConfirm:', err);
+    } finally {
+      setLoading(false);
+      onClose();
+    }
   };
 
   const getIcon = () => {
@@ -92,6 +104,7 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           onClick={onClose} 
           variant="outlined"
           color="inherit"
+          disabled={loading}
         >
           {cancelText}
         </Button>
@@ -100,7 +113,8 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           variant="contained"
           color={confirmColor}
           autoFocus
-          disabled={confirmDisabled}
+          disabled={confirmDisabled || loading}
+          startIcon={loading ? <CircularProgress size={18} color="inherit" /> : undefined}
         >
           {confirmText}
         </Button>

@@ -4,6 +4,8 @@ import type { ILiquidacionEmpleado } from '../models/LiquidacionPeriodo.js';
 import Employee from '../models/Employee.js';
 import HoraExtra from '../models/HoraExtra.js';
 import Gasto from '../models/Gasto.js';
+import DescuentoEmpleado from '../models/DescuentoEmpleado.js';
+import IncentivoEmpleado from '../models/IncentivoEmpleado.js';
 
 // Obtener todos los períodos de liquidación
 export const getPeriodos = async (req: Request, res: Response) => {
@@ -335,8 +337,108 @@ export const liquidarEmpleado = async (req: Request, res: Response) => {
       totalContribucionesPatronales = contribJubilacion + contribObraSocial + contribPami + contribART;
     }
 
-    // Monto neto a pagar al empleado (bruto - adelantos - aportes)
-    const montoNetoPagar = sueldoBasePeriodo + liquidacion.totalHorasExtra - liquidacion.adelantos - totalAportesEmpleado;
+    // Obtener periodoAplicacion YYYY-MM
+    const periodoAplicacion = periodo.fechaInicio instanceof Date
+      ? periodo.fechaInicio.toISOString().slice(0,7)
+      : new Date(periodo.fechaInicio).toISOString().slice(0,7);
+
+    // Permitir que el payload incluya descuentos/incentivos aplicados explícitamente
+    // Formato esperado (opcional):
+    // descuentos: [{ id?: string, monto?: number, esPorcentaje?: boolean }]
+    // incentivos: [{ id?: string, monto?: number, esPorcentaje?: boolean }]
+    const payloadDescuentos = Array.isArray(req.body.descuentos) ? req.body.descuentos : null;
+    const payloadIncentivos = Array.isArray(req.body.incentivos) ? req.body.incentivos : null;
+
+    let totalDescuentos = 0;
+    const appliedDescuentos: any[] = [];
+
+    if (payloadDescuentos && payloadDescuentos.length > 0) {
+      // Aplicar los descuentos enviados en el payload (si tienen id, validar y actualizar el registro)
+      for (const pd of payloadDescuentos) {
+        if (pd.id) {
+          const d = await DescuentoEmpleado.findById(pd.id);
+          if (d && d.empleadoId.toString() === empleadoId && d.periodoAplicacion === periodoAplicacion && d.estado !== 'anulado') {
+            const montoDesc = d.esPorcentaje
+              ? (d.monto / 100) * sueldoBasePeriodo
+              : (typeof pd.monto === 'number' ? pd.monto : d.monto);
+            totalDescuentos += montoDesc;
+            d.estado = 'aplicado';
+            d.montoCalculado = montoDesc;
+            await d.save();
+            appliedDescuentos.push({ id: d._id, monto: montoDesc });
+          }
+        } else if (typeof pd.monto === 'number') {
+          // descuento ad-hoc sin registro
+          totalDescuentos += pd.monto;
+          appliedDescuentos.push({ id: null, monto: pd.monto });
+        }
+      }
+    } else {
+      // Si no vienen en payload, usar comportamiento previo: buscar descuentos pendientes/aplicados para el período
+      const descuentos = await DescuentoEmpleado.find({ empleadoId, periodoAplicacion, estado: { $ne: 'anulado' } });
+      for (const d of descuentos) {
+        const montoDesc = d.esPorcentaje ? (d.monto / 100) * sueldoBasePeriodo : d.monto;
+        totalDescuentos += montoDesc;
+        if (d.estado === 'pendiente') {
+          d.estado = 'aplicado';
+          d.montoCalculado = montoDesc;
+          await d.save();
+        }
+        appliedDescuentos.push({ id: d._id, monto: montoDesc });
+      }
+    }
+
+    let totalIncentivos = 0;
+    const appliedIncentivos: any[] = [];
+
+    if (payloadIncentivos && payloadIncentivos.length > 0) {
+      for (const pi of payloadIncentivos) {
+        if (pi.id) {
+          const it = await IncentivoEmpleado.findById(pi.id);
+          if (it && it.empleadoId.toString() === empleadoId && it.periodoAplicacion === periodoAplicacion && it.estado !== 'anulado') {
+            const montoInc = it.esPorcentaje
+              ? (it.monto / 100) * sueldoBasePeriodo
+              : (typeof pi.monto === 'number' ? pi.monto : it.monto);
+            totalIncentivos += montoInc;
+            if (it.estado === 'pendiente') {
+              it.estado = 'pagado';
+              it.montoCalculado = montoInc;
+            }
+            await it.save();
+            appliedIncentivos.push({ id: it._id, monto: montoInc });
+          }
+        } else if (typeof pi.monto === 'number') {
+          totalIncentivos += pi.monto;
+          appliedIncentivos.push({ id: null, monto: pi.monto });
+        }
+      }
+    } else {
+      const incentivos = await IncentivoEmpleado.find({ empleadoId, periodoAplicacion, estado: { $ne: 'anulado' } });
+      for (const it of incentivos) {
+        const montoInc = it.esPorcentaje ? (it.monto / 100) * sueldoBasePeriodo : it.monto;
+        totalIncentivos += montoInc;
+        if (it.estado === 'pendiente') {
+          it.estado = 'pagado';
+          it.montoCalculado = montoInc;
+          await it.save();
+        }
+        appliedIncentivos.push({ id: it._id, monto: montoInc });
+      }
+    }
+
+    // Actualizar campos en la liquidación
+    liquidacion.descuentos = totalDescuentos;
+    liquidacion.bonus = totalIncentivos;
+    liquidacion.totalAPagar = 
+      liquidacion.sueldoBase +
+      liquidacion.totalHorasExtra +
+      liquidacion.aguinaldos +
+      liquidacion.bonus -
+      liquidacion.adelantos -
+      liquidacion.descuentos;
+
+    // Monto neto a pagar al empleado (bruto + incentivos - adelantos - descuentos - aportes)
+    const montoNetoPagar = sueldoBasePeriodo + liquidacion.totalHorasExtra + totalIncentivos - liquidacion.adelantos - totalDescuentos - totalAportesEmpleado;
     
     const gastosSueldoCreados = [];
     
@@ -424,7 +526,9 @@ export const liquidarEmpleado = async (req: Request, res: Response) => {
         totalAportesEmpleado,
         totalContribucionesPatronales,
         totalAFIP: totalAportesEmpleado + totalContribucionesPatronales
-      } : null
+      } : null,
+      appliedDescuentos,
+      appliedIncentivos
     });
   } catch (error) {
     console.error('Error al liquidar empleado:', error);

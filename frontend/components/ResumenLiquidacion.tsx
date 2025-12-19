@@ -24,7 +24,9 @@ import {
   FormControl,
   InputLabel,
   Select,
-  MenuItem
+  MenuItem,
+  Checkbox,
+  FormControlLabel
 } from '@mui/material';
 import {
   AttachMoney as MoneyIcon,
@@ -45,6 +47,7 @@ import { fetchDescuentos } from '../redux/slices/descuentosEmpleadoSlice';
 import { fetchIncentivos } from '../redux/slices/incentivosEmpleadoSlice';
 import { formatCurrency } from '../utils/formatters';
 import ReciboSueldo from './ReciboSueldo';
+import { ConfirmDialog } from './modal';
 
 interface ResumenLiquidacionProps {
   periodo: LiquidacionPeriodo;
@@ -69,6 +72,9 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
   const [reciboEmpleado, setReciboEmpleado] = useState<LiquidacionEmpleado | null>(null);
   const [openAgregarEmpleado, setOpenAgregarEmpleado] = useState(false);
   const [nuevoEmpleadoId, setNuevoEmpleadoId] = useState('');
+  const [openConfirmLiquidar, setOpenConfirmLiquidar] = useState(false);
+  const [selectedDescuentosIds, setSelectedDescuentosIds] = useState<string[]>([]);
+  const [selectedIncentivosIds, setSelectedIncentivosIds] = useState<string[]>([]);
 
   const isEditable = periodo.estado === 'abierto' && (user?.userType === 'admin' || user?.userType === 'oper_ad');
 
@@ -88,8 +94,9 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
   // Cargar descuentos e incentivos del período
   useEffect(() => {
     if (periodoMes) {
-      dispatch(fetchDescuentos({ periodoAplicacion: periodoMes, estado: 'aplicado' }));
-      dispatch(fetchIncentivos({ periodoAplicacion: periodoMes, estado: 'pagado' }));
+      // Traer todos los descuentos e incentivos del período (pendientes y aplicados/pagados)
+      dispatch(fetchDescuentos({ periodoAplicacion: periodoMes }));
+      dispatch(fetchIncentivos({ periodoAplicacion: periodoMes }));
     }
   }, [dispatch, periodoMes]);
 
@@ -158,6 +165,22 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
     setObservaciones('');
     setMedioDePago('TRANSFERENCIA');
     setBanco('PROVINCIA');
+
+    // Inicializar selección de descuentos e incentivos para este empleado
+    const empId = empleado.empleadoId;
+    const descuentosList = descuentosDetalleEmpleado[empId] || [];
+    const incentivosList = incentivosDetalleEmpleado[empId] || [];
+
+    const inicialDescuentos = descuentosList
+      .filter(d => d.estado !== 'anulado')
+      .map(d => (typeof d._id === 'string' ? d._id : (d._id as any).toString()));
+    const inicialIncentivos = incentivosList
+      .filter(i => i.estado !== 'anulado')
+      .map(i => (typeof i._id === 'string' ? i._id : (i._id as any).toString()));
+
+    setSelectedDescuentosIds(inicialDescuentos);
+    setSelectedIncentivosIds(inicialIncentivos);
+
     setOpenLiquidar(true);
   };
 
@@ -165,6 +188,8 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
     setOpenLiquidar(false);
     setSelectedEmpleado(null);
     setObservaciones('');
+    setSelectedDescuentosIds([]);
+    setSelectedIncentivosIds([]);
   };
 
   const handleLiquidar = async () => {
@@ -176,13 +201,27 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
         empleadoId: selectedEmpleado.empleadoId,
         observaciones,
         medioDePago,
-        banco
+        banco,
+        descuentos: selectedDescuentosIds.map(id => ({ id })),
+        incentivos: selectedIncentivosIds.map(id => ({ id }))
       })).unwrap();
       
       // Refrescar el período y los gastos (default: últimos 3 meses)
       await dispatch(fetchPeriodoById(periodo._id));
+      // Refrescar descuentos e incentivos del período para reflejar cambios de estado
+      const periodoMes = periodo.fechaInicio ? (new Date(periodo.fechaInicio)).toISOString().slice(0,7) : '';
+      if (periodoMes) {
+        // Refrescar todos los descuentos e incentivos del período (no filtrar por estado)
+        await dispatch(fetchDescuentos({ periodoAplicacion: periodoMes }));
+        await dispatch(fetchIncentivos({ periodoAplicacion: periodoMes }));
+      }
       await dispatch(fetchGastos({}));
       handleCloseLiquidar();
+      setOpenConfirmLiquidar(false);
+
+      // Limpiar selecciones
+      setSelectedDescuentosIds([]);
+      setSelectedIncentivosIds([]);
     } catch (error) {
       console.error('Error al liquidar empleado:', error);
     }
@@ -286,16 +325,15 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
       aportePami,
       aporteSindicato,
       totalAportes,
-      // Contribuciones patronales (solo para formales)
-      contribucionJubilacion: contribJubilacion,
-      contribucionObraSocial: contribObraSocial,
-      contribucionPami: contribPami,
-      contribucionART: contribART,
-      totalContribuciones,
-      // Costo total empleador
-      costoTotal,
       // Deducciones totales
       totalDeducciones: liquidacion.adelantos + descuentosEmp + totalAportes,
+      // Contribuciones patronales (guardar en campos personalizados)
+      contribJubilacion,
+      contribObraSocial,
+      contribPami,
+      contribArt: contribART,
+      totalContribuciones,
+      costoTotal,
     };
   };
 
@@ -304,6 +342,46 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
     setReciboEmpleado(liquidacionEnriquecida);
     setOpenRecibo(true);
   };
+
+  // Calcula el total a pagar para el empleado seleccionado (usado en el ConfirmDialog)
+  const computeTotalAPagarForSelected = () => {
+    if (!selectedEmpleado) return 0;
+    const empleadoData = empleados.find(e => e._id === selectedEmpleado.empleadoId);
+    const esEmpleadoFormal = empleadoData?.modalidadContratacion === 'formal';
+    const sueldoBasePeriodo = periodo.tipo === 'quincenal' ? selectedEmpleado.sueldoBase / 2 : selectedEmpleado.sueldoBase;
+    const baseImponible = sueldoBasePeriodo + selectedEmpleado.totalHorasExtra;
+    const aporteJubilacion = esEmpleadoFormal ? baseImponible * (APORTES_EMPLEADO.JUBILACION / 100) : 0;
+    const aporteObraSocial = esEmpleadoFormal ? baseImponible * (APORTES_EMPLEADO.OBRA_SOCIAL / 100) : 0;
+    const aportePami = esEmpleadoFormal ? baseImponible * (APORTES_EMPLEADO.PAMI / 100) : 0;
+    const aporteSindicato = esEmpleadoFormal && empleadoData?.sindicato ? baseImponible * (APORTES_EMPLEADO.SINDICATO / 100) : 0;
+    const totalAportesEmp = aporteJubilacion + aporteObraSocial + aportePami + aporteSindicato;
+
+    // calcular totales según selección hecha en el modal (si hay)
+    const descuentosList = descuentosDetalleEmpleado[selectedEmpleado.empleadoId] || [];
+    const incentivosList = incentivosDetalleEmpleado[selectedEmpleado.empleadoId] || [];
+
+    const totalDescuentosSeleccionados = selectedDescuentosIds.reduce((sum, id) => {
+      const d = descuentosList.find(x => (typeof x._id === 'string' ? x._id : (x._id as any).toString()) === id);
+      if (!d) return sum;
+      const monto = d.montoCalculado ?? (d.esPorcentaje ? (d.monto / 100) * sueldoBasePeriodo : d.monto);
+      return sum + monto;
+    }, 0);
+
+    const totalIncentivosSeleccionados = selectedIncentivosIds.reduce((sum, id) => {
+      const it = incentivosList.find(x => (typeof x._id === 'string' ? x._id : (x._id as any).toString()) === id);
+      if (!it) return sum;
+      const monto = it.montoCalculado ?? (it.esPorcentaje ? (it.monto / 100) * sueldoBasePeriodo : it.monto);
+      return sum + monto;
+    }, 0);
+
+    const totalAPagar = sueldoBasePeriodo + selectedEmpleado.totalHorasExtra
+      - selectedEmpleado.adelantos
+      - totalDescuentosSeleccionados
+      + totalIncentivosSeleccionados
+      - totalAportesEmp;
+
+    return totalAPagar;
+  }; 
 
   const handleCloseRecibo = () => {
     setOpenRecibo(false);
@@ -923,6 +1001,46 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
                   </Select>
                 </FormControl>
               </Box>
+
+              {/* Selección de descuentos */}
+              {selectedEmpleado && (descuentosDetalleEmpleado[selectedEmpleado.empleadoId] || []).length > 0 && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2">Descuentos disponibles</Typography>
+                  {(descuentosDetalleEmpleado[selectedEmpleado.empleadoId] || []).map((d: any) => {
+                    const id = typeof d._id === 'string' ? d._id : (d._id as any).toString();
+                    const monto = d.montoCalculado ?? (d.esPorcentaje ? (d.monto / 100) * (periodo.tipo === 'quincenal' ? selectedEmpleado.sueldoBase / 2 : selectedEmpleado.sueldoBase) : d.monto);
+                    return (
+                      <FormControlLabel
+                        key={id}
+                        control={<Checkbox checked={selectedDescuentosIds.includes(id)} onChange={() => {
+                          setSelectedDescuentosIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+                        }} />}
+                        label={`${TIPOS_DESCUENTO[d.tipo as keyof typeof TIPOS_DESCUENTO] || d.tipo}: ${d.motivo} - ${formatCurrency(monto)}`}
+                      />
+                    );
+                  })}
+                </Box>
+              )}
+
+              {/* Selección de incentivos */}
+              {selectedEmpleado && (incentivosDetalleEmpleado[selectedEmpleado.empleadoId] || []).length > 0 && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="subtitle2">Incentivos disponibles</Typography>
+                  {(incentivosDetalleEmpleado[selectedEmpleado.empleadoId] || []).map((i: any) => {
+                    const id = typeof i._id === 'string' ? i._id : (i._id as any).toString();
+                    const monto = i.montoCalculado ?? (i.esPorcentaje ? (i.monto / 100) * (periodo.tipo === 'quincenal' ? selectedEmpleado.sueldoBase / 2 : selectedEmpleado.sueldoBase) : i.monto);
+                    return (
+                      <FormControlLabel
+                        key={id}
+                        control={<Checkbox checked={selectedIncentivosIds.includes(id)} onChange={() => {
+                          setSelectedIncentivosIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+                        }} />}
+                        label={`${TIPOS_INCENTIVO[i.tipo as keyof typeof TIPOS_INCENTIVO] || i.tipo}: ${i.motivo} - ${formatCurrency(monto)}`}
+                      />
+                    );
+                  })}
+                </Box>
+              )}
               
               <TextField
                 label="Observaciones (opcional)"
@@ -939,7 +1057,7 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
         <DialogActions>
           <Button onClick={handleCloseLiquidar}>Cancelar</Button>
           <Button
-            onClick={handleLiquidar}
+            onClick={() => setOpenConfirmLiquidar(true)}
             variant="contained"
             startIcon={<CheckIcon />}
             disabled={!medioDePago || !banco}
@@ -947,6 +1065,21 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
             Confirmar Liquidación
           </Button>
         </DialogActions>
+
+        {/* Confirmación final antes de liquidar */}
+        <ConfirmDialog
+          open={openConfirmLiquidar}
+          onClose={() => setOpenConfirmLiquidar(false)}
+          onConfirm={handleLiquidar}
+          title="Confirmar Liquidación"
+          message={`¿Confirmar liquidación de ${selectedEmpleado ? `${selectedEmpleado.empleadoApellido}, ${selectedEmpleado.empleadoNombre}` : 'este empleado'} por ${formatCurrency(computeTotalAPagarForSelected())}? Se generarán los gastos correspondientes.`}
+          confirmText="Liquidar"
+          cancelText="Cancelar"
+          severity="question"
+          confirmColor="primary"
+          showAlert={true}
+          confirmDisabled={!medioDePago || !banco}
+        />
       </Dialog>
 
       {/* Dialog Cerrar Período */}
