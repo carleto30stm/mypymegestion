@@ -170,7 +170,12 @@ export interface DescuentoEmpleado {
   esPorcentaje: boolean;
   fecha: string;
   periodoAplicacion: string; // YYYY-MM
+  // Referencias y metadatos de aplicación (opcional)
+  periodoId?: string;
   estado: 'pendiente' | 'aplicado' | 'anulado';
+  aplicadoEnLiquidacionId?: string;
+  fechaAplicacion?: string;
+  aplicadoPor?: string;
   observaciones?: string;
   montoCalculado?: number; // Monto real si esPorcentaje es true
   creadoPor?: string;
@@ -188,7 +193,12 @@ export interface IncentivoEmpleado {
   esPorcentaje: boolean;
   fecha: string;
   periodoAplicacion: string; // YYYY-MM
+  // Referencias y metadatos de aplicación (opcional)
+  periodoId?: string;
   estado: 'pendiente' | 'pagado' | 'anulado';
+  aplicadoEnLiquidacionId?: string;
+  fechaAplicacion?: string;
+  aplicadoPor?: string;
   observaciones?: string;
   montoCalculado?: number; // Monto real si esPorcentaje es true
   creadoPor?: string;

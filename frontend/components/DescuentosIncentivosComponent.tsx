@@ -16,6 +16,7 @@ import {
   deleteIncentivo
 } from '../redux/slices/incentivosEmpleadoSlice';
 import { fetchEmployees } from '../redux/slices/employeesSlice';
+import { fetchPeriodos } from '../redux/slices/liquidacionSlice';
 import {
   DescuentoEmpleado,
   IncentivoEmpleado,
@@ -101,6 +102,9 @@ const DescuentosIncentivosComponent: React.FC = () => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
+
+  // Períodos de liquidación (para seleccionar período activo al crear registros)
+  const { items: periodos } = useSelector((state: RootState) => state.liquidacion);
   const [filterEmpleado, setFilterEmpleado] = useState('');
 
   // Form state
@@ -111,7 +115,9 @@ const DescuentosIncentivosComponent: React.FC = () => {
     monto: '',
     esPorcentaje: false,
     fecha: new Date().toISOString().split('T')[0],
-    periodoAplicacion: filterPeriodo,
+    // Ahora se almacena el periodoId (LiquidacionPeriodo) seleccionado y se deriva periodoAplicacion
+    periodoId: '',
+    periodoAplicacion: '',
     observaciones: ''
   });
 
@@ -120,12 +126,20 @@ const DescuentosIncentivosComponent: React.FC = () => {
     if (employees.length === 0) {
       dispatch(fetchEmployees());
     }
-  }, [dispatch, employees.length]);
+
+    // Cargar períodos para la selección de período activo
+    if (periodos.length === 0) {
+      dispatch(fetchPeriodos());
+    }
+  }, [dispatch, employees.length, periodos.length]);
 
   useEffect(() => {
     dispatch(fetchDescuentos({ periodoAplicacion: filterPeriodo }));
     dispatch(fetchIncentivos({ periodoAplicacion: filterPeriodo }));
   }, [dispatch, filterPeriodo]);
+
+  // Computar períodos activos abiertos
+  const periodosActivos = periodos.filter(p => p.estado === 'abierto');
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -136,6 +150,10 @@ const DescuentosIncentivosComponent: React.FC = () => {
     if (item) {
       setEditingItem(item);
       const empleadoId = typeof item.empleadoId === 'string' ? item.empleadoId : item.empleadoId._id;
+
+      // Si viene periodoId usarlo, sino intentar buscar periodo por periodoAplicacion
+      const periodoIdFromItem = (item as any).periodoId ? (typeof (item as any).periodoId === 'string' ? (item as any).periodoId : ((item as any).periodoId as any)._id) : '';
+
       setFormData({
         empleadoId,
         tipo: item.tipo,
@@ -143,7 +161,8 @@ const DescuentosIncentivosComponent: React.FC = () => {
         monto: item.monto.toString(),
         esPorcentaje: item.esPorcentaje,
         fecha: new Date(item.fecha).toISOString().split('T')[0],
-        periodoAplicacion: item.periodoAplicacion,
+        periodoId: periodoIdFromItem || '',
+        periodoAplicacion: item.periodoAplicacion || '',
         observaciones: item.observaciones || ''
       });
     } else {
@@ -155,7 +174,8 @@ const DescuentosIncentivosComponent: React.FC = () => {
         monto: '',
         esPorcentaje: false,
         fecha: new Date().toISOString().split('T')[0],
-        periodoAplicacion: filterPeriodo,
+        periodoId: periodosActivos.length > 0 ? (periodosActivos[0]._id || '') : '',
+        periodoAplicacion: periodosActivos.length > 0 ? (periodosActivos[0].fechaInicio ? new Date(periodosActivos[0].fechaInicio).toISOString().slice(0,7) : '') : filterPeriodo,
         observaciones: ''
       });
     }
@@ -182,11 +202,16 @@ const DescuentosIncentivosComponent: React.FC = () => {
         };
         
         if (editingItem) {
-          await dispatch(updateDescuento({ id: editingItem._id!, descuento: descuentoPayload }));
+          await dispatch(updateDescuento({ id: editingItem._id!, descuento: { ...descuentoPayload, periodoId: formData.periodoId } }));
         } else {
-          await dispatch(addDescuento(descuentoPayload as any));
+          await dispatch(addDescuento({ ...descuentoPayload, periodoId: formData.periodoId } as any));
         }
-        dispatch(fetchDescuentos({ periodoAplicacion: filterPeriodo }));
+        // Refrescar por el período donde se creó (si lo conocemos)
+        if (formData.periodoAplicacion) {
+          dispatch(fetchDescuentos({ periodoAplicacion: formData.periodoAplicacion }));
+        } else {
+          dispatch(fetchDescuentos({ periodoAplicacion: filterPeriodo }));
+        }
       } else {
         const incentivoPayload = {
           empleadoId: formData.empleadoId,
@@ -200,11 +225,16 @@ const DescuentosIncentivosComponent: React.FC = () => {
         };
         
         if (editingItem) {
-          await dispatch(updateIncentivo({ id: editingItem._id!, incentivo: incentivoPayload }));
+          await dispatch(updateIncentivo({ id: editingItem._id!, incentivo: { ...incentivoPayload, periodoId: formData.periodoId } }));
         } else {
-          await dispatch(addIncentivo(incentivoPayload as any));
+          await dispatch(addIncentivo({ ...incentivoPayload, periodoId: formData.periodoId } as any));
         }
-        dispatch(fetchIncentivos({ periodoAplicacion: filterPeriodo }));
+        // Refrescar por el período donde se creó (si lo conocemos)
+        if (formData.periodoAplicacion) {
+          dispatch(fetchIncentivos({ periodoAplicacion: formData.periodoAplicacion }));
+        } else {
+          dispatch(fetchIncentivos({ periodoAplicacion: filterPeriodo }));
+        }
       }
       handleCloseDialog();
     } catch (error) {
@@ -683,18 +713,32 @@ const DescuentosIncentivosComponent: React.FC = () => {
                 />
               </Grid>
               <Grid item xs={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Período Aplicación</InputLabel>
+                <FormControl fullWidth required>
+                  <InputLabel>Período Activo</InputLabel>
                   <Select
-                    value={formData.periodoAplicacion}
-                    label="Período Aplicación"
-                    onChange={(e) => setFormData({ ...formData, periodoAplicacion: e.target.value })}
+                    value={formData.periodoId}
+                    label="Período Activo"
+                    onChange={(e) => {
+                      const selectedId = e.target.value as string;
+                      const selectedPeriodo = periodos.find(p => p._id === selectedId);
+                      const derivedPeriodoAplicacion = selectedPeriodo && selectedPeriodo.fechaInicio ? new Date(selectedPeriodo.fechaInicio).toISOString().slice(0,7) : '';
+                      setFormData({ ...formData, periodoId: selectedId, periodoAplicacion: derivedPeriodoAplicacion });
+                    }}
                   >
-                    {generatePeriodoOptions().map((p) => (
-                      <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>
-                    ))}
+                    {periodosActivos.length === 0 && (
+                      <MenuItem value="">-- No hay períodos activos --</MenuItem>
+                    )}
+                    {periodosActivos.map((p) => {
+                      const label = `${p.nombre} (${p.tipo}) - ${new Date(p.fechaInicio).toLocaleDateString('es-ES')}`;
+                      return <MenuItem key={p._id} value={p._id}>{label}</MenuItem>;
+                    })}
                   </Select>
                 </FormControl>
+                {periodosActivos.length === 0 && (
+                  <Box sx={{ mt: 1 }}>
+                    <Alert severity="warning">No hay períodos activos. Crea o abre un período antes de agregar descuentos/incentivos vinculados a un período.</Alert>
+                  </Box>
+                )}
               </Grid>
             </Grid>
 
@@ -714,7 +758,7 @@ const DescuentosIncentivosComponent: React.FC = () => {
             onClick={handleSave}
             variant="contained"
             color={dialogType === 'descuento' ? 'error' : 'success'}
-            disabled={!formData.empleadoId || !formData.tipo || !formData.motivo || !formData.monto}
+            disabled={!formData.empleadoId || !formData.tipo || !formData.motivo || !formData.monto || !formData.periodoId || periodosActivos.length === 0}
           >
             Guardar
           </Button>

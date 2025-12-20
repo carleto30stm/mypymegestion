@@ -78,10 +78,11 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
 
   const isEditable = periodo.estado === 'abierto' && (user?.userType === 'admin' || user?.userType === 'oper_ad');
 
-  // Obtener período en formato YYYY-MM desde las fechas del período
+  // Obtener período en formato YYYY-MM desde las fechas del período (si aplica)
   const periodoMes = useMemo(() => {
     if (!periodo.fechaInicio) return '';
-    return periodo.fechaInicio.slice(0, 7); // YYYY-MM
+    const d = periodo.fechaInicio instanceof Date ? periodo.fechaInicio : new Date(periodo.fechaInicio);
+    return d.toISOString().slice(0,7); // YYYY-MM
   }, [periodo.fechaInicio]);
 
   // Cargar empleados si no están cargados
@@ -93,56 +94,87 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
 
   // Cargar descuentos e incentivos del período
   useEffect(() => {
+    // Si es quincenal, usamos periodoId para filtrar exactamente por ese periodo
+    if (periodo.tipo === 'quincenal' && periodo._id) {
+      dispatch(fetchDescuentos({ periodoId: periodo._id } as any));
+      dispatch(fetchIncentivos({ periodoId: periodo._id } as any));
+      return;
+    }
+
+    // Si es mensual u otro, filtramos por YYYY-MM derivado de la fecha de inicio
     if (periodoMes) {
-      // Traer todos los descuentos e incentivos del período (pendientes y aplicados/pagados)
       dispatch(fetchDescuentos({ periodoAplicacion: periodoMes }));
       dispatch(fetchIncentivos({ periodoAplicacion: periodoMes }));
     }
-  }, [dispatch, periodoMes]);
+  }, [dispatch, periodo.tipo, periodo._id, periodoMes]);
 
-  // Calcular descuentos e incentivos por empleado
+  // Calcular descuentos e incentivos por empleado (solo los del período correspondiente)
   const descuentosPorEmpleado = useMemo(() => {
     const map: Record<string, number> = {};
     descuentosPeriodo.forEach(d => {
-      if (d.estado === 'aplicado' || d.estado === 'pendiente') {
-        const empId = typeof d.empleadoId === 'string' ? d.empleadoId : d.empleadoId._id;
-        map[empId] = (map[empId] || 0) + (d.montoCalculado || d.monto);
-      }
+      // Filtrar por estado válido
+      if (!(d.estado === 'aplicado' || d.estado === 'pendiente')) return;
+
+      // Verificar que el registro pertenece al período actual
+      const perteneceAlPeriodo = periodo.tipo === 'quincenal'
+        ? (d.periodoId && (typeof d.periodoId === 'string' ? d.periodoId === periodo._id : (d.periodoId as any)._id === periodo._id))
+        : (d.periodoAplicacion === periodoMes);
+
+      if (!perteneceAlPeriodo) return;
+
+      const empId = typeof d.empleadoId === 'string' ? d.empleadoId : d.empleadoId._id;
+      map[empId] = (map[empId] || 0) + (d.montoCalculado || d.monto);
     });
     return map;
-  }, [descuentosPeriodo]);
+  }, [descuentosPeriodo, periodo.tipo, periodo._id, periodoMes]);
 
   const incentivosPorEmpleado = useMemo(() => {
     const map: Record<string, number> = {};
     incentivosPeriodo.forEach(i => {
-      if (i.estado === 'pagado' || i.estado === 'pendiente') {
-        const empId = typeof i.empleadoId === 'string' ? i.empleadoId : i.empleadoId._id;
-        map[empId] = (map[empId] || 0) + (i.montoCalculado || i.monto);
-      }
+      if (!(i.estado === 'pagado' || i.estado === 'pendiente')) return;
+
+      const perteneceAlPeriodo = periodo.tipo === 'quincenal'
+        ? (i.periodoId && (typeof i.periodoId === 'string' ? i.periodoId === periodo._id : (i.periodoId as any)._id === periodo._id))
+        : (i.periodoAplicacion === periodoMes);
+
+      if (!perteneceAlPeriodo) return;
+
+      const empId = typeof i.empleadoId === 'string' ? i.empleadoId : i.empleadoId._id;
+      map[empId] = (map[empId] || 0) + (i.montoCalculado || i.monto);
     });
     return map;
-  }, [incentivosPeriodo]);
+  }, [incentivosPeriodo, periodo.tipo, periodo._id, periodoMes]);
 
-  // Detalle de descuentos por empleado
+  // Detalle de descuentos por empleado (solo del período actual)
   const descuentosDetalleEmpleado = useMemo(() => {
     const map: Record<string, typeof descuentosPeriodo> = {};
     descuentosPeriodo.forEach(d => {
+      const perteneceAlPeriodo = periodo.tipo === 'quincenal'
+        ? (d.periodoId && (typeof d.periodoId === 'string' ? d.periodoId === periodo._id : (d.periodoId as any)._id === periodo._id))
+        : (d.periodoAplicacion === periodoMes);
+      if (!perteneceAlPeriodo) return;
+
       const empId = typeof d.empleadoId === 'string' ? d.empleadoId : d.empleadoId._id;
       if (!map[empId]) map[empId] = [];
       map[empId].push(d);
     });
     return map;
-  }, [descuentosPeriodo]);
+  }, [descuentosPeriodo, periodo.tipo, periodo._id, periodoMes]);
 
   const incentivosDetalleEmpleado = useMemo(() => {
     const map: Record<string, typeof incentivosPeriodo> = {};
     incentivosPeriodo.forEach(i => {
+      const perteneceAlPeriodo = periodo.tipo === 'quincenal'
+        ? (i.periodoId && (typeof i.periodoId === 'string' ? i.periodoId === periodo._id : (i.periodoId as any)._id === periodo._id))
+        : (i.periodoAplicacion === periodoMes);
+      if (!perteneceAlPeriodo) return;
+
       const empId = typeof i.empleadoId === 'string' ? i.empleadoId : i.empleadoId._id;
       if (!map[empId]) map[empId] = [];
       map[empId].push(i);
     });
     return map;
-  }, [incentivosPeriodo]);
+  }, [incentivosPeriodo, periodo.tipo, periodo._id, periodoMes]);
 
   // Filtrar empleados que no están en el período
   const empleadosDisponibles = empleados.filter(emp => 
@@ -172,10 +204,13 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
     const incentivosList = incentivosDetalleEmpleado[empId] || [];
 
     const inicialDescuentos = descuentosList
-      .filter(d => d.estado !== 'anulado')
+      .filter(d => d.estado === 'pendiente')
+      // Asegurar que pertenecen al período actual
+      .filter(d => periodo.tipo === 'quincenal' ? ((d.periodoId && (typeof d.periodoId === 'string' ? d.periodoId === periodo._id : (d.periodoId as any)._id === periodo._id))) : (d.periodoAplicacion === periodoMes))
       .map(d => (typeof d._id === 'string' ? d._id : (d._id as any).toString()));
     const inicialIncentivos = incentivosList
-      .filter(i => i.estado !== 'anulado')
+      .filter(i => i.estado === 'pendiente')
+      .filter(i => periodo.tipo === 'quincenal' ? ((i.periodoId && (typeof i.periodoId === 'string' ? i.periodoId === periodo._id : (i.periodoId as any)._id === periodo._id))) : (i.periodoAplicacion === periodoMes))
       .map(i => (typeof i._id === 'string' ? i._id : (i._id as any).toString()));
 
     setSelectedDescuentosIds(inicialDescuentos);
@@ -1002,11 +1037,11 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
                 </FormControl>
               </Box>
 
-              {/* Selección de descuentos */}
-              {selectedEmpleado && (descuentosDetalleEmpleado[selectedEmpleado.empleadoId] || []).length > 0 && (
+              {/* Selección de descuentos (solo pendientes) */}
+              {selectedEmpleado && ((descuentosDetalleEmpleado[selectedEmpleado.empleadoId] || []).filter((d: any) => d.estado === 'pendiente').length > 0) && (
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="subtitle2">Descuentos disponibles</Typography>
-                  {(descuentosDetalleEmpleado[selectedEmpleado.empleadoId] || []).map((d: any) => {
+                  {(descuentosDetalleEmpleado[selectedEmpleado.empleadoId] || []).filter((d: any) => d.estado === 'pendiente' && (periodo.tipo === 'quincenal' ? (d.periodoId && (typeof d.periodoId === 'string' ? d.periodoId === periodo._id : (d.periodoId as any)._id === periodo._id)) : (d.periodoAplicacion === periodoMes))).map((d: any) => {
                     const id = typeof d._id === 'string' ? d._id : (d._id as any).toString();
                     const monto = d.montoCalculado ?? (d.esPorcentaje ? (d.monto / 100) * (periodo.tipo === 'quincenal' ? selectedEmpleado.sueldoBase / 2 : selectedEmpleado.sueldoBase) : d.monto);
                     return (
@@ -1022,11 +1057,11 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
                 </Box>
               )}
 
-              {/* Selección de incentivos */}
-              {selectedEmpleado && (incentivosDetalleEmpleado[selectedEmpleado.empleadoId] || []).length > 0 && (
+              {/* Selección de incentivos (solo pendientes) */}
+              {selectedEmpleado && ((incentivosDetalleEmpleado[selectedEmpleado.empleadoId] || []).filter((i: any) => i.estado === 'pendiente').length > 0) && (
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="subtitle2">Incentivos disponibles</Typography>
-                  {(incentivosDetalleEmpleado[selectedEmpleado.empleadoId] || []).map((i: any) => {
+                  {(incentivosDetalleEmpleado[selectedEmpleado.empleadoId] || []).filter((i: any) => i.estado === 'pendiente' && (periodo.tipo === 'quincenal' ? (i.periodoId && (typeof i.periodoId === 'string' ? i.periodoId === periodo._id : (i.periodoId as any)._id === periodo._id)) : (i.periodoAplicacion === periodoMes))).map((i: any) => {
                     const id = typeof i._id === 'string' ? i._id : (i._id as any).toString();
                     const monto = i.montoCalculado ?? (i.esPorcentaje ? (i.monto / 100) * (periodo.tipo === 'quincenal' ? selectedEmpleado.sueldoBase / 2 : selectedEmpleado.sueldoBase) : i.monto);
                     return (

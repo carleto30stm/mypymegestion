@@ -154,15 +154,16 @@ router.post('/', async (req, res) => {
       monto,
       esPorcentaje,
       fecha,
+      periodoId,
       periodoAplicacion,
       estado,
       observaciones
     } = req.body;
 
     // Validaciones básicas
-    if (!empleadoId || !tipo || !motivo || monto === undefined || !periodoAplicacion) {
+    if (!empleadoId || !tipo || !motivo || monto === undefined || !periodoId) {
       return res.status(400).json({ 
-        message: 'Campos requeridos: empleadoId, tipo, motivo, monto, periodoAplicacion' 
+        message: 'Campos requeridos: empleadoId, tipo, motivo, monto, periodoId (período activo)'
       });
     }
 
@@ -172,10 +173,20 @@ router.post('/', async (req, res) => {
       return res.status(404).json({ message: 'Empleado no encontrado' });
     }
 
-    // Validar formato de período
-    if (!/^\d{4}-\d{2}$/.test(periodoAplicacion)) {
-      return res.status(400).json({ message: 'El período debe tener formato YYYY-MM' });
+    // Verificar que el período existe y está abierto
+    const LiquidacionPeriodo = (await import('../models/LiquidacionPeriodo.js')).default;
+    const periodoDoc = await LiquidacionPeriodo.findById(periodoId);
+    if (!periodoDoc) {
+      return res.status(404).json({ message: 'Período seleccionado no encontrado' });
     }
+    if (periodoDoc.estado !== 'abierto') {
+      return res.status(400).json({ message: 'El período seleccionado no está abierto' });
+    }
+
+    // Derivar periodoAplicacion desde la fecha de inicio del periodo
+    const derivedPeriodoAplicacion = periodoDoc.fechaInicio instanceof Date
+      ? periodoDoc.fechaInicio.toISOString().slice(0,7)
+      : new Date(periodoDoc.fechaInicio).toISOString().slice(0,7);
 
     const incentivo = new IncentivoEmpleado({
       empleadoId,
@@ -184,10 +195,11 @@ router.post('/', async (req, res) => {
       monto: Number(monto),
       esPorcentaje: esPorcentaje || false,
       fecha: fecha ? new Date(fecha) : new Date(),
-      periodoAplicacion,
+      periodoAplicacion: derivedPeriodoAplicacion,
+      periodoId,
       estado: estado || 'pendiente',
       observaciones: observaciones?.trim(),
-      creadoPor: (req as any).user?._id
+      creadoPor: (req as any).user?.username || (req as any).user?._id
     });
 
     const savedIncentivo = await incentivo.save();
@@ -237,6 +249,7 @@ router.put('/:id', async (req, res) => {
       esPorcentaje,
       fecha,
       periodoAplicacion,
+      periodoId,
       estado,
       observaciones
     } = req.body;
@@ -246,12 +259,21 @@ router.put('/:id', async (req, res) => {
     if (monto !== undefined) incentivo.monto = Number(monto);
     if (esPorcentaje !== undefined) incentivo.esPorcentaje = esPorcentaje;
     if (fecha) incentivo.fecha = new Date(fecha);
-    if (periodoAplicacion) {
+
+    if (periodoId) {
+      const LiquidacionPeriodo = (await import('../models/LiquidacionPeriodo.js')).default;
+      const periodoDoc = await LiquidacionPeriodo.findById(periodoId);
+      if (!periodoDoc) return res.status(404).json({ message: 'Período seleccionado no encontrado' });
+      if (periodoDoc.estado !== 'abierto') return res.status(400).json({ message: 'El período seleccionado no está abierto' });
+      incentivo.periodoId = periodoId;
+      incentivo.periodoAplicacion = periodoDoc.fechaInicio instanceof Date ? periodoDoc.fechaInicio.toISOString().slice(0,7) : new Date(periodoDoc.fechaInicio).toISOString().slice(0,7);
+    } else if (periodoAplicacion) {
       if (!/^\d{4}-\d{2}$/.test(periodoAplicacion)) {
         return res.status(400).json({ message: 'El período debe tener formato YYYY-MM' });
       }
       incentivo.periodoAplicacion = periodoAplicacion;
     }
+
     if (estado) incentivo.estado = estado;
     if (observaciones !== undefined) incentivo.observaciones = observaciones?.trim();
 

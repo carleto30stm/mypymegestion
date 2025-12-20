@@ -8,7 +8,15 @@ export interface IDescuentoEmpleado extends mongoose.Document {
   esPorcentaje: boolean; // Si es true, monto representa un % del sueldo base
   fecha: Date;
   periodoAplicacion: string; // YYYY-MM
+  // Referencia opcional al periodo (LiquidacionPeriodo) específico (por ejemplo 1ª quincena / 2ª quincena)
+  periodoId?: mongoose.Types.ObjectId;
   estado: 'pendiente' | 'aplicado' | 'anulado';
+
+  // Metadatos de aplicación
+  aplicadoEnLiquidacionId?: mongoose.Types.ObjectId;
+  fechaAplicacion?: Date;
+  aplicadoPor?: string;
+
   observaciones?: string;
   montoCalculado?: number; // Campo virtual para el monto real calculado
   creadoPor?: mongoose.Types.ObjectId;
@@ -52,11 +60,23 @@ const descuentoEmpleadoSchema = new mongoose.Schema<IDescuentoEmpleado>({
     required: [true, 'El período de aplicación es requerido'],
     match: [/^\d{4}-\d{2}$/, 'El período debe tener formato YYYY-MM']
   },
+  // Referencia opcional al periodo (LiquidacionPeriodo) específico (por ejemplo 1ª quincena / 2ª quincena)
+  periodoId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'LiquidacionPeriodo'
+  },
   estado: {
     type: String,
     enum: ['pendiente', 'aplicado', 'anulado'],
     default: 'pendiente'
   },
+  // Metadatos de aplicación
+  aplicadoEnLiquidacionId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'LiquidacionPeriodo'
+  },
+  fechaAplicacion: { type: Date },
+  aplicadoPor: { type: String },
   observaciones: {
     type: String,
     trim: true,
@@ -84,8 +104,10 @@ const descuentoEmpleadoSchema = new mongoose.Schema<IDescuentoEmpleado>({
 // Índices para búsqueda eficiente
 descuentoEmpleadoSchema.index({ empleadoId: 1 });
 descuentoEmpleadoSchema.index({ periodoAplicacion: 1 });
+descuentoEmpleadoSchema.index({ periodoId: 1 });
 descuentoEmpleadoSchema.index({ estado: 1 });
 descuentoEmpleadoSchema.index({ empleadoId: 1, periodoAplicacion: 1 });
+descuentoEmpleadoSchema.index({ aplicadoEnLiquidacionId: 1 });
 
 // Tipos de descuento con descripciones para el frontend
 export const TIPOS_DESCUENTO = {
