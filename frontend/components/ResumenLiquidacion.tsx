@@ -81,7 +81,7 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
   // Obtener período en formato YYYY-MM desde las fechas del período (si aplica)
   const periodoMes = useMemo(() => {
     if (!periodo.fechaInicio) return '';
-    const d = periodo.fechaInicio instanceof Date ? periodo.fechaInicio : new Date(periodo.fechaInicio);
+    const d = typeof periodo.fechaInicio === 'string' ? new Date(periodo.fechaInicio) : periodo.fechaInicio;
     return d.toISOString().slice(0,7); // YYYY-MM
   }, [periodo.fechaInicio]);
 
