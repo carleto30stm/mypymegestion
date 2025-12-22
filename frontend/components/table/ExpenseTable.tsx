@@ -18,7 +18,8 @@ import {
   InputAdornment,
   Stack,
   ToggleButtonGroup,
-  ToggleButton
+  ToggleButton,
+  Tooltip
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/DeleteOutlined';
@@ -334,6 +335,21 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
         if (row.tipoOperacion === 'transferencia') return '';
         return value || '';
       } },
+    // Nueva columna: Saldo por Caja/Banco (saldo resultante despues del movimiento)
+    { field: 'saldo', headerName: 'Saldo', width: 140,
+      renderCell: (params) => {
+        const gasto = params.row as Gasto;
+        const saldo = gastosConSaldoMap[gasto._id as string] ?? 0;
+        const bancoDisplay = gasto.tipoOperacion === 'transferencia' ? (gasto.cuentaDestino || gasto.cuentaOrigen) : (gasto.banco || '');
+        return (
+          <Tooltip title={bancoDisplay ? `Caja: ${bancoDisplay}` : ''}>
+            <Typography variant="body2" sx={{ fontWeight: 600, color: saldo >= 0 ? 'success.main' : 'error.main' }}>
+              {formatCurrencyWithSymbol(saldo)}
+            </Typography>
+          </Tooltip>
+        );
+      }
+    },
   ];
 
   // Solo agregar columna de acciones si el usuario puede ver acciones
@@ -432,8 +448,58 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
     });
   }
 
-  // Función de filtrado con useMemo para optimizar rendimiento
-  const gastosFiltered = useMemo(() => {
+  // Calcular saldos acumulados por caja/banco y luego filtrar con useMemo para optimizar rendimiento
+  const { gastosConSaldoMap, gastosFiltered } = useMemo(() => {
+    // Copia de gastos ordenada ascendentemente para calcular corridas (más antiguo primero)
+    const sortedAsc = [...gastos].sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+
+    // Mapa de saldos por banco (caja)
+    const saldoPorBanco: Record<string, number> = {};
+    // Mapa de saldo resultante por gasto id
+    const saldoPorGasto: Record<string, number> = {};
+
+    for (const g of sortedAsc) {
+      // Determinar comportamiento según tipo de operación
+      const tipo = g.tipoOperacion;
+
+      // Helper para sumar/restar en una cuenta
+      const addToBank = (bank: string | undefined, amount: number) => {
+        if (!bank) return;
+        saldoPorBanco[bank] = (saldoPorBanco[bank] || 0) + amount;
+      };
+
+      // Si es transferencia, restar de origen y sumar a destino
+      if (tipo === 'transferencia') {
+        const monto = Number(g.montoTransferencia) || 0;
+        const origen = g.cuentaOrigen;
+        const destino = g.cuentaDestino;
+        if (monto) {
+          if (origen) addToBank(origen, -monto);
+          if (destino) addToBank(destino, monto);
+        }
+        // Mostrar saldo de la cuenta destino si existe, sino origen
+        const keyView = destino || origen || '';
+        saldoPorGasto[g._id as string] = keyView ? (saldoPorBanco[keyView] || 0) : 0;
+        continue;
+      }
+
+      // Para cheques no confirmados: NO impactan el saldo de caja todavía
+      const isCheque = g.medioDePago?.toUpperCase().includes('CHEQUE');
+      const incluirCheque = !isCheque || !!g.confirmado;
+
+      const bank = g.banco;
+      if (tipo === 'entrada' && incluirCheque) {
+        addToBank(bank, Number(g.entrada) || 0);
+      } else if (tipo === 'salida' && incluirCheque) {
+        addToBank(bank, -(Number(g.salida) || 0));
+      }
+
+      // Registrar saldo actual para este gasto usando la cuenta asociada
+      const keyView = bank || '';
+      saldoPorGasto[g._id as string] = keyView ? (saldoPorBanco[keyView] || 0) : 0;
+    }
+
+    // Ahora aplicar filtros sobre la lista completa (misma lógica que antes)
     let filtered = [...gastos];
 
     // Filtrar por estado
@@ -481,7 +547,10 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
       return dateB - dateA; // DESC
     });
 
-    return filtered;
+    return {
+      gastosConSaldoMap: saldoPorGasto,
+      gastosFiltered: filtered
+    };
   }, [gastos, estadoFilter, tipoOperacionFilter, searchText]);
 
   return (
@@ -489,6 +558,9 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
         <Box sx={{p: 2, borderBottom: '1px solid #ddd' }}>
             <Typography variant="h5" component="h2" gutterBottom>
                 Dashboard de Gastos
+            </Typography>
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+              El campo <strong>Saldo</strong> muestra el saldo acumulado por caja después de cada movimiento (los cheques no confirmados no afectan el saldo).
             </Typography>
             
             {/* Filtros rápidos */}

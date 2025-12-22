@@ -386,64 +386,6 @@ const Sidebar: React.FC<SidebarProps> = ({
         </ListItem>
       </List>
       <Divider />
-      
-      {/* Acciones específicas del dashboard */}
-      {(location.pathname === '/' || location.pathname === '/dashboard' || location.pathname === '/gastos') && (
-        <>
-          <List>
-            {canCreate && onAddNew && (
-              <ListItem disablePadding>
-                <ListItemButton onClick={onAddNew}>
-                  <ListItemIcon>
-                    <AddCircleOutlineIcon />
-                  </ListItemIcon>
-                  <ListItemText primary="Agregar Registro" />
-                </ListItemButton>
-              </ListItem>
-            )}
-            {onToggleBankSummary && (
-              <ListItem disablePadding>
-                <ListItemButton onClick={onToggleBankSummary}>
-                  <ListItemIcon>
-                    <AccountBalanceIcon />
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary={showBankSummary ? "Ocultar Resumen Bancos" : "Mostrar Resumen Bancos"} 
-                  />
-                </ListItemButton>
-              </ListItem>
-            )}
-            {onTogglePendingChecks && (
-              <ListItem disablePadding>
-                <ListItemButton onClick={onTogglePendingChecks}>
-                  <ListItemIcon>
-                    <ReceiptIcon />
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary={showPendingChecks ? "Ocultar Cheques Pendientes" : "Mostrar Cheques Pendientes"} 
-                  />
-                </ListItemButton>
-              </ListItem>
-            )}
-
-            {/* Toggle Cheques Disponibles */}
-            {onToggleChequesDisponibles && (
-              <ListItem disablePadding>
-                <ListItemButton onClick={onToggleChequesDisponibles}>
-                  <ListItemIcon>
-                    <ReceiptIcon color={showChequesDisponibles ? "primary" : "action"} />
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary={showChequesDisponibles ? "Ocultar Cheques Disponibles" : "Mostrar Cheques Disponibles"} 
-                  />
-                </ListItemButton>
-              </ListItem>
-            )}
-          </List>
-          <Divider />
-        </>
-      )}
-      
       <List>
         <ListItem disablePadding>
             <ListItemButton onClick={handleLogout}>

@@ -4,7 +4,7 @@ import { useOutletContext } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
-import { 
+import {
   Paper,
   ToggleButton,
   ToggleButtonGroup,
@@ -12,8 +12,14 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Typography
+  Typography,
+  IconButton,
+  Tooltip,
+  Menu,
+  Switch,
 } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 import ExpenseTable from '../components/table/ExpenseTable';
 import BankSummary from '../components/BankSummary';
 import PendingChecks from '../components/PendingChecks';
@@ -36,12 +42,18 @@ const DashboardPage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { error, lastUpdated } = useSelector((state: RootState) => state.gastos);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
-  
+  const [toggleAnchorEl, setToggleAnchorEl] = useState<null | HTMLElement>(null);
+  const handleOpenToggleMenu = (e: React.MouseEvent<HTMLElement>) => setToggleAnchorEl(e.currentTarget);
+  const handleCloseToggleMenu = () => setToggleAnchorEl(null);
+
   // Obtener estados del Layout a través del contexto
   const { 
     showBankSummary, 
     showPendingChecks, 
-    showChequesDisponibles 
+    showChequesDisponibles,
+    onToggleBankSummary,
+    onTogglePendingChecks,
+    onToggleChequesDisponibles
   } = useOutletContext<LayoutContextType>();
 
   // Estados para filtros unificados
@@ -343,6 +355,47 @@ const DashboardPage: React.FC = () => {
                 </Select>
               </FormControl>
             )}
+            <Box sx={{ marginLeft: 'auto', display: 'flex', gap: 1, alignItems: 'center' }}>
+              <Tooltip title="Agregar gasto">
+                <IconButton color="primary" onClick={handleAddNew} size="small">
+                  <AddIcon />
+                  <Typography variant="button" sx={{ ml: 0.5 }}>Agregar</Typography>
+                </IconButton>
+              </Tooltip>
+
+              <Tooltip title="Mostrar/Ocultar paneles">
+                <IconButton onClick={handleOpenToggleMenu} size="small">
+                  <VisibilityIcon />
+                </IconButton>
+              </Tooltip>
+
+              <Menu
+                anchorEl={toggleAnchorEl}
+                open={Boolean(toggleAnchorEl)}
+                onClose={handleCloseToggleMenu}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+              >
+                <MenuItem>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: 240 }}>
+                    <Typography variant="body2">Resumen Bancos</Typography>
+                    <Switch checked={showBankSummary} onChange={() => { onToggleBankSummary(); }} />
+                  </Box>
+                </MenuItem>
+                <MenuItem>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: 240 }}>
+                    <Typography variant="body2">Cheques Pendientes</Typography>
+                    <Switch checked={showPendingChecks} onChange={() => { onTogglePendingChecks(); }} />
+                  </Box>
+                </MenuItem>
+                <MenuItem>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: 240 }}>
+                    <Typography variant="body2">Cheques Disponibles</Typography>
+                    <Switch checked={showChequesDisponibles} onChange={() => { onToggleChequesDisponibles(); }} />
+                  </Box>
+                </MenuItem>
+              </Menu>
+            </Box>
           </Box>
         </Paper>
 
