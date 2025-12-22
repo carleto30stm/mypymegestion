@@ -333,14 +333,46 @@ const BankSummary: React.FC<BankSummaryProps> = ({
         }
       }
       
-      // 4. Detalle de Transacciones (con estado de cheques)
+      // 4. Detalle de Transacciones (con estado de cheques) + columna SALDO (running balance por caja)
       pdf.setFontSize(14);
       pdf.text('Detalle de Transacciones', 20, yPosition);
       yPosition += 10;
-      
+
+      // Calcular saldos acumulados por banco (solo con los gastos incluidos en gastosActivos)
+      const sortedTransAsc = [...gastosActivos].sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+      const saldoPorBancoTmp: Record<string, number> = {};
+      const saldoPorGasto: Record<string, number> = {};
+
+      for (const g of sortedTransAsc) {
+        // Handle transferencias: restar origen y sumar destino
+        if (g.tipoOperacion === 'transferencia') {
+          const monto = Number(g.montoTransferencia) || 0;
+          const origen = g.cuentaOrigen;
+          const destino = g.cuentaDestino;
+          if (monto) {
+            if (origen) saldoPorBancoTmp[origen] = (saldoPorBancoTmp[origen] || 0) - monto;
+            if (destino) saldoPorBancoTmp[destino] = (saldoPorBancoTmp[destino] || 0) + monto;
+          }
+          const keyView = destino || origen || '';
+          saldoPorGasto[g._id] = keyView ? (saldoPorBancoTmp[keyView] || 0) : 0;
+          continue;
+        }
+
+        // Cheques ya fueron filtrados en gastosActivos: aquí todos los cheques son confirmados
+        const bank = g.banco || '';
+
+        if (g.tipoOperacion === 'entrada') {
+          saldoPorBancoTmp[bank] = (saldoPorBancoTmp[bank] || 0) + (Number(g.entrada) || 0);
+        } else if (g.tipoOperacion === 'salida') {
+          saldoPorBancoTmp[bank] = (saldoPorBancoTmp[bank] || 0) - (Number(g.salida) || 0);
+        }
+
+        saldoPorGasto[g._id] = bank ? (saldoPorBancoTmp[bank] || 0) : 0;
+      }
+
       const transactionTableData = gastosActivos.map(gasto => {
         let estadoInfo = '';
-        
+
         // Agregar información de estado para cheques
         if (gasto.medioDePago?.toUpperCase().includes('CHEQUE')) {
           if (gasto.confirmado) {
@@ -361,7 +393,9 @@ const BankSummary: React.FC<BankSummaryProps> = ({
             estadoInfo = 'PENDIENTE';
           }
         }
-        
+
+        const saldo = saldoPorGasto[gasto._id] ?? 0;
+
         return [
           new Date(gasto.fecha).toLocaleDateString('es-ES'),
           gasto.rubro,
@@ -370,13 +404,14 @@ const BankSummary: React.FC<BankSummaryProps> = ({
           `${gasto.banco}${estadoInfo ? ` (${estadoInfo})` : ''}`,
           gasto.medioDePago || '-',
           gasto.entrada ? `$${gasto.entrada.toLocaleString('es-AR')}` : '-',
-          gasto.salida ? `$${gasto.salida.toLocaleString('es-AR')}` : '-'
+          gasto.salida ? `$${gasto.salida.toLocaleString('es-AR')}` : '-',
+          formatCurrencyWithSymbol(saldo)
         ];
       });
-      
+
       autoTable(pdf, {
         startY: yPosition,
-        head: [['Fecha', 'Rubro', 'Sub-Rubro', 'Detalle', 'Cuenta', 'Medio Pago', 'Entrada', 'Salida']],
+        head: [['Fecha', 'Rubro', 'Sub-Rubro', 'Detalle', 'Cuenta', 'Medio Pago', 'Entrada', 'Salida', 'Saldo']],
         body: transactionTableData,
         theme: 'grid',
         styles: { fontSize: 7 },
@@ -386,7 +421,8 @@ const BankSummary: React.FC<BankSummaryProps> = ({
           4: { cellWidth: 25 }, // Cuenta column
           5: { cellWidth: 20 }, // Medio Pago column
           6: { halign: 'right', cellWidth: 18 }, // Entrada alignment
-          7: { halign: 'right', cellWidth: 18 }  // Salida alignment
+          7: { halign: 'right', cellWidth: 18 }, // Salida alignment
+          8: { halign: 'right', cellWidth: 18 }  // Saldo alignment
         }
       });
 
