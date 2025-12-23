@@ -80,8 +80,13 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
 
   // Obtener período en formato YYYY-MM desde las fechas del período (si aplica)
   const periodoMes = useMemo(() => {
-    if (!periodo.fechaInicio) return '';
-    const d = typeof periodo.fechaInicio === 'string' ? new Date(periodo.fechaInicio) : periodo.fechaInicio;
+    const raw = periodo?.fechaInicio;
+    if (!raw) return '';
+
+    // `fechaInicio` está tipado como string en `LiquidacionPeriodo` — parseamos y validamos
+    const d = new Date(raw);
+    if (isNaN(d.getTime())) return '';
+
     return d.toISOString().slice(0,7); // YYYY-MM
   }, [periodo.fechaInicio]);
 
@@ -112,18 +117,29 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
   const descuentosPorEmpleado = useMemo(() => {
     const map: Record<string, number> = {};
     descuentosPeriodo.forEach(d => {
+      if (!d) return;
       // Filtrar por estado válido
       if (!(d.estado === 'aplicado' || d.estado === 'pendiente')) return;
 
       // Verificar que el registro pertenece al período actual
-      const perteneceAlPeriodo = periodo.tipo === 'quincenal'
-        ? (d.periodoId && (typeof d.periodoId === 'string' ? d.periodoId === periodo._id : (d.periodoId as any)._id === periodo._id))
-        : (d.periodoAplicacion === periodoMes);
+      let perteneceAlPeriodo = false;
+      if (periodo.tipo === 'quincenal') {
+        if (d.periodoId) {
+          if (typeof d.periodoId === 'string') perteneceAlPeriodo = d.periodoId === periodo._id;
+          else if ((d.periodoId as any)?._id) perteneceAlPeriodo = (d.periodoId as any)._id === periodo._id;
+        }
+      } else {
+        perteneceAlPeriodo = d.periodoAplicacion === periodoMes;
+      }
 
       if (!perteneceAlPeriodo) return;
 
-      const empId = typeof d.empleadoId === 'string' ? d.empleadoId : d.empleadoId._id;
-      map[empId] = (map[empId] || 0) + (d.montoCalculado || d.monto);
+      // Obtener empleadoId de forma segura
+      const empId = typeof d.empleadoId === 'string' ? d.empleadoId : ((d.empleadoId && (d.empleadoId as any)._id) ? ((typeof (d.empleadoId as any)._id === 'string') ? (d.empleadoId as any)._id : (d.empleadoId as any)._id.toString()) : undefined);
+      if (!empId) return;
+
+      const monto = d.montoCalculado ?? d.monto ?? 0;
+      map[empId] = (map[empId] || 0) + monto;
     });
     return map;
   }, [descuentosPeriodo, periodo.tipo, periodo._id, periodoMes]);
@@ -131,16 +147,26 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
   const incentivosPorEmpleado = useMemo(() => {
     const map: Record<string, number> = {};
     incentivosPeriodo.forEach(i => {
+      if (!i) return;
       if (!(i.estado === 'pagado' || i.estado === 'pendiente')) return;
 
-      const perteneceAlPeriodo = periodo.tipo === 'quincenal'
-        ? (i.periodoId && (typeof i.periodoId === 'string' ? i.periodoId === periodo._id : (i.periodoId as any)._id === periodo._id))
-        : (i.periodoAplicacion === periodoMes);
+      let perteneceAlPeriodo = false;
+      if (periodo.tipo === 'quincenal') {
+        if (i.periodoId) {
+          if (typeof i.periodoId === 'string') perteneceAlPeriodo = i.periodoId === periodo._id;
+          else if ((i.periodoId as any)?._id) perteneceAlPeriodo = (i.periodoId as any)._id === periodo._id;
+        }
+      } else {
+        perteneceAlPeriodo = i.periodoAplicacion === periodoMes;
+      }
 
       if (!perteneceAlPeriodo) return;
 
-      const empId = typeof i.empleadoId === 'string' ? i.empleadoId : i.empleadoId._id;
-      map[empId] = (map[empId] || 0) + (i.montoCalculado || i.monto);
+      const empId = typeof i.empleadoId === 'string' ? i.empleadoId : ((i.empleadoId && (i.empleadoId as any)._id) ? ((typeof (i.empleadoId as any)._id === 'string') ? (i.empleadoId as any)._id : (i.empleadoId as any)._id.toString()) : undefined);
+      if (!empId) return;
+
+      const monto = i.montoCalculado ?? i.monto ?? 0;
+      map[empId] = (map[empId] || 0) + monto;
     });
     return map;
   }, [incentivosPeriodo, periodo.tipo, periodo._id, periodoMes]);
@@ -149,12 +175,22 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
   const descuentosDetalleEmpleado = useMemo(() => {
     const map: Record<string, typeof descuentosPeriodo> = {};
     descuentosPeriodo.forEach(d => {
-      const perteneceAlPeriodo = periodo.tipo === 'quincenal'
-        ? (d.periodoId && (typeof d.periodoId === 'string' ? d.periodoId === periodo._id : (d.periodoId as any)._id === periodo._id))
-        : (d.periodoAplicacion === periodoMes);
+      if (!d) return;
+
+      let perteneceAlPeriodo = false;
+      if (periodo.tipo === 'quincenal') {
+        if (d.periodoId) {
+          if (typeof d.periodoId === 'string') perteneceAlPeriodo = d.periodoId === periodo._id;
+          else if ((d.periodoId as any)?._id) perteneceAlPeriodo = (d.periodoId as any)._id === periodo._id;
+        }
+      } else {
+        perteneceAlPeriodo = d.periodoAplicacion === periodoMes;
+      }
       if (!perteneceAlPeriodo) return;
 
-      const empId = typeof d.empleadoId === 'string' ? d.empleadoId : d.empleadoId._id;
+      const empId = typeof d.empleadoId === 'string' ? d.empleadoId : ((d.empleadoId && (d.empleadoId as any)._id) ? ((typeof (d.empleadoId as any)._id === 'string') ? (d.empleadoId as any)._id : (d.empleadoId as any)._id.toString()) : undefined);
+      if (!empId) return;
+
       if (!map[empId]) map[empId] = [];
       map[empId].push(d);
     });
@@ -164,12 +200,22 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
   const incentivosDetalleEmpleado = useMemo(() => {
     const map: Record<string, typeof incentivosPeriodo> = {};
     incentivosPeriodo.forEach(i => {
-      const perteneceAlPeriodo = periodo.tipo === 'quincenal'
-        ? (i.periodoId && (typeof i.periodoId === 'string' ? i.periodoId === periodo._id : (i.periodoId as any)._id === periodo._id))
-        : (i.periodoAplicacion === periodoMes);
+      if (!i) return;
+
+      let perteneceAlPeriodo = false;
+      if (periodo.tipo === 'quincenal') {
+        if (i.periodoId) {
+          if (typeof i.periodoId === 'string') perteneceAlPeriodo = i.periodoId === periodo._id;
+          else if ((i.periodoId as any)?._id) perteneceAlPeriodo = (i.periodoId as any)._id === periodo._id;
+        }
+      } else {
+        perteneceAlPeriodo = i.periodoAplicacion === periodoMes;
+      }
       if (!perteneceAlPeriodo) return;
 
-      const empId = typeof i.empleadoId === 'string' ? i.empleadoId : i.empleadoId._id;
+      const empId = typeof i.empleadoId === 'string' ? i.empleadoId : ((i.empleadoId && (i.empleadoId as any)._id) ? ((typeof (i.empleadoId as any)._id === 'string') ? (i.empleadoId as any)._id : (i.empleadoId as any)._id.toString()) : undefined);
+      if (!empId) return;
+
       if (!map[empId]) map[empId] = [];
       map[empId].push(i);
     });

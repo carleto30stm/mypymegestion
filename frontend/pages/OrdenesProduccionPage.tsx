@@ -191,6 +191,7 @@ interface VentaPendiente {
     nombreProducto: string;
     cantidad: number;
     precioUnitario: number;
+    tieneReceta?: boolean;
   }>;
   totalItemsProducir: number;
   total: number;
@@ -1115,7 +1116,7 @@ const OrdenesProduccionPage: React.FC = () => {
               <>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                   <Typography variant="subtitle1">
-                    Ventas confirmadas con productos para producir: {ventasPendientes.length}
+                    Pedidos para Producción (ventas confirmadas): {ventasPendientes.length}
                   </Typography>
                   <Box sx={{ display: 'flex', gap: 1 }}>
                     <Button
@@ -1231,7 +1232,14 @@ const OrdenesProduccionPage: React.FC = () => {
                                         {venta.itemsParaProducir.map((item, idx) => (
                                           <TableRow key={idx}>
                                             <TableCell>{item.codigoProducto}</TableCell>
-                                            <TableCell>{item.nombreProducto}</TableCell>
+                                            <TableCell>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                              <Typography>{item.nombreProducto}</Typography>
+                                              {!item.tieneReceta && (
+                                                <Chip size="small" label="Sin receta" color="error" sx={{ ml: 1 }} />
+                                              )}
+                                            </Box>
+                                          </TableCell>
                                             <TableCell align="right">{item.cantidad}</TableCell>
                                             <TableCell align="right">
                                               {formatearMoneda(item.precioUnitario)}
@@ -1464,9 +1472,14 @@ const OrdenesProduccionPage: React.FC = () => {
                                 <Typography variant="caption" display="block">
                                   Cliente: {venta.nombreCliente}
                                 </Typography>
-                                <Typography variant="caption" color="primary">
-                                  Productos: {venta.itemsParaProducir.map(i => `${i.nombreProducto} (${i.cantidad})`).join(', ')}
-                                </Typography>
+                                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                                  <Typography variant="caption" color="primary">
+                                    Productos: {venta.itemsParaProducir.map(i => `${i.nombreProducto} (${i.cantidad})`).join(', ')}
+                                  </Typography>
+                                  {venta.itemsParaProducir.some((i:any) => !i.tieneReceta) && (
+                                    <Chip size="small" label="Hay productos sin receta" color="error" />
+                                  )}
+                                </Box>
                               </Box>
                             }
                           />
