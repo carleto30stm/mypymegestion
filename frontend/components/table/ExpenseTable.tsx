@@ -450,25 +450,38 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
 
   // Calcular saldos acumulados por caja/banco y luego filtrar con useMemo para optimizar rendimiento
   const { gastosConSaldoMap, gastosFiltered } = useMemo(() => {
-    // Copia de gastos ordenada ascendentemente para calcular corridas (más antiguo primero)
-    const sortedAsc = [...gastos].sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+    // Reglas de inclusión para los cálculos de saldo (coinciden con BankSummary):
+    // - Excluir gastos cancelados
+    // - Excluir cheques no confirmados
+    // - Excluir gastos con fechaStandBy > today
+    const gastosParaSaldo = [...gastos].filter(g => {
+      if (!g) return false;
+      if (g.estado === 'cancelado') return false;
+      const isCheque = g.medioDePago?.toUpperCase().includes('CHEQUE');
+      if (isCheque && !g.confirmado) return false;
+      if (g.fechaStandBy) {
+        const fechaStandBy = new Date(g.fechaStandBy).toISOString().split('T')[0];
+        if (fechaStandBy > today) return false;
+      }
+      return true;
+    });
+
+    // Orden ascendente por fecha para calcular running balances (más antiguo primero)
+    const sortedAsc = gastosParaSaldo.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
 
     // Mapa de saldos por banco (caja)
     const saldoPorBanco: Record<string, number> = {};
-    // Mapa de saldo resultante por gasto id
+    // Mapa de saldo resultante por gasto id (solo para los gastos incluidos)
     const saldoPorGasto: Record<string, number> = {};
 
     for (const g of sortedAsc) {
-      // Determinar comportamiento según tipo de operación
       const tipo = g.tipoOperacion;
 
-      // Helper para sumar/restar en una cuenta
       const addToBank = (bank: string | undefined, amount: number) => {
         if (!bank) return;
         saldoPorBanco[bank] = (saldoPorBanco[bank] || 0) + amount;
       };
 
-      // Si es transferencia, restar de origen y sumar a destino
       if (tipo === 'transferencia') {
         const monto = Number(g.montoTransferencia) || 0;
         const origen = g.cuentaOrigen;
@@ -477,29 +490,22 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
           if (origen) addToBank(origen, -monto);
           if (destino) addToBank(destino, monto);
         }
-        // Mostrar saldo de la cuenta destino si existe, sino origen
         const keyView = destino || origen || '';
         saldoPorGasto[g._id as string] = keyView ? (saldoPorBanco[keyView] || 0) : 0;
         continue;
       }
 
-      // Para cheques no confirmados: NO impactan el saldo de caja todavía
-      const isCheque = g.medioDePago?.toUpperCase().includes('CHEQUE');
-      const incluirCheque = !isCheque || !!g.confirmado;
-
       const bank = g.banco;
-      if (tipo === 'entrada' && incluirCheque) {
+      if (tipo === 'entrada') {
         addToBank(bank, Number(g.entrada) || 0);
-      } else if (tipo === 'salida' && incluirCheque) {
+      } else if (tipo === 'salida') {
         addToBank(bank, -(Number(g.salida) || 0));
       }
 
-      // Registrar saldo actual para este gasto usando la cuenta asociada
-      const keyView = bank || '';
-      saldoPorGasto[g._id as string] = keyView ? (saldoPorBanco[keyView] || 0) : 0;
+      saldoPorGasto[g._id as string] = bank ? (saldoPorBanco[bank] || 0) : 0;
     }
 
-    // Ahora aplicar filtros sobre la lista completa (misma lógica que antes)
+    // Ahora aplicar filtros sobre la lista completa para la vista (misma lógica que antes)
     let filtered = [...gastos];
 
     // Filtrar por estado
@@ -527,7 +533,7 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
         const banco = g.banco?.toLowerCase() || '';
         const numeroCheque = g.numeroCheque?.toLowerCase() || '';
         const comentario = g.comentario?.toLowerCase() || '';
-        
+
         return (
           rubro.includes(search) ||
           subRubro.includes(search) ||
@@ -547,11 +553,25 @@ const ExpenseTable: React.FC<ExpenseTableProps> = ({
       return dateB - dateA; // DESC
     });
 
+    // Para gastos que no están incluidos en los cálculos (ej. cancelados), mostrar el saldo actual de la cuenta si existe
+    const gastosConSaldoFinal: Record<string, number> = { ...saldoPorGasto };
+    for (const g of gastos) {
+      if (!g._id) continue; // Saltar si el ID no existe
+      if (!(g._id in gastosConSaldoFinal)) {
+        const bankKey = g.tipoOperacion === 'transferencia' ? (g.cuentaDestino || g.cuentaOrigen) : (g.banco || '');
+        if (bankKey) {
+          gastosConSaldoFinal[g._id] = saldoPorBanco[bankKey] || 0;
+        } else {
+          gastosConSaldoFinal[g._id] = 0;
+        }
+      }
+    }
+
     return {
-      gastosConSaldoMap: saldoPorGasto,
+      gastosConSaldoMap: gastosConSaldoFinal,
       gastosFiltered: filtered
     };
-  }, [gastos, estadoFilter, tipoOperacionFilter, searchText]);
+  }, [gastos, estadoFilter, tipoOperacionFilter, searchText, today]);
 
   return (
     <Paper sx={{ height: 'calc(100vh - 280px)', width: '100%' }}>
