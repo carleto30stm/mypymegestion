@@ -1137,7 +1137,7 @@ export const getVentasSinFacturar = async (req: ExpressRequest, res: ExpressResp
     }
 };
 
-// @desc    Obtener ventas confirmadas pendientes de producción (para generar notas de pedido)
+// @desc    Obtener ventas confirmadas/cobradas/entregadas (Pedidos para producción). Devuelve todos los items y marca si cada item tiene receta activa.
 // @route   GET /api/ventas/pendientes-produccion
 // @access  Private
 export const getVentasPendientesProduccion = async (req: ExpressRequest, res: ExpressResponse) => {
@@ -1145,38 +1145,35 @@ export const getVentasPendientesProduccion = async (req: ExpressRequest, res: Ex
         // Importar Receta dinámicamente para evitar problemas de dependencia circular
         const Receta = (await import('../models/Receta.js')).default;
         
-        // Obtener todas las recetas activas para saber qué productos se pueden producir
+        // Obtener todas las recetas activas para saber qué productos tienen receta
         const recetasActivas = await Receta.find({ estado: 'activa' }).select('productoId codigoProducto nombreProducto');
         const productosConReceta = new Set(recetasActivas.map(r => r.productoId.toString()));
         
-        // Buscar ventas confirmadas (no pendientes, no anuladas)
+        // Buscar ventas confirmadas (excluir ventas que ya fueron cobradas o entregadas)
         const ventas = await Venta.find({
             $or: [
                 { estado: 'confirmada' },
-                { estadoGranular: { $in: ['confirmada', 'cobrada', 'entregada'] } }
+                { estadoGranular: { $in: ['confirmada'] } }
             ]
         })
         .populate('clienteId', 'nombre apellido razonSocial numeroDocumento telefono direccion')
         .sort({ fecha: -1 });
         
-        // Filtrar ventas que tienen al menos un producto con receta
-        // y agregar info de qué productos necesitan producción
-        const ventasConProduccion = ventas
-            .map(venta => {
-                const ventaObj = venta.toObject();
-                const itemsParaProducir = ventaObj.items.filter((item: any) => 
-                    productosConReceta.has(item.productoId?.toString())
-                );
-                
-                if (itemsParaProducir.length === 0) return null;
-                
-                return {
-                    ...ventaObj,
-                    itemsParaProducir,
-                    totalItemsProducir: itemsParaProducir.reduce((sum: number, item: any) => sum + item.cantidad, 0)
-                };
-            })
-            .filter(v => v !== null);
+        // Incluir todas las ventas (no requerimos que tengan productos con receta).
+        // Para cada item incluimos un flag 'tieneReceta' para que el frontend lo muestre.
+        const ventasConProduccion = ventas.map(venta => {
+            const ventaObj = venta.toObject();
+            const itemsParaProducir = ventaObj.items.map((item: any) => ({
+                ...item,
+                tieneReceta: productosConReceta.has(item.productoId?.toString())
+            }));
+
+            return {
+                ...ventaObj,
+                itemsParaProducir,
+                totalItemsProducir: itemsParaProducir.reduce((sum: number, item: any) => sum + (item.cantidad || 0), 0)
+            };
+        });
         
         // También devolver un resumen agrupado por producto
         const resumenPorProducto: Record<string, {
