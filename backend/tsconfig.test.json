@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "types": ["node", "jest"],
+    "rootDir": ".",
+    "outDir": "./dist-test",
+    "verbatimModuleSyntax": false,
+    "moduleResolution": "node"
+  },
+  "include": ["src", "tests", "**/*.spec.ts", "**/*.test.ts"]
+}
