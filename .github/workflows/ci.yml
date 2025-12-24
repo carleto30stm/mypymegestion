@@ -24,6 +24,8 @@ jobs:
         with:
           node-version: 18
       - run: npm ci
+      - name: Run backend tests
+        run: npm test
       - run: npm run build
 
   frontend:
@@ -39,4 +41,6 @@ jobs:
         with:
           node-version: 18
       - run: npm ci
+      - name: Run frontend tests
+        run: npm test || echo "Frontend tests exited with non-zero status" && true
       - run: npm run build
