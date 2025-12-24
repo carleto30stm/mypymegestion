@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { AppDispatch, RootState } from '../redux/store';
-import { fetchProductos } from '../redux/slices/productosSlice';
-import { fetchClientesActivos } from '../redux/slices/clientesSlice';
-import { createVenta, updateVenta } from '../redux/slices/ventasSlice';
-import { crearFacturaDesdeVenta } from '../redux/slices/facturasSlice';
-import { Producto, ItemVenta, Cliente, Venta } from '../types';
+import { AppDispatch, RootState } from '../../redux/store';
+import { fetchProductos } from '../../redux/slices/productosSlice';
+import { fetchClientesActivos } from '../../redux/slices/clientesSlice';
+import { createVenta, updateVenta } from '../../redux/slices/ventasSlice';
+import { crearFacturaDesdeVenta } from '../../redux/slices/facturasSlice';
+import { Producto, ItemVenta, Cliente, Venta } from '../../types';
 import {
   Box,
   Typography,
@@ -46,8 +46,8 @@ import {
   Info as InfoIcon,
   ArrowBack as ArrowBackIcon
 } from '@mui/icons-material';
-import { formatCurrency, formatNumberInput, getNumericValue, formatCurrencyDecimals } from '../utils/formatters';
-import { ConfirmDialog } from '../components/modal';
+import { formatCurrency, formatNumberInput, getNumericValue, formatCurrencyDecimals } from '../../utils/formatters';
+import { ConfirmDialog } from '../../components/modal';
 
 const VentasPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();

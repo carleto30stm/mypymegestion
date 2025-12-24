@@ -45,9 +45,9 @@ import {
   Warning as WarningIcon,
   Edit as EditIcon
 } from '@mui/icons-material';
-import { AppDispatch, RootState } from '../redux/store';
-import { fetchVentas } from '../redux/slices/ventasSlice';
-import { fetchClientes } from '../redux/slices/clientesSlice';
+import { AppDispatch, RootState } from '../../redux/store';
+import { fetchVentas } from '../../redux/slices/ventasSlice';
+import { fetchClientes } from '../../redux/slices/clientesSlice';
 import {
   fetchRecibos,
   fetchReciboById,
@@ -55,14 +55,14 @@ import {
   anularRecibo,
   fetchEstadisticasCobranza,
   clearError
-} from '../redux/slices/recibosSlice';
-import { generarRemitoDesdeVenta } from '../redux/slices/remitosSlice';
-import FormaPagoModal from '../components/FormaPagoModal';
-import CuentaCorrienteDetalle from '../components/CuentaCorrienteDetalle';
-import InteresesPunitoriosPage from './InteresesPunitoriosPage';
-import { formatCurrency, formatDate, formatNumberInput, getNumericValue } from '../utils/formatters';
-import { generarPDFRecibo, generarPDFRemito } from '../utils/pdfGenerator';
-import { Venta, Cliente, ReciboPago, FormaPago, ESTADOS_RECIBO, Remito, MOTIVOS_CORRECCION, MOTIVOS_CORRECCION_LABELS } from '../types';
+} from '../../redux/slices/recibosSlice';
+import { generarRemitoDesdeVenta } from '../../redux/slices/remitosSlice';
+import FormaPagoModal from '../../components/FormaPagoModal';
+import CuentaCorrienteDetalle from '../../components/CuentaCorrienteDetalle';
+import InteresesPunitoriosPage from '../InteresesPunitoriosPage';
+import { formatCurrency, formatDate, formatNumberInput, getNumericValue } from '../../utils/formatters';
+import { generarPDFRecibo, generarPDFRemito } from '../../utils/pdfGenerator';
+import { Venta, Cliente, ReciboPago, FormaPago, ESTADOS_RECIBO, Remito, MOTIVOS_CORRECCION, MOTIVOS_CORRECCION_LABELS } from '../../types';
 
 interface TabPanelProps {
   children?: React.ReactNode;

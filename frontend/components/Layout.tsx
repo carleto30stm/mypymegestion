@@ -9,8 +9,9 @@ const Layout: React.FC = () => {
   
   // Estados para controlar las secciones del dashboard
   const [showBankSummary, setShowBankSummary] = useState(true);
-  const [showPendingChecks, setShowPendingChecks] = useState(true);
-  const [showChequesDisponibles, setShowChequesDisponibles] = useState(true);
+  // Por defecto: desactivar paneles de cheques pendienes y cheques disponibles
+  const [showPendingChecks, setShowPendingChecks] = useState(false);
+  const [showChequesDisponibles, setShowChequesDisponibles] = useState(false);
 
   const handleToggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);

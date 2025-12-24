@@ -85,6 +85,25 @@ export const liquidarEmpleado = createAsyncThunk(
     banco: string;
     descuentos?: Array<{ id?: string; monto?: number; esPorcentaje?: boolean }>;
     incentivos?: Array<{ id?: string; monto?: number; esPorcentaje?: boolean }>;
+    calculos?: {
+      adicionalPresentismo?: number;
+      adicionalZona?: number;
+      adicionalAntiguedad?: number;
+      totalAportesEmpleado?: number;
+      totalContribucionesPatronales?: number;
+      sueldoBasePeriodo?: number;
+      montoNetoPagar?: number;
+      costoTotalEmpresa?: number;
+      aporteJubilacion?: number;
+      aporteObraSocial?: number;
+      aportePami?: number;
+      aporteSindicato?: number;
+      contribJubilacion?: number;
+      contribObraSocial?: number;
+      contribPami?: number;
+      contribART?: number;
+      totalAPagar?: number;
+    };
   }) => {
     const response = await api.post('/api/liquidacion/liquidar', data);
     return response.data;

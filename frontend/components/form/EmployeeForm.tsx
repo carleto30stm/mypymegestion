@@ -4,7 +4,7 @@ import { AppDispatch } from '../../redux/store';
 import { addEmployee, updateEmployee } from '../../redux/slices/employeesSlice';
 import { categoriasAPI, CategoriaUnificada } from '../../services/rrhhService';
 import { formatCurrency, formatNumberInput, getNumericValue } from '../../utils/formatters';
-import { Employee, ObraSocial, AdicionalesEmpleado } from '../../types';
+import { Employee, ObraSocial } from '../../types';
 import {
   TextField,
   Button,
@@ -23,7 +23,7 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
-  Chip
+  
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
@@ -57,6 +57,10 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
     observaciones: '',
     categoria: '',
     antiguedad: 0,
+    // Flags para controlar aplicación de adicionales en la liquidación
+    aplicaAntiguedad: true,
+    aplicaPresentismo: true,
+    aplicaZonaPeligrosa: false,
     // Campos Argentina
     cuit: '',
     legajo: '',
@@ -66,19 +70,14 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
       nombre: '',
       numero: ''
     },
-    adicionales: {
-      presentismo: false,
-      zonaPeligrosa: false,
-      otrosAdicionales: []
-    }
+    // legacy `adicionales` removed; use top-level flags `aplica*`
   });
 
   // Estado separado para el valor formateado del sueldo
   const [sueldoFormatted, setSueldoFormatted] = useState('');
   const [horaFormatted, setHoraFormatted] = useState('');
   
-  // Estado para adicionales personalizados
-  const [nuevoAdicional, setNuevoAdicional] = useState({ concepto: '', monto: '' });
+  // No manejamos más `adicionales` anidados; usamos solo flags `aplica*`
 
   useEffect(() => {
     const cargarCategorias = async () => {
@@ -115,13 +114,16 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
         observaciones: employee.observaciones || '',
         categoria: employee.categoria,
         antiguedad: employee.antiguedad || 0,
+        aplicaAntiguedad: typeof (employee as any).aplicaAntiguedad !== 'undefined' ? (employee as any).aplicaAntiguedad : true,
+        aplicaPresentismo: typeof (employee as any).aplicaPresentismo !== 'undefined' ? (employee as any).aplicaPresentismo : true,
+        aplicaZonaPeligrosa: typeof (employee as any).aplicaZonaPeligrosa !== 'undefined' ? (employee as any).aplicaZonaPeligrosa : false,
         // Campos Argentina
         cuit: employee.cuit || '',
         legajo: employee.legajo || '',
         cbu: employee.cbu || '',
         sindicato: employee.sindicato || '',
         obraSocial: employee.obraSocial || { nombre: '', numero: '' },
-        adicionales: employee.adicionales || { presentismo: false, zonaPeligrosa: false, otrosAdicionales: [] }
+        // legacy `adicionales` intentionally ignored; migrate to top-level flags
       });
       
       if (employee.sueldoBase && employee.sueldoBase > 0) {
@@ -152,13 +154,16 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
         observaciones: '',
         categoria: '',
         antiguedad: 0,
+        aplicaAntiguedad: true,
+        aplicaPresentismo: true,
+        aplicaZonaPeligrosa: false,
         // Campos Argentina
         cuit: '',
         legajo: '',
         cbu: '',
         sindicato: '',
         obraSocial: { nombre: '', numero: '' },
-        adicionales: { presentismo: false, zonaPeligrosa: false, otrosAdicionales: [] }
+        // legacy `adicionales` intentionally not included
       });
       setSueldoFormatted('');
       setHoraFormatted('');
@@ -202,53 +207,14 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
     }));
   };
 
-  // Manejador para adicionales (switches)
-  const handleAdicionalSwitch = (field: 'presentismo' | 'zonaPeligrosa') => (
+  // Switches para aplicar conceptos en la liquidación
+  const handleAplicarFlag = (field: 'aplicaAntiguedad' | 'aplicaPresentismo' | 'aplicaZonaPeligrosa') => (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
-    setFormData(prev => ({
-      ...prev,
-      adicionales: {
-        presentismo: prev.adicionales?.presentismo ?? false,
-        zonaPeligrosa: prev.adicionales?.zonaPeligrosa ?? false,
-        otrosAdicionales: prev.adicionales?.otrosAdicionales ?? [],
-        [field]: event.target.checked
-      }
-    }));
+    setFormData(prev => ({ ...prev, [field]: event.target.checked }));
   };
 
-  // Agregar adicional personalizado
-  const handleAddAdicional = () => {
-    if (nuevoAdicional.concepto && nuevoAdicional.monto) {
-      const monto = getNumericValue(nuevoAdicional.monto);
-      if (monto > 0) {
-        setFormData(prev => ({
-          ...prev,
-          adicionales: {
-            presentismo: prev.adicionales?.presentismo ?? false,
-            zonaPeligrosa: prev.adicionales?.zonaPeligrosa ?? false,
-            otrosAdicionales: [
-              ...(prev.adicionales?.otrosAdicionales ?? []),
-              { concepto: nuevoAdicional.concepto, monto }
-            ]
-          }
-        }));
-        setNuevoAdicional({ concepto: '', monto: '' });
-      }
-    }
-  };
-
-  // Eliminar adicional personalizado
-  const handleRemoveAdicional = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      adicionales: {
-        presentismo: prev.adicionales?.presentismo ?? false,
-        zonaPeligrosa: prev.adicionales?.zonaPeligrosa ?? false,
-        otrosAdicionales: (prev.adicionales?.otrosAdicionales ?? []).filter((_, i) => i !== index)
-      }
-    }));
-  };
+  // Agregar/eliminar de `adicionales` legacy eliminado
 
   // Validar CUIT argentino (formato XX-XXXXXXXX-X)
   const formatCUIT = (value: string) => {
@@ -469,6 +435,41 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
                 : 'Sin aportes, se paga el bruto completo'}
             </Typography>
           </Grid>
+
+          {/* Switches para decidir si aplicar antigüedad/presentismo/zona peligrosa */}
+          <Grid item xs={12} sm={4}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={formData.aplicaAntiguedad ?? true}
+                  onChange={handleAplicarFlag('aplicaAntiguedad')}
+                />
+              }
+              label="Aplicar Antigüedad"
+            />
+          </Grid>
+          <Grid item xs={12} sm={4}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={formData.aplicaPresentismo ?? true}
+                  onChange={handleAplicarFlag('aplicaPresentismo')}
+                />
+              }
+              label="Aplicar Presentismo"
+            />
+          </Grid>
+          <Grid item xs={12} sm={4}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={formData.aplicaZonaPeligrosa ?? false}
+                  onChange={handleAplicarFlag('aplicaZonaPeligrosa')}
+                />
+              }
+              label="Aplicar Zona Peligrosa"
+            />
+          </Grid>
           
           <Grid item xs={12} sm={6}>
             <TextField
@@ -590,79 +591,7 @@ const EmployeeForm: React.FC<EmployeeFormProps> = ({ employee, onSuccess, onCanc
                     />
                   </Grid>
                   
-                  {/* Adicionales */}
-                  <Grid item xs={12}>
-                    <Divider sx={{ my: 1 }} />
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Adicionales de convenio
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={formData.adicionales?.presentismo || false}
-                          onChange={handleAdicionalSwitch('presentismo')}
-                        />
-                      }
-                      label="Adicional por Presentismo"
-                    />
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={formData.adicionales?.zonaPeligrosa || false}
-                          onChange={handleAdicionalSwitch('zonaPeligrosa')}
-                        />
-                      }
-                      label="Adicional Zona Peligrosa"
-                    />
-                  </Grid>
-                  
-                  {/* Otros adicionales personalizados */}
-                  <Grid item xs={12}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Otros adicionales
-                    </Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-                      {formData.adicionales?.otrosAdicionales?.map((adicional, index) => (
-                        <Chip
-                          key={index}
-                          label={`${adicional.concepto}: ${formatCurrency(adicional.monto)}`}
-                          onDelete={() => handleRemoveAdicional(index)}
-                          color="primary"
-                          variant="outlined"
-                        />
-                      ))}
-                    </Box>
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                      <TextField
-                        label="Concepto"
-                        value={nuevoAdicional.concepto}
-                        onChange={(e) => setNuevoAdicional(prev => ({ ...prev, concepto: e.target.value }))}
-                        size="small"
-                        sx={{ flex: 1 }}
-                      />
-                      <TextField
-                        label="Monto"
-                        value={nuevoAdicional.monto}
-                        onChange={(e) => setNuevoAdicional(prev => ({ ...prev, monto: formatNumberInput(e.target.value) }))}
-                        size="small"
-                        sx={{ width: 150 }}
-                        InputProps={{
-                          startAdornment: <InputAdornment position="start">$</InputAdornment>,
-                        }}
-                      />
-                      <Button 
-                        variant="outlined" 
-                        onClick={handleAddAdicional}
-                        disabled={!nuevoAdicional.concepto || !nuevoAdicional.monto}
-                      >
-                        Agregar
-                      </Button>
-                    </Box>
-                  </Grid>
+                  {/* Adicionales removed — use top-level aplica* flags */}
                 </Grid>
               </AccordionDetails>
             </Accordion>

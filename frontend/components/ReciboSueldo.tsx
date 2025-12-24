@@ -9,9 +9,11 @@ import {
   IncentivoEmpleado, 
   TIPOS_DESCUENTO, 
   TIPOS_INCENTIVO,
-  APORTES_EMPLEADO
+  APORTES_EMPLEADO,
+  ADICIONALES_LEGALES
 } from '../types';
 import { formatCurrency, formatDateForDisplay } from '../utils/formatters';
+import calcularLiquidacionEmpleado from '../utils/liquidacionCalculator';
 
 interface ReciboSueldoProps {
   liquidacion: LiquidacionEmpleado;
@@ -45,19 +47,39 @@ const ReciboSueldo: React.FC<ReciboSueldoProps> = ({
   // Calcular totales de descuentos e incentivos
   const totalDescuentosPersonalizados = descuentosDetalle.reduce((sum, d) => sum + (d.montoCalculado || d.monto), 0);
   const totalIncentivos = incentivosDetalle.reduce((sum, i) => sum + (i.montoCalculado || i.monto), 0);
+  // `bonusAmount` unifica el monto de incentivos/bonus: si se pasaron detalles usamos `totalIncentivos`,
+  // si no, usamos `liquidacion.bonus` (legacy/guardado)
+  const bonusAmount = (incentivosDetalle && incentivosDetalle.length > 0) ? totalIncentivos : (liquidacion.bonus || 0);
+// Ajustes por tipo de período (usar calculador central si es posible)
+  const empleadoData: any = {
+    fechaIngreso: (liquidacion as any).empleadoFechaIngreso || liquidacion.empleadoFechaIngreso,
+    modalidadContratacion: (liquidacion as any).empleadoModalidad || liquidacion.empleadoModalidad,
+    sindicato: (liquidacion as any).empleadoSindicato || liquidacion.empleadoSindicato,
+    aplicaAntiguedad: (liquidacion as any).aplicaAntiguedad,
+    aplicaPresentismo: (liquidacion as any).aplicaPresentismo,
+    aplicaZonaPeligrosa: (liquidacion as any).aplicaZonaPeligrosa
+  };
 
-  // Calcular aportes si están habilitados
-  const baseImponible = liquidacion.sueldoBase + 
-    liquidacion.totalHorasExtra + 
-    (liquidacion.adicionalAntiguedad || 0) + 
-    (liquidacion.adicionalPresentismo || 0) +
-    totalIncentivos;
+  const enriched = calcularLiquidacionEmpleado({
+    liquidacion,
+    empleadoData,
+    periodo,
+    descuentosDetalle,
+    incentivosDetalle
+  });
+
+  const sueldoBasePeriodo = periodo.tipo === 'quincenal' ? (enriched.sueldoBase / 2) : enriched.sueldoBase;
+  const adicionalAntiguedadAmount = enriched.adicionalAntiguedad || 0;
+  const adicionalPresentismoAmount = enriched.adicionalPresentismo || 0;
+  const adicionalZonaAmount = enriched.adicionalZona || 0;
+
+  const baseImponible = enriched.baseImponible || (sueldoBasePeriodo + enriched.totalHorasExtra + adicionalAntiguedadAmount + adicionalPresentismoAmount + adicionalZonaAmount + bonusAmount);
 
   const aportes = incluirAportes ? {
-    jubilacion: liquidacion.aporteJubilacion || (baseImponible * APORTES_EMPLEADO.JUBILACION / 100),
-    obraSocial: liquidacion.aporteObraSocial || (baseImponible * APORTES_EMPLEADO.OBRA_SOCIAL / 100),
-    pami: liquidacion.aportePami || (baseImponible * APORTES_EMPLEADO.PAMI / 100),
-    sindicato: liquidacion.aporteSindicato || 0,
+    jubilacion: enriched.aporteJubilacion || 0,
+    obraSocial: enriched.aporteObraSocial || 0,
+    pami: enriched.aportePami || 0,
+    sindicato: enriched.aporteSindicato || 0,
   } : { jubilacion: 0, obraSocial: 0, pami: 0, sindicato: 0 };
 
   const totalAportes = aportes.jubilacion + aportes.obraSocial + aportes.pami + aportes.sindicato;
@@ -165,28 +187,38 @@ const ReciboSueldo: React.FC<ReciboSueldoProps> = ({
     let totalDeducciones = 0;
 
     // -------- HABERES --------
-    // Sueldo básico
+    // Sueldo básico (ajustado por período)
     doc.text('Sueldo Básico', marginLeft + 2, yPos);
     doc.text('30', 95, yPos, { align: 'center' });
-    doc.text(formatCurrency(liquidacion.sueldoBase), 130, yPos, { align: 'right' });
-    totalHaberes += liquidacion.sueldoBase;
-    yPos += 4;
+    doc.text(formatCurrency(sueldoBasePeriodo), 130, yPos, { align: 'right' });
+    totalHaberes += sueldoBasePeriodo;
+    yPos += 4; 
 
-    // Adicional por antigüedad
-    if (liquidacion.adicionalAntiguedad && liquidacion.adicionalAntiguedad > 0) {
+    // Adicional por antigüedad (ajustado por período)
+    if (adicionalAntiguedadAmount && adicionalAntiguedadAmount > 0) {
       doc.text('Adicional Antigüedad', marginLeft + 2, yPos);
       doc.text(`${liquidacion.empleadoAntiguedad || 0} años`, 95, yPos, { align: 'center' });
-      doc.text(formatCurrency(liquidacion.adicionalAntiguedad), 130, yPos, { align: 'right' });
-      totalHaberes += liquidacion.adicionalAntiguedad;
+      doc.text(formatCurrency(adicionalAntiguedadAmount), 130, yPos, { align: 'right' });
+      totalHaberes += adicionalAntiguedadAmount;
       yPos += 4;
     }
 
-    // Adicional presentismo
-    if (liquidacion.adicionalPresentismo && liquidacion.adicionalPresentismo > 0) {
+    // Adicional presentismo (ajustado por período)
+    if (adicionalPresentismoAmount && adicionalPresentismoAmount > 0) {
       doc.text('Presentismo', marginLeft + 2, yPos);
-      doc.text('8.33%', 95, yPos, { align: 'center' });
-      doc.text(formatCurrency(liquidacion.adicionalPresentismo), 130, yPos, { align: 'right' });
-      totalHaberes += liquidacion.adicionalPresentismo;
+      // Mostrar el porcentaje dinámico desde ADICIONALES_LEGALES
+      doc.text(`${ADICIONALES_LEGALES.PRESENTISMO}%`, 95, yPos, { align: 'center' });
+      doc.text(formatCurrency(adicionalPresentismoAmount), 130, yPos, { align: 'right' });
+      totalHaberes += adicionalPresentismoAmount;
+      yPos += 4;
+    }
+
+    // Adicional zona peligrosa (ajustado por período)
+    if (adicionalZonaAmount && adicionalZonaAmount > 0) {
+      doc.text('Zona peligrosa', marginLeft + 2, yPos);
+      doc.text('-', 95, yPos, { align: 'center' });
+      doc.text(formatCurrency(adicionalZonaAmount), 130, yPos, { align: 'right' });
+      totalHaberes += adicionalZonaAmount;
       yPos += 4;
     }
 
@@ -209,16 +241,16 @@ const ReciboSueldo: React.FC<ReciboSueldoProps> = ({
       yPos += 4;
     }
 
-    // Bonus/Premios
-    if (liquidacion.bonus > 0) {
+    // Bonus/Premios (solo si no tenemos detalles de incentivos)
+    if ((!incentivosDetalle || incentivosDetalle.length === 0) && bonusAmount > 0) {
       doc.text('Premios/Bonus', marginLeft + 2, yPos);
       doc.text('-', 95, yPos, { align: 'center' });
-      doc.text(formatCurrency(liquidacion.bonus), 130, yPos, { align: 'right' });
-      totalHaberes += liquidacion.bonus;
+      doc.text(formatCurrency(bonusAmount), 130, yPos, { align: 'right' });
+      totalHaberes += bonusAmount;
       yPos += 4;
     }
 
-    // Incentivos detallados
+    // Incentivos detallados (si existen, ya suman a totalHaberes)
     incentivosDetalle.forEach(incentivo => {
       const tipoLabel = TIPOS_INCENTIVO[incentivo.tipo as keyof typeof TIPOS_INCENTIVO] || incentivo.tipo;
       const monto = incentivo.montoCalculado || incentivo.monto;
@@ -446,10 +478,10 @@ const ReciboSueldo: React.FC<ReciboSueldoProps> = ({
 
   // Calcular neto para mostrar en el dialog
   const netoMostrar = incluirAportes 
-    ? (liquidacion.sueldoBase + liquidacion.totalHorasExtra + (liquidacion.adicionalAntiguedad || 0) + 
-       (liquidacion.adicionalPresentismo || 0) + liquidacion.aguinaldos + liquidacion.bonus + 
-       totalIncentivos - totalAportes - liquidacion.adelantos - totalDescuentosPersonalizados)
-    : liquidacion.totalAPagar;
+    ? (sueldoBasePeriodo + liquidacion.totalHorasExtra + adicionalAntiguedadAmount + 
+       adicionalPresentismoAmount + adicionalZonaAmount + liquidacion.aguinaldos + bonusAmount - 
+       totalAportes - liquidacion.adelantos - totalDescuentosPersonalizados)
+    : liquidacion.totalAPagar; 
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -491,7 +523,7 @@ const ReciboSueldo: React.FC<ReciboSueldoProps> = ({
             </Typography>
             <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
               <Typography variant="body2">Sueldo Básico:</Typography>
-              <Typography variant="body2">$ {formatCurrency(liquidacion.sueldoBase)}</Typography>
+              <Typography variant="body2">$ {formatCurrency(sueldoBasePeriodo)}</Typography>
             </Box>
             {liquidacion.totalHorasExtra > 0 && (
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -499,10 +531,24 @@ const ReciboSueldo: React.FC<ReciboSueldoProps> = ({
                 <Typography variant="body2">$ {formatCurrency(liquidacion.totalHorasExtra)}</Typography>
               </Box>
             )}
-            {totalIncentivos > 0 && (
+            {bonusAmount > 0 && (
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="success.main">Incentivos:</Typography>
-                <Typography variant="body2" color="success.main">$ {formatCurrency(totalIncentivos)}</Typography>
+                <Typography variant="body2" color="success.main">$ {formatCurrency(bonusAmount)}</Typography>
+              </Box>
+            )} 
+
+            {adicionalPresentismoAmount > 0 && (
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="body2">Presentismo ({ADICIONALES_LEGALES.PRESENTISMO}%):</Typography>
+                <Typography variant="body2">$ {formatCurrency(adicionalPresentismoAmount)}</Typography>
+              </Box>
+            )}
+
+            {adicionalZonaAmount > 0 && (
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="body2">Zona peligrosa:</Typography>
+                <Typography variant="body2">$ {formatCurrency(adicionalZonaAmount)}</Typography>
               </Box>
             )}
           </Box>
