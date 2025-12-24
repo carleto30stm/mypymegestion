@@ -314,9 +314,50 @@ export const liquidarEmpleado = async (req: Request, res: Response) => {
     // Calcular el monto del sueldo base según el tipo de período
     const sueldoBasePeriodo = periodo.tipo === 'quincenal' ? liquidacion.sueldoBase / 2 : liquidacion.sueldoBase;
     
-    // Base imponible para aportes
-    const baseImponible = sueldoBasePeriodo + liquidacion.totalHorasExtra;
-    
+    // Base imponible inicial para aportes (se ajustará con presentismo/zona si aplican)
+    let baseImponible = sueldoBasePeriodo + liquidacion.totalHorasExtra;
+
+    // Calcular adicionales por presentismo / zona si aplican (usar convenio si está disponible)
+    let adicionalPresentismo = 0;
+    let adicionalZona = 0;
+
+    try {
+      if (empleado.adicionales?.presentismo || empleado.adicionales?.zonaPeligrosa) {
+        if (empleado.convenioId && empleado.categoriaConvenio) {
+          const convenio = await (await import('../models/Convenio.js')).default.findById(empleado.convenioId);
+          if (convenio) {
+            const antig = empleado.fechaIngreso ? Math.floor((Date.now() - new Date(empleado.fechaIngreso).getTime()) / (365.25 * 24 * 60 * 60 * 1000)) : 0;
+            const calculo = (convenio as any).calcularSueldoCategoria(
+              empleado.categoriaConvenio,
+              antig,
+              !!empleado.adicionales?.presentismo,
+              !!empleado.adicionales?.zonaPeligrosa
+            );
+            adicionalPresentismo = calculo.adicionales.find((a: any) => a.concepto.toLowerCase().includes('presentismo'))?.monto || 0;
+            adicionalZona = calculo.adicionales.find((a: any) => a.concepto.toLowerCase().includes('zona'))?.monto || 0;
+          }
+        }
+
+        // Fallback si no hay convenio: usar porcentaje por defecto para presentismo
+        if (!adicionalPresentismo && empleado.adicionales?.presentismo) {
+          adicionalPresentismo = sueldoBasePeriodo * (8.33 / 100);
+        }
+      }
+    } catch (e) {
+      console.error('Error al calcular adicionales (presentismo/zona):', e);
+      adicionalPresentismo = adicionalPresentismo || 0;
+      adicionalZona = adicionalZona || 0;
+    }
+
+    // Si el período es quincenal, proporcionalizar los adicionales calculados por convenio (dividir por 2)
+    if (periodo.tipo === 'quincenal') {
+      adicionalPresentismo = adicionalPresentismo / 2;
+      adicionalZona = adicionalZona / 2;
+    }
+
+    // Incluir adicionales en base imponible
+    baseImponible = baseImponible + adicionalPresentismo + adicionalZona;
+
     // Calcular aportes del empleado (solo formales)
     let totalAportesEmpleado = 0;
     if (esEmpleadoFormal) {
@@ -437,8 +478,8 @@ export const liquidarEmpleado = async (req: Request, res: Response) => {
       liquidacion.adelantos -
       liquidacion.descuentos;
 
-    // Monto neto a pagar al empleado (bruto + incentivos - adelantos - descuentos - aportes)
-    const montoNetoPagar = sueldoBasePeriodo + liquidacion.totalHorasExtra + totalIncentivos - liquidacion.adelantos - totalDescuentos - totalAportesEmpleado;
+    // Monto neto a pagar al empleado (bruto + incentivos + adicionales - adelantos - descuentos - aportes)
+    const montoNetoPagar = sueldoBasePeriodo + liquidacion.totalHorasExtra + adicionalPresentismo + adicionalZona + totalIncentivos - liquidacion.adelantos - totalDescuentos - totalAportesEmpleado;
     
     const gastosSueldoCreados = [];
     
@@ -512,6 +553,9 @@ export const liquidarEmpleado = async (req: Request, res: Response) => {
     liquidacion.fechaPago = new Date();
     liquidacion.medioDePago = medioFinal;
     liquidacion.banco = bancoFinal;
+    // Guardar adicionales calculados para trazabilidad
+    (liquidacion as any).adicionalPresentismo = adicionalPresentismo;
+    (liquidacion as any).adicionalZona = adicionalZona;
     if (observaciones) {
       liquidacion.observaciones = observaciones;
     }

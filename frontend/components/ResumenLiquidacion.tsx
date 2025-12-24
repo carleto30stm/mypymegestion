@@ -39,8 +39,9 @@ import {
   TrendingUp as IncentivoIcon
 } from '@mui/icons-material';
 import { AppDispatch, RootState } from '../redux/store';
-import { LiquidacionPeriodo, LiquidacionEmpleado, TIPOS_DESCUENTO, TIPOS_INCENTIVO, APORTES_EMPLEADO, CONTRIBUCIONES_EMPLEADOR } from '../types';
+import { LiquidacionPeriodo, LiquidacionEmpleado, TIPOS_DESCUENTO, TIPOS_INCENTIVO, APORTES_EMPLEADO, CONTRIBUCIONES_EMPLEADOR, ADICIONALES_LEGALES } from '../types';
 import { liquidarEmpleado, fetchPeriodoById, cerrarPeriodo, agregarEmpleado } from '../redux/slices/liquidacionSlice';
+import { conveniosAPI } from '../services/rrhhService';
 import { fetchGastos } from '../redux/slices/gastosSlice';
 import { fetchEmployees } from '../redux/slices/employeesSlice';
 import { fetchDescuentos } from '../redux/slices/descuentosEmpleadoSlice';
@@ -76,6 +77,9 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
   const [selectedDescuentosIds, setSelectedDescuentosIds] = useState<string[]>([]);
   const [selectedIncentivosIds, setSelectedIncentivosIds] = useState<string[]>([]);
 
+  // Adicionales calculados por convenio (presentismo, zona) por empleadoId
+  const [adicionalesPorEmpleado, setAdicionalesPorEmpleado] = useState<Record<string, { presentismo: number; zona: number; loading?: boolean }>>({});
+
   const isEditable = periodo.estado === 'abierto' && (user?.userType === 'admin' || user?.userType === 'oper_ad');
 
   // Obtener período en formato YYYY-MM desde las fechas del período (si aplica)
@@ -96,6 +100,65 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
       dispatch(fetchEmployees());
     }
   }, [dispatch, empleados.length]);
+
+  // Calcular adicionales (presentismo, zona) por empleado usando el convenio cuando corresponda
+  useEffect(() => {
+    // Lista de empleados a procesar: los que están en el período actual
+    const empleadosEnPeriodo = periodo.liquidaciones.map(l => l.empleadoId).filter(Boolean);
+    const toProcess = empleados.filter(e => empleadosEnPeriodo.includes(e._id as string));
+
+    // For each employee, if they have presentismo or zonaPeligrosa true, compute amounts
+    const procesarEmpleados = async () => {
+      for (const emp of toProcess) {
+        if (!emp || !emp._id) continue;
+        const shouldPresentismo = emp.adicionales?.presentismo;
+        const shouldZona = emp.adicionales?.zonaPeligrosa;
+        if (!shouldPresentismo && !shouldZona) {
+          // Ensure map has zeroes if not present
+          setAdicionalesPorEmpleado(prev => ({ ...prev, [emp._id as string]: { presentismo: 0, zona: 0 } }));
+          continue;
+        }
+
+        // If already computed, skip
+        const existing = adicionalesPorEmpleado[emp._id as string];
+        if (existing && existing.loading === false) continue;
+
+        // Set loading placeholder
+        setAdicionalesPorEmpleado(prev => ({ ...prev, [emp._id as string]: { presentismo: 0, zona: 0, loading: true } }));
+
+        // Try to compute via convenio API if convenioId and categoriaConvenio exist
+        try {
+          if (emp.convenioId && emp.categoriaConvenio) {
+            const antig = emp.fechaIngreso ? Math.floor((new Date().getTime() - new Date(emp.fechaIngreso).getTime()) / (365.25 * 24 * 60 * 60 * 1000)) : 0;
+            const response = await conveniosAPI.calcularSueldo(emp.convenioId, {
+              codigoCategoria: emp.categoriaConvenio,
+              antiguedadAnios: antig,
+              aplicaPresentismo: !!shouldPresentismo,
+              tieneZonaPeligrosa: !!shouldZona
+            });
+
+            const calculo = response.calculo as { basico: number; adicionales: { concepto: string; monto: number }[]; total: number };
+            const presentismoMonto = calculo.adicionales.find(a => a.concepto.toLowerCase().includes('presentismo'))?.monto || 0;
+            const zonaMonto = calculo.adicionales.find(a => a.concepto.toLowerCase().includes('zona'))?.monto || 0;
+
+            setAdicionalesPorEmpleado(prev => ({ ...prev, [emp._id as string]: { presentismo: presentismoMonto, zona: zonaMonto, loading: false } }));
+            continue;
+          }
+
+          // Fallback: calcular localmente usando porcentajes por defecto
+          const presentismoFallback = shouldPresentismo ? (emp.sueldoBase * (ADICIONALES_LEGALES.PRESENTISMO / 100)) : 0;
+          const zonaFallback = 0; // Sin info del convenio, no sumar zona
+          setAdicionalesPorEmpleado(prev => ({ ...prev, [emp._id as string]: { presentismo: presentismoFallback, zona: zonaFallback, loading: false } }));
+        } catch (error) {
+          console.error('Error calculando adicionales para empleado', emp._id, error);
+          // Fallback zeros
+          setAdicionalesPorEmpleado(prev => ({ ...prev, [emp._id as string]: { presentismo: 0, zona: 0, loading: false } }));
+        }
+      }
+    };
+
+    procesarEmpleados();
+  }, [periodo.liquidaciones, empleados]);
 
   // Cargar descuentos e incentivos del período
   useEffect(() => {
@@ -420,7 +483,15 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
 
   const handleOpenRecibo = (empleado: LiquidacionEmpleado) => {
     const liquidacionEnriquecida = enriquecerLiquidacionConEmpleado(empleado);
-    setReciboEmpleado(liquidacionEnriquecida);
+    // Si tenemos cálculos de adicionales por convenio, inyectarlos para impresión
+    const adicionales = adicionalesPorEmpleado[empleado.empleadoId] || { presentismo: 0, zona: 0 };
+    const enrichedWithAd = {
+      ...liquidacionEnriquecida,
+      adicionalPresentismo: adicionales.presentismo || liquidacionEnriquecida.adicionalPresentismo || 0,
+      adicionalZona: adicionales.zona || liquidacionEnriquecida.adicionalZona || 0
+    } as LiquidacionEmpleado;
+
+    setReciboEmpleado(enrichedWithAd);
     setOpenRecibo(true);
   };
 
@@ -455,7 +526,13 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
       return sum + monto;
     }, 0);
 
+    // Adicionales por convenio (presentismo/zona)
+    const adicionales = adicionalesPorEmpleado[selectedEmpleado.empleadoId] || { presentismo: 0, zona: 0 };
+    const adicionalPresentismo = adicionales.presentismo ? (periodo.tipo === 'quincenal' ? (adicionales.presentismo / 2) : adicionales.presentismo) : (empleadoData?.adicionales?.presentismo ? (sueldoBasePeriodo * (ADICIONALES_LEGALES.PRESENTISMO / 100)) : 0);
+    const adicionalZona = adicionales.zona ? (periodo.tipo === 'quincenal' ? (adicionales.zona / 2) : adicionales.zona) : 0;
+
     const totalAPagar = sueldoBasePeriodo + selectedEmpleado.totalHorasExtra
+      + adicionalPresentismo + adicionalZona
       - selectedEmpleado.adelantos
       - totalDescuentosSeleccionados
       + totalIncentivosSeleccionados
@@ -640,8 +717,13 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
                 ? baseImponible * ((APORTES_EMPLEADO.JUBILACION + APORTES_EMPLEADO.OBRA_SOCIAL + APORTES_EMPLEADO.PAMI + (empleadoData?.sindicato ? APORTES_EMPLEADO.SINDICATO : 0)) / 100)
                 : 0;
               
-              // Total ajustado (informal = bruto, formal = neto)
-              const totalAjustado = sueldoBaseAjustado + liquidacion.totalHorasExtra - liquidacion.adelantos - descuentosEmp + incentivosEmp - totalAportesEmp;
+              // Adicionales (presentismo / zona) si aplican
+              const adicionales = adicionalesPorEmpleado[liquidacion.empleadoId] || { presentismo: 0, zona: 0 };
+              const presentismoLocal = adicionales.presentismo ? (periodo.tipo === 'quincenal' ? (adicionales.presentismo / 2) : adicionales.presentismo) : (empleadoData?.adicionales?.presentismo ? (sueldoBaseAjustado * (ADICIONALES_LEGALES.PRESENTISMO / 100)) : 0);
+              const zonaLocal = adicionales.zona ? (periodo.tipo === 'quincenal' ? (adicionales.zona / 2) : adicionales.zona) : 0;
+
+              // Total ajustado (informal = bruto, formal = neto) incluyendo adicionales
+              const totalAjustado = sueldoBaseAjustado + liquidacion.totalHorasExtra + presentismoLocal + zonaLocal - liquidacion.adelantos - descuentosEmp + incentivosEmp - totalAportesEmp;
               
               return (
               <React.Fragment key={liquidacion.empleadoId}>
@@ -740,7 +822,7 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
                   <TableCell colSpan={10} sx={{ p: 0 }}>
                     <Collapse in={expandedRows.has(liquidacion.empleadoId)} timeout="auto" unmountOnExit>
                       <Box sx={{ p: 2, backgroundColor: 'grey.50' }}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                           <Typography variant="subtitle2">Detalle de Liquidación</Typography>
                           <Chip 
                             label={esEmpleadoFormal ? '📋 Formal (con aportes)' : '💵 Informal (en mano)'} 
@@ -751,8 +833,8 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
                         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 2, mt: 1 }}>
                           <Box>
                             <Typography variant="caption" color="text.secondary">Sueldo Base:</Typography>
-                            <Typography variant="body2">{formatCurrency(liquidacion.sueldoBase)}</Typography>
-                          </Box>
+                            <Typography variant="body2">{formatCurrency(sueldoBaseAjustado)}</Typography>
+                          </Box> 
                           <Box>
                             <Typography variant="caption" color="text.secondary">Horas Extra ({liquidacion.horasExtra.length}):</Typography>
                             <Typography variant="body2" color="info.main">
@@ -765,6 +847,28 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
                               +{formatCurrency(liquidacion.aguinaldos)}
                             </Typography>
                           </Box>
+                          {/* Presentismo y Zona (cuando aplican) */}
+                          <Box>
+                            <Typography variant="caption" color="text.secondary">Presentismo:</Typography>
+                            <Typography variant="body2" color="success.main">
+                              {(() => {
+                                const emp = empleados.find(e => e._id === liquidacion.empleadoId);
+                                const adicionales = adicionalesPorEmpleado[liquidacion.empleadoId] || { presentismo: 0, zona: 0 };
+                                const presentismo = adicionales.presentismo ? (periodo.tipo === 'quincenal' ? (adicionales.presentismo / 2) : adicionales.presentismo) : (emp?.adicionales?.presentismo ? (sueldoBaseAjustado * (ADICIONALES_LEGALES.PRESENTISMO / 100)) : 0);
+                                return presentismo > 0 ? `+${formatCurrency(presentismo)}` : '-';
+                              })()}
+                            </Typography>
+                          </Box>
+                          <Box>
+                            <Typography variant="caption" color="text.secondary">Zona peligrosa:</Typography>
+                            <Typography variant="body2" color="success.main">
+                              {(() => {
+                                const adicionales = adicionalesPorEmpleado[liquidacion.empleadoId] || { presentismo: 0, zona: 0 };
+                                const zona = adicionales.zona ? (periodo.tipo === 'quincenal' ? (adicionales.zona / 2) : adicionales.zona) : 0;
+                                return zona && zona > 0 ? `+${formatCurrency(zona)}` : '-';
+                              })()}
+                            </Typography>
+                          </Box> 
                           <Box>
                             <Typography variant="caption" color="text.secondary">Bonus:</Typography>
                             <Typography variant="body2" color="secondary.main">

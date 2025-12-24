@@ -72,6 +72,8 @@ const LiquidacionEmpleadoSchema = new Schema({
   aguinaldos: { type: Number, default: 0 },
   bonus: { type: Number, default: 0 },
   descuentos: { type: Number, default: 0 },
+  adicionalPresentismo: { type: Number, default: 0 },
+  adicionalZona: { type: Number, default: 0 },
   totalAPagar: { type: Number, required: true },
   estado: {
     type: String,
