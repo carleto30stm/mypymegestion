@@ -842,7 +842,7 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
                           <Box>
                             <Typography variant="caption" color="text.secondary">Antiguedad:</Typography>
                             <Typography variant="body2" color="success.main">
-                              {antiguedadAmount > 0 ? `+${formatCurrency(antiguedadAmount)} (${antiguedadYears} años)` : '-'}
+                              {liquidacion.adicionalAntiguedad && liquidacion.adicionalAntiguedad > 0 ? `+${formatCurrency(antiguedadAmount)} (${antiguedadYears} años)` : '-'}
                             </Typography>
                           </Box>
                           <Box>
