@@ -134,8 +134,8 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, onEdit }) => {
           <TableHead>
             <TableRow>
               <TableCell><strong>Nombre Completo</strong></TableCell>
-              <TableCell><strong>Documento</strong></TableCell>
-              <TableCell><strong>Puesto</strong></TableCell>
+              <TableCell><strong>Datos Personales</strong></TableCell>
+              <TableCell><strong>Puesto/Legajo</strong></TableCell>
               <TableCell><strong>Fecha Ingreso</strong></TableCell>
               <TableCell align="center"><strong>Antigüedad</strong></TableCell>
               <TableCell align="right"><strong>Sueldo Base</strong></TableCell>
@@ -182,6 +182,11 @@ const EmployeeList: React.FC<EmployeeListProps> = ({ employees, onEdit }) => {
                   <Typography variant="body2">
                     {employee.puesto}
                   </Typography>
+                  {employee.legajo && (
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      {`Legajo: 00${employee.legajo}`}
+                    </Typography>
+                  )}
                 </TableCell>
                 
                 <TableCell>

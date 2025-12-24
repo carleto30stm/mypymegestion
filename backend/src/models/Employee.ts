@@ -216,8 +216,6 @@ const employeeSchema = new mongoose.Schema<IEmployee>({
 // Índices para búsqueda eficiente
 employeeSchema.index({ estado: 1 });
 employeeSchema.index({ apellido: 1, nombre: 1 });
-// Índice único para legajo (sparse para permitir documentos sin legajo previo)
-employeeSchema.index({ legajo: 1 }, { unique: true, sparse: true });
 
 // Pre-save hook para asignar legajo secuencial cuando se crea un empleado nuevo
 employeeSchema.pre('save', async function (next) {
