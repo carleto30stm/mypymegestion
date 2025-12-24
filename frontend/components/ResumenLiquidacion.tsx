@@ -48,6 +48,7 @@ import { fetchDescuentos } from '../redux/slices/descuentosEmpleadoSlice';
 import { fetchIncentivos } from '../redux/slices/incentivosEmpleadoSlice';
 import { formatCurrency } from '../utils/formatters';
 import ReciboSueldo from './ReciboSueldo';
+import calcularLiquidacionEmpleado, { calcularAntiguedadYearsAndAmount } from '../utils/liquidacionCalculator';
 import { ConfirmDialog } from './modal';
 
 interface ResumenLiquidacionProps {
@@ -111,8 +112,9 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
     const procesarEmpleados = async () => {
       for (const emp of toProcess) {
         if (!emp || !emp._id) continue;
-        const shouldPresentismo = emp.adicionales?.presentismo;
-        const shouldZona = emp.adicionales?.zonaPeligrosa;
+        // Considerar solo las flags top-level `aplica*` (legacy `adicionales` removed)
+        const shouldPresentismo = ((emp as any).aplicaPresentismo !== false);
+        const shouldZona = ((emp as any).aplicaZonaPeligrosa === true);
         if (!shouldPresentismo && !shouldZona) {
           // Ensure map has zeroes if not present
           setAdicionalesPorEmpleado(prev => ({ ...prev, [emp._id as string]: { presentismo: 0, zona: 0 } }));
@@ -133,8 +135,9 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
             const response = await conveniosAPI.calcularSueldo(emp.convenioId, {
               codigoCategoria: emp.categoriaConvenio,
               antiguedadAnios: antig,
-              aplicaPresentismo: !!shouldPresentismo,
-              tieneZonaPeligrosa: !!shouldZona
+              // pasar la intención real: si al empleado se le debe aplicar el adicional
+              aplicaPresentismo: !!((emp as any).aplicaPresentismo !== false),
+              tieneZonaPeligrosa: !!((emp as any).aplicaZonaPeligrosa === true)
             });
 
             const calculo = response.calculo as { basico: number; adicionales: { concepto: string; monto: number }[]; total: number };
@@ -340,6 +343,41 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
     if (!selectedEmpleado || !periodo._id) return;
 
     try {
+      // Calculamos en el frontend usando el util para asegurar consistencia
+      const empleadoData = empleados.find(e => e._id === selectedEmpleado.empleadoId);
+      const calculado = calcularLiquidacionEmpleado({
+        liquidacion: selectedEmpleado,
+        empleadoData,
+        periodo,
+        descuentosDetalle: descuentosDetalleEmpleado[selectedEmpleado.empleadoId] || [],
+        incentivosDetalle: incentivosDetalleEmpleado[selectedEmpleado.empleadoId] || [],
+        adicionalesConvenio: adicionalesPorEmpleado[selectedEmpleado.empleadoId] || null
+      });
+
+      const sueldoBasePeriodo = periodo.tipo === 'quincenal' ? (selectedEmpleado.sueldoBase / 2) : selectedEmpleado.sueldoBase;
+
+      const calculosPayload = {
+        adicionalPresentismo: Number((calculado as any).adicionalPresentismo || 0),
+        adicionalZona: Number((calculado as any).adicionalZona || 0),
+        adicionalAntiguedad: Number((calculado as any).adicionalAntiguedad || 0),
+        totalAportesEmpleado: Number((calculado as any).totalAportes || 0),
+        // Backend acepta contribuciones patronales; el frontend no las calcula en detalle, dejar 0 si no disponible
+        totalContribucionesPatronales: Number((calculado as any).totalContribucionesPatronales || 0),
+        sueldoBasePeriodo: Number(sueldoBasePeriodo || 0),
+        montoNetoPagar: Number((calculado as any).totalAPagar || 0),
+        costoTotalEmpresa: Number((calculado as any).costoTotalEmpresa || 0),
+        aporteJubilacion: Number((calculado as any).aporteJubilacion || 0),
+        aporteObraSocial: Number((calculado as any).aporteObraSocial || 0),
+        aportePami: Number((calculado as any).aportePami || 0),
+        aporteSindicato: Number((calculado as any).aporteSindicato || 0),
+        // Campos de contribuciones patronales individuales (opcionales)
+        contribJubilacion: Number((calculado as any).contribJubilacion || 0),
+        contribObraSocial: Number((calculado as any).contribObraSocial || 0),
+        contribPami: Number((calculado as any).contribPami || 0),
+        contribART: Number((calculado as any).contribART || 0),
+        totalAPagar: Number((calculado as any).totalAPagar || 0)
+      };
+
       await dispatch(liquidarEmpleado({
         periodoId: periodo._id,
         empleadoId: selectedEmpleado.empleadoId,
@@ -347,7 +385,8 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
         medioDePago,
         banco,
         descuentos: selectedDescuentosIds.map(id => ({ id })),
-        incentivos: selectedIncentivosIds.map(id => ({ id }))
+        incentivos: selectedIncentivosIds.map(id => ({ id })),
+        calculos: calculosPayload
       })).unwrap();
       
       // Refrescar el período y los gastos (default: últimos 3 meses)
@@ -396,99 +435,43 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
     }
   };
 
-  // Función para enriquecer datos de liquidación con datos del empleado
-  const enriquecerLiquidacionConEmpleado = (liquidacion: LiquidacionEmpleado): LiquidacionEmpleado => {
-    const empleadoData = empleados.find(e => e._id === liquidacion.empleadoId);
-    if (!empleadoData) return liquidacion;
-
-    // Calcular antigüedad en años
-    let antiguedad = 0;
-    if (empleadoData.fechaIngreso) {
-      const fechaIngreso = new Date(empleadoData.fechaIngreso);
-      const hoy = new Date();
-      antiguedad = Math.floor((hoy.getTime() - fechaIngreso.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
-    }
-
-    // Calcular adicionales
-    const adicionalAntiguedad = liquidacion.sueldoBase * (antiguedad * 0.01); // 1% por año
-    const adicionalPresentismo = empleadoData.adicionales?.presentismo 
-      ? liquidacion.sueldoBase * 0.0833 // 8.33%
-      : 0;
-
-    // Base imponible para aportes
-    const baseImponible = liquidacion.sueldoBase + liquidacion.totalHorasExtra + adicionalAntiguedad + adicionalPresentismo;
-    
-    // Determinar si es empleado formal (con aportes)
-    const esEmpleadoFormal = empleadoData.modalidadContratacion === 'formal';
-    
-    // Calcular aportes solo si es empleado formal
-    const aporteJubilacion = esEmpleadoFormal ? baseImponible * (APORTES_EMPLEADO.JUBILACION / 100) : 0;
-    const aporteObraSocial = esEmpleadoFormal ? baseImponible * (APORTES_EMPLEADO.OBRA_SOCIAL / 100) : 0;
-    const aportePami = esEmpleadoFormal ? baseImponible * (APORTES_EMPLEADO.PAMI / 100) : 0;
-    const aporteSindicato = esEmpleadoFormal && empleadoData.sindicato ? baseImponible * (APORTES_EMPLEADO.SINDICATO / 100) : 0;
-    const totalAportes = aporteJubilacion + aporteObraSocial + aportePami + aporteSindicato;
-
-    // Calcular contribuciones patronales (para el gasto AFIP)
-    const contribJubilacion = esEmpleadoFormal ? baseImponible * (CONTRIBUCIONES_EMPLEADOR.JUBILACION / 100) : 0;
-    const contribObraSocial = esEmpleadoFormal ? baseImponible * (CONTRIBUCIONES_EMPLEADOR.OBRA_SOCIAL / 100) : 0;
-    const contribPami = esEmpleadoFormal ? baseImponible * (CONTRIBUCIONES_EMPLEADOR.PAMI / 100) : 0;
-    const contribART = esEmpleadoFormal ? baseImponible * (CONTRIBUCIONES_EMPLEADOR.ART / 100) : 0;
-    const totalContribuciones = contribJubilacion + contribObraSocial + contribPami + contribART;
-
-    // Costo total para el empleador
-    const costoTotal = baseImponible + totalContribuciones;
-
-    // Obtener descuentos e incentivos
-    const descuentosEmp = descuentosPorEmpleado[liquidacion.empleadoId] || 0;
-    const incentivosEmp = incentivosPorEmpleado[liquidacion.empleadoId] || 0;
-
-    return {
-      ...liquidacion,
-      empleadoDocumento: empleadoData.documento,
-      empleadoCuit: empleadoData.cuit,
-      empleadoLegajo: empleadoData.legajo,
-      empleadoPuesto: empleadoData.puesto,
-      empleadoFechaIngreso: empleadoData.fechaIngreso,
-      empleadoCategoria: empleadoData.categoriaConvenio,
-      empleadoObraSocial: empleadoData.obraSocial?.nombre,
-      empleadoSindicato: empleadoData.sindicato,
-      empleadoAntiguedad: antiguedad,
-      empleadoModalidad: empleadoData.modalidadContratacion || 'informal',
-      adicionalAntiguedad,
-      adicionalPresentismo,
-      adicionalZona: 0,
-      otrosAdicionales: 0,
-      viaticos: 0,
-      otrosNoRemunerativos: 0,
-      totalNoRemunerativo: 0,
-      totalRemunerativo: baseImponible,
-      totalBruto: baseImponible + liquidacion.aguinaldos + liquidacion.bonus + incentivosEmp,
-      // Aportes del empleado (solo para formales)
-      aporteJubilacion,
-      aporteObraSocial,
-      aportePami,
-      aporteSindicato,
-      totalAportes,
-      // Deducciones totales
-      totalDeducciones: liquidacion.adelantos + descuentosEmp + totalAportes,
-      // Contribuciones patronales (guardar en campos personalizados)
-      contribJubilacion,
-      contribObraSocial,
-      contribPami,
-      contribArt: contribART,
-      totalContribuciones,
-      costoTotal,
-    };
-  };
+  // Centralizar cálculo de liquidación por empleado usando util
+  // Enriquecer cada liquidación con datos del empleado y cálculos
+  const liquidacionesEnriquecidas = useMemo(() => {
+    return periodo.liquidaciones.map(l => {
+      const emp = empleados.find(e => e._id === l.empleadoId);
+      const descuentosDetalle = descuentosDetalleEmpleado[l.empleadoId] || [];
+      const incentivosDetalle = incentivosDetalleEmpleado[l.empleadoId] || [];
+      const adicionalesConv = adicionalesPorEmpleado[l.empleadoId] || null;
+      return calcularLiquidacionEmpleado({
+        liquidacion: l,
+        empleadoData: emp,
+        periodo,
+        descuentosDetalle,
+        incentivosDetalle,
+        adicionalesConvenio: adicionalesConv
+      });
+    });
+  }, [periodo.liquidaciones, empleados, descuentosDetalleEmpleado, incentivosDetalleEmpleado, adicionalesPorEmpleado, periodo]);
 
   const handleOpenRecibo = (empleado: LiquidacionEmpleado) => {
-    const liquidacionEnriquecida = enriquecerLiquidacionConEmpleado(empleado);
+    // Intentar obtener la liquidación ya enriquecida desde el memo
+    const encontrada = liquidacionesEnriquecidas.find(l => l.empleadoId === empleado.empleadoId);
+    const liquidacionEnriquecida = encontrada ?? calcularLiquidacionEmpleado({
+      liquidacion: empleado,
+      empleadoData: empleados.find(e => e._id === empleado.empleadoId),
+      periodo,
+      descuentosDetalle: descuentosDetalleEmpleado[empleado.empleadoId] || [],
+      incentivosDetalle: incentivosDetalleEmpleado[empleado.empleadoId] || [],
+      adicionalesConvenio: adicionalesPorEmpleado[empleado.empleadoId] || null
+    });
+
     // Si tenemos cálculos de adicionales por convenio, inyectarlos para impresión
     const adicionales = adicionalesPorEmpleado[empleado.empleadoId] || { presentismo: 0, zona: 0 };
     const enrichedWithAd = {
       ...liquidacionEnriquecida,
-      adicionalPresentismo: adicionales.presentismo || liquidacionEnriquecida.adicionalPresentismo || 0,
-      adicionalZona: adicionales.zona || liquidacionEnriquecida.adicionalZona || 0
+      adicionalPresentismo: adicionales.presentismo || (liquidacionEnriquecida as any).adicionalPresentismo || 0,
+      adicionalZona: adicionales.zona || (liquidacionEnriquecida as any).adicionalZona || 0
     } as LiquidacionEmpleado;
 
     setReciboEmpleado(enrichedWithAd);
@@ -499,46 +482,50 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
   const computeTotalAPagarForSelected = () => {
     if (!selectedEmpleado) return 0;
     const empleadoData = empleados.find(e => e._id === selectedEmpleado.empleadoId);
-    const esEmpleadoFormal = empleadoData?.modalidadContratacion === 'formal';
-    const sueldoBasePeriodo = periodo.tipo === 'quincenal' ? selectedEmpleado.sueldoBase / 2 : selectedEmpleado.sueldoBase;
-    const baseImponible = sueldoBasePeriodo + selectedEmpleado.totalHorasExtra;
-    const aporteJubilacion = esEmpleadoFormal ? baseImponible * (APORTES_EMPLEADO.JUBILACION / 100) : 0;
-    const aporteObraSocial = esEmpleadoFormal ? baseImponible * (APORTES_EMPLEADO.OBRA_SOCIAL / 100) : 0;
-    const aportePami = esEmpleadoFormal ? baseImponible * (APORTES_EMPLEADO.PAMI / 100) : 0;
-    const aporteSindicato = esEmpleadoFormal && empleadoData?.sindicato ? baseImponible * (APORTES_EMPLEADO.SINDICATO / 100) : 0;
-    const totalAportesEmp = aporteJubilacion + aporteObraSocial + aportePami + aporteSindicato;
 
-    // calcular totales según selección hecha en el modal (si hay)
-    const descuentosList = descuentosDetalleEmpleado[selectedEmpleado.empleadoId] || [];
-    const incentivosList = incentivosDetalleEmpleado[selectedEmpleado.empleadoId] || [];
+    // Usar el calculador centralizado para obtener totalAPagar (fuente de verdad)
+    const calculada = calcularLiquidacionEmpleado({
+      liquidacion: selectedEmpleado,
+      empleadoData,
+      periodo,
+      descuentosDetalle: descuentosDetalleEmpleado[selectedEmpleado.empleadoId] || [],
+      incentivosDetalle: incentivosDetalleEmpleado[selectedEmpleado.empleadoId] || [],
+      adicionalesConvenio: adicionalesPorEmpleado[selectedEmpleado.empleadoId] || null
+    });
 
-    const totalDescuentosSeleccionados = selectedDescuentosIds.reduce((sum, id) => {
-      const d = descuentosList.find(x => (typeof x._id === 'string' ? x._id : (x._id as any).toString()) === id);
-      if (!d) return sum;
-      const monto = d.montoCalculado ?? (d.esPorcentaje ? (d.monto / 100) * sueldoBasePeriodo : d.monto);
-      return sum + monto;
-    }, 0);
+    // Si el usuario seleccionó descuentos/incentivos manualmente en el modal,
+    // necesitamos ajustar el resultado para reflejar solo los seleccionados.
+    // Para simplicidad, si hay selecciones aplicadas usaremos el cálculo base
+    // y aplicaremos deltas manuales aquí.
+    let total = calculada.totalAPagar ?? 0;
 
-    const totalIncentivosSeleccionados = selectedIncentivosIds.reduce((sum, id) => {
-      const it = incentivosList.find(x => (typeof x._id === 'string' ? x._id : (x._id as any).toString()) === id);
-      if (!it) return sum;
-      const monto = it.montoCalculado ?? (it.esPorcentaje ? (it.monto / 100) * sueldoBasePeriodo : it.monto);
-      return sum + monto;
-    }, 0);
+    // Aplicar descuentos seleccionados (si existen)
+    if (selectedDescuentosIds.length > 0) {
+      const descuentosList = descuentosDetalleEmpleado[selectedEmpleado.empleadoId] || [];
+      const totalDescuentosSeleccionados = selectedDescuentosIds.reduce((sum, id) => {
+        const d = descuentosList.find(x => (typeof x._id === 'string' ? x._id : (x._id as any).toString()) === id);
+        if (!d) return sum;
+        const sueldoBasePeriodo = periodo.tipo === 'quincenal' ? selectedEmpleado.sueldoBase / 2 : selectedEmpleado.sueldoBase;
+        const monto = d.montoCalculado ?? (d.esPorcentaje ? (d.monto / 100) * sueldoBasePeriodo : d.monto);
+        return sum + monto;
+      }, 0);
+      total -= totalDescuentosSeleccionados;
+    }
 
-    // Adicionales por convenio (presentismo/zona)
-    const adicionales = adicionalesPorEmpleado[selectedEmpleado.empleadoId] || { presentismo: 0, zona: 0 };
-    const adicionalPresentismo = adicionales.presentismo ? (periodo.tipo === 'quincenal' ? (adicionales.presentismo / 2) : adicionales.presentismo) : (empleadoData?.adicionales?.presentismo ? (sueldoBasePeriodo * (ADICIONALES_LEGALES.PRESENTISMO / 100)) : 0);
-    const adicionalZona = adicionales.zona ? (periodo.tipo === 'quincenal' ? (adicionales.zona / 2) : adicionales.zona) : 0;
+    // Aplicar incentivos seleccionados (si existen)
+    if (selectedIncentivosIds.length > 0) {
+      const incentivosList = incentivosDetalleEmpleado[selectedEmpleado.empleadoId] || [];
+      const totalIncentivosSeleccionados = selectedIncentivosIds.reduce((sum, id) => {
+        const it = incentivosList.find(x => (typeof x._id === 'string' ? x._id : (x._id as any).toString()) === id);
+        if (!it) return sum;
+        const sueldoBasePeriodo = periodo.tipo === 'quincenal' ? selectedEmpleado.sueldoBase / 2 : selectedEmpleado.sueldoBase;
+        const monto = it.montoCalculado ?? (it.esPorcentaje ? (it.monto / 100) * sueldoBasePeriodo : it.monto);
+        return sum + monto;
+      }, 0);
+      total += totalIncentivosSeleccionados;
+    }
 
-    const totalAPagar = sueldoBasePeriodo + selectedEmpleado.totalHorasExtra
-      + adicionalPresentismo + adicionalZona
-      - selectedEmpleado.adelantos
-      - totalDescuentosSeleccionados
-      + totalIncentivosSeleccionados
-      - totalAportesEmp;
-
-    return totalAPagar;
+    return total;
   }; 
 
   const handleCloseRecibo = () => {
@@ -697,33 +684,30 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {periodo.liquidaciones.map((liquidacion) => {
+            {liquidacionesEnriquecidas.map((liquidacion) => {
               // Calcular descuentos e incentivos para este empleado
-              const descuentosEmp = descuentosPorEmpleado[liquidacion.empleadoId] || 0;
-              const incentivosEmp = incentivosPorEmpleado[liquidacion.empleadoId] || 0;
+              const descuentosEmp = liquidacion.descuentos || 0;
+              const incentivosEmp = liquidacion.incentivos || 0;
               const descuentosDetalleEmp = descuentosDetalleEmpleado[liquidacion.empleadoId] || [];
               const incentivosDetalleEmp = incentivosDetalleEmpleado[liquidacion.empleadoId] || [];
-              
-              // Calcular total ajustado
-              const sueldoBaseAjustado = periodo.tipo === 'quincenal' ? liquidacion.sueldoBase / 2 : liquidacion.sueldoBase;
-              
-              // Obtener modalidad del empleado
-              const empleadoData = empleados.find(e => e._id === liquidacion.empleadoId);
-              const esEmpleadoFormal = empleadoData?.modalidadContratacion === 'formal';
-              
-              // Calcular aportes si es formal
-              const baseImponible = sueldoBaseAjustado + liquidacion.totalHorasExtra;
-              const totalAportesEmp = esEmpleadoFormal 
-                ? baseImponible * ((APORTES_EMPLEADO.JUBILACION + APORTES_EMPLEADO.OBRA_SOCIAL + APORTES_EMPLEADO.PAMI + (empleadoData?.sindicato ? APORTES_EMPLEADO.SINDICATO : 0)) / 100)
-                : 0;
-              
-              // Adicionales (presentismo / zona) si aplican
-              const adicionales = adicionalesPorEmpleado[liquidacion.empleadoId] || { presentismo: 0, zona: 0 };
-              const presentismoLocal = adicionales.presentismo ? (periodo.tipo === 'quincenal' ? (adicionales.presentismo / 2) : adicionales.presentismo) : (empleadoData?.adicionales?.presentismo ? (sueldoBaseAjustado * (ADICIONALES_LEGALES.PRESENTISMO / 100)) : 0);
-              const zonaLocal = adicionales.zona ? (periodo.tipo === 'quincenal' ? (adicionales.zona / 2) : adicionales.zona) : 0;
 
-              // Total ajustado (informal = bruto, formal = neto) incluyendo adicionales
-              const totalAjustado = sueldoBaseAjustado + liquidacion.totalHorasExtra + presentismoLocal + zonaLocal - liquidacion.adelantos - descuentosEmp + incentivosEmp - totalAportesEmp;
+              const sueldoBaseAjustado = periodo.tipo === 'quincenal' ? (liquidacion.sueldoBase / 2) : liquidacion.sueldoBase;
+              const esEmpleadoFormal = liquidacion.empleadoModalidad === 'formal';
+
+              const presentismoLocal = liquidacion.adicionalPresentismo || 0;
+              const zonaLocal = liquidacion.adicionalZona || 0;
+
+              // Calcular antigüedad reutilizando el helper (no dentro del JSX)
+              const empleadoFull = empleados.find(e => e._id === liquidacion.empleadoId);
+              const { years: antiguedadYears, amount: antiguedadAmount } = calcularAntiguedadYearsAndAmount({
+                fechaIngreso: liquidacion.empleadoFechaIngreso || empleadoFull?.fechaIngreso,
+                empleadoAntiguedad: liquidacion.empleadoAntiguedad ?? empleadoFull?.antiguedad,
+                adicionalAntiguedad: liquidacion.adicionalAntiguedad ?? null,
+                sueldoBasePeriodo: sueldoBaseAjustado,
+                porcentajePorAnio: ADICIONALES_LEGALES.ANTIGUEDAD
+              });
+
+              const totalAjustado = liquidacion.totalHaberes - liquidacion.totalDeducciones;
               
               return (
               <React.Fragment key={liquidacion.empleadoId}>
@@ -847,26 +831,24 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
                               +{formatCurrency(liquidacion.aguinaldos)}
                             </Typography>
                           </Box>
-                          {/* Presentismo y Zona (cuando aplican) */}
+                          {/* Presentismo, Antiguedad y Zona (cuando aplican) */}
                           <Box>
                             <Typography variant="caption" color="text.secondary">Presentismo:</Typography>
                             <Typography variant="body2" color="success.main">
-                              {(() => {
-                                const emp = empleados.find(e => e._id === liquidacion.empleadoId);
-                                const adicionales = adicionalesPorEmpleado[liquidacion.empleadoId] || { presentismo: 0, zona: 0 };
-                                const presentismo = adicionales.presentismo ? (periodo.tipo === 'quincenal' ? (adicionales.presentismo / 2) : adicionales.presentismo) : (emp?.adicionales?.presentismo ? (sueldoBaseAjustado * (ADICIONALES_LEGALES.PRESENTISMO / 100)) : 0);
-                                return presentismo > 0 ? `+${formatCurrency(presentismo)}` : '-';
-                              })()}
+                              {liquidacion.adicionalPresentismo && liquidacion.adicionalPresentismo > 0 ? `+${formatCurrency(liquidacion.adicionalPresentismo)}` : '-'}
+                            </Typography>
+                          </Box>
+                          {/* Calcular antigüedad en años y mostrar el adicional correspondiente */}
+                          <Box>
+                            <Typography variant="caption" color="text.secondary">Antiguedad:</Typography>
+                            <Typography variant="body2" color="success.main">
+                              {antiguedadAmount > 0 ? `+${formatCurrency(antiguedadAmount)} (${antiguedadYears} años)` : '-'}
                             </Typography>
                           </Box>
                           <Box>
                             <Typography variant="caption" color="text.secondary">Zona peligrosa:</Typography>
                             <Typography variant="body2" color="success.main">
-                              {(() => {
-                                const adicionales = adicionalesPorEmpleado[liquidacion.empleadoId] || { presentismo: 0, zona: 0 };
-                                const zona = adicionales.zona ? (periodo.tipo === 'quincenal' ? (adicionales.zona / 2) : adicionales.zona) : 0;
-                                return zona && zona > 0 ? `+${formatCurrency(zona)}` : '-';
-                              })()}
+                              {liquidacion.adicionalZona && liquidacion.adicionalZona > 0 ? `+${formatCurrency(liquidacion.adicionalZona)}` : '-'}
                             </Typography>
                           </Box> 
                           <Box>
@@ -986,36 +968,44 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
         </DialogTitle>
         <DialogContent>
           {selectedEmpleado && (() => {
-            // Calcular valores para este empleado
+            // Usar el calculador central para este empleado (fuente de verdad)
             const empleadoData = empleados.find(e => e._id === selectedEmpleado.empleadoId);
+            const calculada = calcularLiquidacionEmpleado({
+              liquidacion: selectedEmpleado,
+              empleadoData,
+              periodo,
+              descuentosDetalle: descuentosDetalleEmpleado[selectedEmpleado.empleadoId] || [],
+              incentivosDetalle: incentivosDetalleEmpleado[selectedEmpleado.empleadoId] || [],
+              adicionalesConvenio: adicionalesPorEmpleado[selectedEmpleado.empleadoId] || null
+            }) as any;
+
             const esEmpleadoFormal = empleadoData?.modalidadContratacion === 'formal';
             const sueldoBasePeriodo = periodo.tipo === 'quincenal' ? selectedEmpleado.sueldoBase / 2 : selectedEmpleado.sueldoBase;
-            const baseImponible = sueldoBasePeriodo + selectedEmpleado.totalHorasExtra;
-            
-            // Aportes del empleado (solo formales)
-            const aporteJubilacion = esEmpleadoFormal ? baseImponible * (APORTES_EMPLEADO.JUBILACION / 100) : 0;
-            const aporteObraSocial = esEmpleadoFormal ? baseImponible * (APORTES_EMPLEADO.OBRA_SOCIAL / 100) : 0;
-            const aportePami = esEmpleadoFormal ? baseImponible * (APORTES_EMPLEADO.PAMI / 100) : 0;
-            const aporteSindicato = esEmpleadoFormal && empleadoData?.sindicato ? baseImponible * (APORTES_EMPLEADO.SINDICATO / 100) : 0;
+
+            const totalHorasExtra = calculada.totalHorasExtra ?? selectedEmpleado.totalHorasExtra ?? 0;
+            const adelantos = calculada.adelantos ?? selectedEmpleado.adelantos ?? 0;
+            const descuentosSistema = calculada.descuentos ?? (descuentosPorEmpleado[selectedEmpleado.empleadoId] || 0);
+            const incentivosSistema = calculada.incentivos ?? (incentivosPorEmpleado[selectedEmpleado.empleadoId] || 0);
+            const adicionalPresentismo = calculada.adicionalPresentismo ?? 0;
+            const adicionalZona = calculada.adicionalZona ?? 0;
+            const aguinaldos = calculada.aguinaldos ?? 0;
+            const bonus = calculada.bonus ?? 0;
+
+            const aporteJubilacion = calculada.aporteJubilacion ?? (esEmpleadoFormal ? (calculada.baseImponible ?? (sueldoBasePeriodo + totalHorasExtra)) * (APORTES_EMPLEADO.JUBILACION / 100) : 0);
+            const aporteObraSocial = calculada.aporteObraSocial ?? (esEmpleadoFormal ? (calculada.baseImponible ?? (sueldoBasePeriodo + totalHorasExtra)) * (APORTES_EMPLEADO.OBRA_SOCIAL / 100) : 0);
+            const aportePami = calculada.aportePami ?? (esEmpleadoFormal ? (calculada.baseImponible ?? (sueldoBasePeriodo + totalHorasExtra)) * (APORTES_EMPLEADO.PAMI / 100) : 0);
+            const aporteSindicato = calculada.aporteSindicato ?? (esEmpleadoFormal && empleadoData?.sindicato ? (calculada.baseImponible ?? (sueldoBasePeriodo + totalHorasExtra)) * (APORTES_EMPLEADO.SINDICATO / 100) : 0);
             const totalAportesEmp = aporteJubilacion + aporteObraSocial + aportePami + aporteSindicato;
-            
-            // Contribuciones patronales (solo formales)
-            const contribJubilacion = esEmpleadoFormal ? baseImponible * (CONTRIBUCIONES_EMPLEADOR.JUBILACION / 100) : 0;
-            const contribObraSocial = esEmpleadoFormal ? baseImponible * (CONTRIBUCIONES_EMPLEADOR.OBRA_SOCIAL / 100) : 0;
-            const contribPami = esEmpleadoFormal ? baseImponible * (CONTRIBUCIONES_EMPLEADOR.PAMI / 100) : 0;
-            const contribART = esEmpleadoFormal ? baseImponible * (CONTRIBUCIONES_EMPLEADOR.ART / 100) : 0;
+
+            const contribJubilacion = calculada.contribJubilacion ?? (esEmpleadoFormal ? (calculada.baseImponible ?? (sueldoBasePeriodo + totalHorasExtra)) * (CONTRIBUCIONES_EMPLEADOR.JUBILACION / 100) : 0);
+            const contribObraSocial = calculada.contribObraSocial ?? (esEmpleadoFormal ? (calculada.baseImponible ?? (sueldoBasePeriodo + totalHorasExtra)) * (CONTRIBUCIONES_EMPLEADOR.OBRA_SOCIAL / 100) : 0);
+            const contribPami = calculada.contribPami ?? (esEmpleadoFormal ? (calculada.baseImponible ?? (sueldoBasePeriodo + totalHorasExtra)) * (CONTRIBUCIONES_EMPLEADOR.PAMI / 100) : 0);
+            const contribART = calculada.contribART ?? (esEmpleadoFormal ? (calculada.baseImponible ?? (sueldoBasePeriodo + totalHorasExtra)) * (CONTRIBUCIONES_EMPLEADOR.ART / 100) : 0);
             const totalContribuciones = contribJubilacion + contribObraSocial + contribPami + contribART;
-            
-            // Total a pagar al empleado
-            const totalAPagar = sueldoBasePeriodo + selectedEmpleado.totalHorasExtra 
-              - selectedEmpleado.adelantos 
-              - (descuentosPorEmpleado[selectedEmpleado.empleadoId] || 0) 
-              + (incentivosPorEmpleado[selectedEmpleado.empleadoId] || 0)
-              - totalAportesEmp;
-            
-            // Costo total para la empresa
-            const costoTotalEmpresa = totalAPagar + totalAportesEmp + totalContribuciones;
-            
+
+            const totalAPagar = calculada.totalAPagar ?? (sueldoBasePeriodo + totalHorasExtra - adelantos - descuentosSistema + incentivosSistema - totalAportesEmp);
+            const costoTotalEmpresa = calculada.costoTotalEmpresa ?? (totalAPagar + totalAportesEmp + totalContribuciones);
+
             return (
             <Box sx={{ pt: 2 }}>
               {esEmpleadoFormal ? (

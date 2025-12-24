@@ -1,14 +1,10 @@
 import mongoose from 'mongoose';
+// Registrar el modelo Counter para la secuencia de legajos
+import './Counter.js';
 
 export interface IObraSocial {
   nombre: string;
   numero?: string;
-}
-
-export interface IAdicionales {
-  presentismo: boolean;
-  zonaPeligrosa: boolean;
-  otrosAdicionales?: { concepto: string; monto: number }[];
 }
 
 export interface IEmployee extends mongoose.Document {
@@ -30,13 +26,16 @@ export interface IEmployee extends mongoose.Document {
   antiguedad?: number;
   // Campos argentinos
   cuit?: string;
-  legajo?: string;
+  legajo?: number;
   cbu?: string;
   obraSocial?: IObraSocial;
   sindicato?: string;
   convenioId?: mongoose.Types.ObjectId;
   categoriaConvenio?: string;
-  adicionales?: IAdicionales;
+  // Flags para controlar si al empleado se le aplican ciertos adicionales
+  aplicaAntiguedad?: boolean;
+  aplicaPresentismo?: boolean;
+  aplicaZonaPeligrosa?: boolean;
   fechaCreacion: Date;
   fechaActualizacion: Date;
 }
@@ -142,10 +141,12 @@ const employeeSchema = new mongoose.Schema<IEmployee>({
       message: 'CUIT inválido. Formato: XX-XXXXXXXX-X'
     }
   },
+  // Legajo secuencial: se asigna automáticamente si no viene en el payload
   legajo: {
-    type: String,
-    trim: true,
-    maxlength: [20, 'El legajo no puede exceder 20 caracteres']
+    type: Number,
+    unique: true,
+    sparse: true,
+    index: true
   },
   cbu: {
     type: String,
@@ -184,25 +185,18 @@ const employeeSchema = new mongoose.Schema<IEmployee>({
     trim: true,
     maxlength: [50, 'La categoría del convenio no puede exceder 50 caracteres']
   },
-  adicionales: {
-    presentismo: {
-      type: Boolean,
-      default: true
-    },
-    zonaPeligrosa: {
-      type: Boolean,
-      default: false
-    },
-    otrosAdicionales: [{
-      concepto: {
-        type: String,
-        trim: true
-      },
-      monto: {
-        type: Number,
-        default: 0
-      }
-    }]
+  // Flags para controlar la aplicación de adicionales en la liquidación
+  aplicaAntiguedad: {
+    type: Boolean,
+    default: true
+  },
+  aplicaPresentismo: {
+    type: Boolean,
+    default: true
+  },
+  aplicaZonaPeligrosa: {
+    type: Boolean,
+    default: false
   },
   fechaCreacion: {
     type: Date,
@@ -222,6 +216,28 @@ const employeeSchema = new mongoose.Schema<IEmployee>({
 // Índices para búsqueda eficiente
 employeeSchema.index({ estado: 1 });
 employeeSchema.index({ apellido: 1, nombre: 1 });
+// Índice único para legajo (sparse para permitir documentos sin legajo previo)
+employeeSchema.index({ legajo: 1 }, { unique: true, sparse: true });
+
+// Pre-save hook para asignar legajo secuencial cuando se crea un empleado nuevo
+employeeSchema.pre('save', async function (next) {
+  try {
+    const doc = this as any;
+    if (doc.isNew && (typeof doc.legajo === 'undefined' || doc.legajo === null)) {
+      // Usamos un documento contador en la colección 'counters' con _id 'legajo'
+      const Counter = mongoose.model('Counter');
+      const seqDoc = await Counter.findOneAndUpdate(
+        { _id: 'legajo' },
+        { $inc: { seq: 1 } },
+        { new: true, upsert: true }
+      );
+      doc.legajo = seqDoc.seq;
+    }
+    next();
+  } catch (err) {
+    next(err as any);
+  }
+});
 
 const Employee = mongoose.model<IEmployee>('Employee', employeeSchema);
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { AppDispatch, RootState } from '../redux/store';
+import { AppDispatch, RootState } from '../../redux/store';
 import {
   fetchRemitos,
   fetchRemitoById,
@@ -10,10 +10,10 @@ import {
   eliminarRemito,
   fetchEstadisticasRemitos,
   clearError
-} from '../redux/slices/remitosSlice';
-import { fetchVentas } from '../redux/slices/ventasSlice';
-import { ESTADOS_REMITO, Remito } from '../types';
-import { generarPDFRemito, generarPDFCaratulaEnvio } from '../utils/pdfGenerator';
+} from '../../redux/slices/remitosSlice';
+import { fetchVentas } from '../../redux/slices/ventasSlice';
+import { ESTADOS_REMITO, Remito } from '../../types';
+import { generarPDFRemito, generarPDFCaratulaEnvio } from '../../utils/pdfGenerator';
 import {
   Box,
   Typography,
@@ -54,7 +54,7 @@ import {
   Visibility as ViewIcon,
   FilterList as FilterIcon
 } from '@mui/icons-material';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency } from '../../utils/formatters';
 
 const RemitosPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();

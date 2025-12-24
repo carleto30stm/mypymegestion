@@ -15,7 +15,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { formatCurrency } from '../utils/formatters';
+import { formatCurrency } from '../../utils/formatters';
 import {
   DataGrid,
   GridColDef,
@@ -32,18 +32,18 @@ import {
   Receipt as ReceiptIcon,
 } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
-import type { AppDispatch, RootState } from '../redux/store';
-import { fetchFacturas, clearError } from '../redux/slices/facturasSlice';
-import type { Factura, TipoComprobante, EstadoFactura } from '../redux/slices/facturasSlice';
-import { fetchClientes } from '../redux/slices/clientesSlice';
+import type { AppDispatch, RootState } from '../../redux/store';
+import { fetchFacturas, clearError } from '../../redux/slices/facturasSlice';
+import type { Factura, TipoComprobante, EstadoFactura } from '../../redux/slices/facturasSlice';
+import { fetchClientes } from '../../redux/slices/clientesSlice';
 import { 
   FacturaDetailDialog, 
   AutorizarFacturaDialog, 
   FacturaPDF,
   AnularFacturaDialog,
   EmitirNotaCreditoDialog 
-} from '../components';
-import CrearFacturaDialog from '../components/CrearFacturaDialog';
+} from '../../components';
+import CrearFacturaDialog from '../../components/CrearFacturaDialog';
 
 const tiposComprobante: { value: TipoComprobante; label: string }[] = [
   { value: 'FACTURA_A', label: 'Factura A' },

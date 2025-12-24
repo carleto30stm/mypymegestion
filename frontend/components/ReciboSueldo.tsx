@@ -13,6 +13,7 @@ import {
   ADICIONALES_LEGALES
 } from '../types';
 import { formatCurrency, formatDateForDisplay } from '../utils/formatters';
+import calcularLiquidacionEmpleado from '../utils/liquidacionCalculator';
 
 interface ReciboSueldoProps {
   liquidacion: LiquidacionEmpleado;
@@ -49,29 +50,36 @@ const ReciboSueldo: React.FC<ReciboSueldoProps> = ({
   // `bonusAmount` unifica el monto de incentivos/bonus: si se pasaron detalles usamos `totalIncentivos`,
   // si no, usamos `liquidacion.bonus` (legacy/guardado)
   const bonusAmount = (incentivosDetalle && incentivosDetalle.length > 0) ? totalIncentivos : (liquidacion.bonus || 0);
+// Ajustes por tipo de período (usar calculador central si es posible)
+  const empleadoData: any = {
+    fechaIngreso: (liquidacion as any).empleadoFechaIngreso || liquidacion.empleadoFechaIngreso,
+    modalidadContratacion: (liquidacion as any).empleadoModalidad || liquidacion.empleadoModalidad,
+    sindicato: (liquidacion as any).empleadoSindicato || liquidacion.empleadoSindicato,
+    aplicaAntiguedad: (liquidacion as any).aplicaAntiguedad,
+    aplicaPresentismo: (liquidacion as any).aplicaPresentismo,
+    aplicaZonaPeligrosa: (liquidacion as any).aplicaZonaPeligrosa
+  };
 
-// Ajustes por tipo de período (quincenal = mitad del básico y adicionales si aplica)
-  const sueldoBasePeriodo = periodo.tipo === 'quincenal' ? (liquidacion.sueldoBase / 2) : liquidacion.sueldoBase;
-  const adicionalAntiguedadAmount = periodo.tipo === 'quincenal' ? ((liquidacion.adicionalAntiguedad || 0) / 2) : (liquidacion.adicionalAntiguedad || 0);
-  const adicionalPresentismoAmount = (liquidacion.adicionalPresentismo && liquidacion.adicionalPresentismo > 0)
-    ? (periodo.tipo === 'quincenal' ? (liquidacion.adicionalPresentismo / 2) : liquidacion.adicionalPresentismo)
-    : (sueldoBasePeriodo * (ADICIONALES_LEGALES.PRESENTISMO / 100));
-  const adicionalZonaAmount = (liquidacion.adicionalZona && liquidacion.adicionalZona > 0)
-    ? (periodo.tipo === 'quincenal' ? (liquidacion.adicionalZona / 2) : liquidacion.adicionalZona)
-    : 0;
+  const enriched = calcularLiquidacionEmpleado({
+    liquidacion,
+    empleadoData,
+    periodo,
+    descuentosDetalle,
+    incentivosDetalle
+  });
 
-  const baseImponible = sueldoBasePeriodo + 
-    liquidacion.totalHorasExtra + 
-    adicionalAntiguedadAmount + 
-    adicionalPresentismoAmount +
-    adicionalZonaAmount +
-    bonusAmount;
+  const sueldoBasePeriodo = periodo.tipo === 'quincenal' ? (enriched.sueldoBase / 2) : enriched.sueldoBase;
+  const adicionalAntiguedadAmount = enriched.adicionalAntiguedad || 0;
+  const adicionalPresentismoAmount = enriched.adicionalPresentismo || 0;
+  const adicionalZonaAmount = enriched.adicionalZona || 0;
+
+  const baseImponible = enriched.baseImponible || (sueldoBasePeriodo + enriched.totalHorasExtra + adicionalAntiguedadAmount + adicionalPresentismoAmount + adicionalZonaAmount + bonusAmount);
 
   const aportes = incluirAportes ? {
-    jubilacion: liquidacion.aporteJubilacion || (baseImponible * APORTES_EMPLEADO.JUBILACION / 100),
-    obraSocial: liquidacion.aporteObraSocial || (baseImponible * APORTES_EMPLEADO.OBRA_SOCIAL / 100),
-    pami: liquidacion.aportePami || (baseImponible * APORTES_EMPLEADO.PAMI / 100),
-    sindicato: liquidacion.aporteSindicato || 0,
+    jubilacion: enriched.aporteJubilacion || 0,
+    obraSocial: enriched.aporteObraSocial || 0,
+    pami: enriched.aportePami || 0,
+    sindicato: enriched.aporteSindicato || 0,
   } : { jubilacion: 0, obraSocial: 0, pami: 0, sindicato: 0 };
 
   const totalAportes = aportes.jubilacion + aportes.obraSocial + aportes.pami + aportes.sindicato;

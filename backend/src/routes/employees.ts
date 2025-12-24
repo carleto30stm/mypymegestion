@@ -64,7 +64,10 @@ router.post('/', async (req, res) => {
       estado,
       email,
       telefono,
-      observaciones
+      observaciones,
+      aplicaAntiguedad,
+      aplicaPresentismo,
+      aplicaZonaPeligrosa
     } = req.body;
 
     // Validación básica
@@ -94,6 +97,9 @@ router.post('/', async (req, res) => {
       hora: Number(hora),
       estado: estado || 'activo',
       modalidadContratacion: modalidadContratacion || 'informal',
+      aplicaAntiguedad: typeof aplicaAntiguedad !== 'undefined' ? !!aplicaAntiguedad : true,
+      aplicaPresentismo: typeof aplicaPresentismo !== 'undefined' ? !!aplicaPresentismo : true,
+      aplicaZonaPeligrosa: typeof aplicaZonaPeligrosa !== 'undefined' ? !!aplicaZonaPeligrosa : false,
       email: email?.trim(),
       telefono: telefono?.trim(),
       observaciones: observaciones?.trim()
@@ -146,7 +152,10 @@ router.put('/:id', async (req, res) => {
       estado,
       email,
       telefono,
-      observaciones
+      observaciones,
+      aplicaAntiguedad,
+      aplicaPresentismo,
+      aplicaZonaPeligrosa
     } = req.body;
 
     // Validación básica
@@ -190,6 +199,10 @@ router.put('/:id', async (req, res) => {
     if (modalidadContratacion) {
       employee.modalidadContratacion = modalidadContratacion;
     }
+    // Actualizar flags de aplicación de adicionales si vienen en el body
+    if (typeof aplicaAntiguedad !== 'undefined') employee.aplicaAntiguedad = !!aplicaAntiguedad;
+    if (typeof aplicaPresentismo !== 'undefined') employee.aplicaPresentismo = !!aplicaPresentismo;
+    if (typeof aplicaZonaPeligrosa !== 'undefined') employee.aplicaZonaPeligrosa = !!aplicaZonaPeligrosa;
     employee.email = email?.trim();
     employee.telefono = telefono?.trim();
     employee.observaciones = observaciones?.trim();

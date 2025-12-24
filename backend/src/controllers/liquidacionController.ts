@@ -6,6 +6,7 @@ import HoraExtra from '../models/HoraExtra.js';
 import Gasto from '../models/Gasto.js';
 import DescuentoEmpleado from '../models/DescuentoEmpleado.js';
 import IncentivoEmpleado from '../models/IncentivoEmpleado.js';
+import calcularLiquidacionEmpleadoBackend from '../utils/liquidacionCalculator.js';
 
 // Obtener todos los períodos de liquidación
 export const getPeriodos = async (req: Request, res: Response) => {
@@ -311,72 +312,12 @@ export const liquidarEmpleado = async (req: Request, res: Response) => {
     const medioFinal = medioDePago || 'EFECTIVO';
     const bancoFinal = banco || 'EFECTIVO';
 
-    // Calcular el monto del sueldo base según el tipo de período
-    const sueldoBasePeriodo = periodo.tipo === 'quincenal' ? liquidacion.sueldoBase / 2 : liquidacion.sueldoBase;
-    
-    // Base imponible inicial para aportes (se ajustará con presentismo/zona si aplican)
-    let baseImponible = sueldoBasePeriodo + liquidacion.totalHorasExtra;
+    // Nota: los cálculos de adicionales/aportes/contribuciones se realizan
+    // mediante el util `calcularLiquidacionEmpleadoBackend` más abajo, una vez
+    // que se conocen descuentos e incentivos aplicados.
 
-    // Calcular adicionales por presentismo / zona si aplican (usar convenio si está disponible)
-    let adicionalPresentismo = 0;
-    let adicionalZona = 0;
-
-    try {
-      if (empleado.adicionales?.presentismo || empleado.adicionales?.zonaPeligrosa) {
-        if (empleado.convenioId && empleado.categoriaConvenio) {
-          const convenio = await (await import('../models/Convenio.js')).default.findById(empleado.convenioId);
-          if (convenio) {
-            const antig = empleado.fechaIngreso ? Math.floor((Date.now() - new Date(empleado.fechaIngreso).getTime()) / (365.25 * 24 * 60 * 60 * 1000)) : 0;
-            const calculo = (convenio as any).calcularSueldoCategoria(
-              empleado.categoriaConvenio,
-              antig,
-              !!empleado.adicionales?.presentismo,
-              !!empleado.adicionales?.zonaPeligrosa
-            );
-            adicionalPresentismo = calculo.adicionales.find((a: any) => a.concepto.toLowerCase().includes('presentismo'))?.monto || 0;
-            adicionalZona = calculo.adicionales.find((a: any) => a.concepto.toLowerCase().includes('zona'))?.monto || 0;
-          }
-        }
-
-        // Fallback si no hay convenio: usar porcentaje por defecto para presentismo
-        if (!adicionalPresentismo && empleado.adicionales?.presentismo) {
-          adicionalPresentismo = sueldoBasePeriodo * (8.33 / 100);
-        }
-      }
-    } catch (e) {
-      console.error('Error al calcular adicionales (presentismo/zona):', e);
-      adicionalPresentismo = adicionalPresentismo || 0;
-      adicionalZona = adicionalZona || 0;
-    }
-
-    // Si el período es quincenal, proporcionalizar los adicionales calculados por convenio (dividir por 2)
-    if (periodo.tipo === 'quincenal') {
-      adicionalPresentismo = adicionalPresentismo / 2;
-      adicionalZona = adicionalZona / 2;
-    }
-
-    // Incluir adicionales en base imponible
-    baseImponible = baseImponible + adicionalPresentismo + adicionalZona;
-
-    // Calcular aportes del empleado (solo formales)
-    let totalAportesEmpleado = 0;
-    if (esEmpleadoFormal) {
-      const aporteJubilacion = baseImponible * (APORTES_EMPLEADO.JUBILACION / 100);
-      const aporteObraSocial = baseImponible * (APORTES_EMPLEADO.OBRA_SOCIAL / 100);
-      const aportePami = baseImponible * (APORTES_EMPLEADO.PAMI / 100);
-      const aporteSindicato = empleado.sindicato ? baseImponible * (APORTES_EMPLEADO.SINDICATO / 100) : 0;
-      totalAportesEmpleado = aporteJubilacion + aporteObraSocial + aportePami + aporteSindicato;
-    }
-
-    // Calcular contribuciones patronales (solo formales)
-    let totalContribucionesPatronales = 0;
-    if (esEmpleadoFormal) {
-      const contribJubilacion = baseImponible * (CONTRIBUCIONES_EMPLEADOR.JUBILACION / 100);
-      const contribObraSocial = baseImponible * (CONTRIBUCIONES_EMPLEADOR.OBRA_SOCIAL / 100);
-      const contribPami = baseImponible * (CONTRIBUCIONES_EMPLEADOR.PAMI / 100);
-      const contribART = baseImponible * (CONTRIBUCIONES_EMPLEADOR.ART / 100);
-      totalContribucionesPatronales = contribJubilacion + contribObraSocial + contribPami + contribART;
-    }
+    // Calcular sueldo base del período antes de aplicar descuentos/incentivos
+    let sueldoBasePeriodo = periodo.tipo === 'quincenal' ? liquidacion.sueldoBase / 2 : liquidacion.sueldoBase;
 
     // Obtener periodoAplicacion YYYY-MM
     const periodoAplicacion = periodo.fechaInicio instanceof Date
@@ -477,9 +418,49 @@ export const liquidarEmpleado = async (req: Request, res: Response) => {
       liquidacion.bonus -
       liquidacion.adelantos -
       liquidacion.descuentos;
+    // Permitir que el frontend envie el resultado del calculador (para asegurar coincidencia)
+    // Si viene `calculos` en el payload, lo usamos tal cual; si no, calculamos en backend.
+    const payloadCalculos = req.body.calculos;
+    let calc: any;
+    if (payloadCalculos && typeof payloadCalculos === 'object') {
+      calc = {
+        adicionalPresentismo: Number(payloadCalculos.adicionalPresentismo || 0),
+        adicionalZona: Number(payloadCalculos.adicionalZona || 0),
+        adicionalAntiguedad: Number(payloadCalculos.adicionalAntiguedad || 0),
+        totalAportesEmpleado: Number(payloadCalculos.totalAportesEmpleado || 0),
+        totalContribucionesPatronales: Number(payloadCalculos.totalContribucionesPatronales || 0),
+        sueldoBasePeriodo: Number(payloadCalculos.sueldoBasePeriodo || (periodo.tipo === 'quincenal' ? liquidacion.sueldoBase / 2 : liquidacion.sueldoBase)),
+        montoNetoPagar: Number(payloadCalculos.montoNetoPagar || 0),
+        costoTotalEmpresa: Number(payloadCalculos.costoTotalEmpresa || 0),
+        aporteJubilacion: Number(payloadCalculos.aporteJubilacion || 0),
+        aporteObraSocial: Number(payloadCalculos.aporteObraSocial || 0),
+        aportePami: Number(payloadCalculos.aportePami || 0),
+        aporteSindicato: Number(payloadCalculos.aporteSindicato || 0),
+        contribJubilacion: Number(payloadCalculos.contribJubilacion || 0),
+        contribObraSocial: Number(payloadCalculos.contribObraSocial || 0),
+        contribPami: Number(payloadCalculos.contribPami || 0),
+        contribART: Number(payloadCalculos.contribART || 0),
+        totalAPagar: Number(payloadCalculos.totalAPagar || 0)
+      };
+    } else {
+      // Usar util centralizado para calcular adicionales, aportes, contribuciones y totales
+      calc = await calcularLiquidacionEmpleadoBackend({
+        empleado,
+        liquidacion,
+        periodo,
+        totalDescuentos,
+        totalIncentivos
+      });
+    }
 
-    // Monto neto a pagar al empleado (bruto + incentivos + adicionales - adelantos - descuentos - aportes)
-    const montoNetoPagar = sueldoBasePeriodo + liquidacion.totalHorasExtra + adicionalPresentismo + adicionalZona + totalIncentivos - liquidacion.adelantos - totalDescuentos - totalAportesEmpleado;
+    const adicionalPresentismo = calc.adicionalPresentismo || 0;
+    const adicionalZona = calc.adicionalZona || 0;
+    const adicionalAntiguedad = calc.adicionalAntiguedad || 0;
+    const totalAportesEmpleado = calc.totalAportesEmpleado || 0;
+    const totalContribucionesPatronales = calc.totalContribucionesPatronales || 0;
+    sueldoBasePeriodo = calc.sueldoBasePeriodo;
+    const montoNetoPagar = calc.montoNetoPagar;
+    const costoTotalEmpresa = calc.costoTotalEmpresa;
     
     const gastosSueldoCreados = [];
     
@@ -556,6 +537,17 @@ export const liquidarEmpleado = async (req: Request, res: Response) => {
     // Guardar adicionales calculados para trazabilidad
     (liquidacion as any).adicionalPresentismo = adicionalPresentismo;
     (liquidacion as any).adicionalZona = adicionalZona;
+    (liquidacion as any).adicionalAntiguedad = adicionalAntiguedad;
+    // Guardar aportes y contribuciones para que el frontend/PDF los muestre
+    (liquidacion as any).aporteJubilacion = calc.aporteJubilacion || 0;
+    (liquidacion as any).aporteObraSocial = calc.aporteObraSocial || 0;
+    (liquidacion as any).aportePami = calc.aportePami || 0;
+    (liquidacion as any).aporteSindicato = calc.aporteSindicato || 0;
+    (liquidacion as any).totalAportesEmpleado = totalAportesEmpleado;
+    (liquidacion as any).totalContribucionesPatronales = totalContribucionesPatronales;
+    (liquidacion as any).costoTotal = costoTotalEmpresa;
+    // Actualizar el total a pagar guardado en la liquidación con el neto calculado
+    (liquidacion as any).totalAPagar = montoNetoPagar;
     if (observaciones) {
       liquidacion.observaciones = observaciones;
     }

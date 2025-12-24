@@ -96,12 +96,7 @@ export interface ObraSocial {
   numero?: string;
 }
 
-// Interface para adicionales del empleado
-export interface AdicionalesEmpleado {
-  presentismo: boolean;
-  zonaPeligrosa: boolean;
-  otrosAdicionales?: { concepto: string; monto: number }[];
-}
+// NOTE: nested `adicionales` removed; use top-level flags `aplica*`
 
 // Interface para empleados
 export interface Employee {
@@ -122,6 +117,10 @@ export interface Employee {
   observaciones?: string;
   categoria: string;
   antiguedad: number;
+  // Flags para controlar si se deben aplicar ciertos adicionales en la liquidación
+  aplicaAntiguedad?: boolean;
+  aplicaPresentismo?: boolean;
+  aplicaZonaPeligrosa?: boolean;
   // Campos argentinos
   cuit?: string;
   legajo?: string;
@@ -130,7 +129,6 @@ export interface Employee {
   sindicato?: string;
   convenioId?: string;
   categoriaConvenio?: string;
-  adicionales?: AdicionalesEmpleado;
 }
 
 // Tipos de descuento disponibles
@@ -325,10 +323,16 @@ export interface LiquidacionEmpleado {
   incentivos: number;
   totalRemunerativo: number;
 
+  // Base imponible usada para cálculo de aportes y contribuciones
+  baseImponible?: number;
+
   // Conceptos no remunerativos
   viaticos: number;
   otrosNoRemunerativos: number;
   totalNoRemunerativo: number;
+
+  // Total de haberes (remunerativos + adicionales relevantes)
+  totalHaberes: number;
 
   // Total bruto
   totalBruto: number;

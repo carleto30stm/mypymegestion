@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { AppDispatch, RootState } from '../redux/store';
-import { fetchVentas, fetchVentasByRango, anularVenta, confirmarVenta, updateVenta } from '../redux/slices/ventasSlice';
-import { crearFacturaDesdeVenta, fetchFacturas } from '../redux/slices/facturasSlice';
-import { Venta } from '../types';
+import { AppDispatch, RootState } from '../../redux/store';
+import { fetchVentas, fetchVentasByRango, anularVenta, confirmarVenta, updateVenta } from '../../redux/slices/ventasSlice';
+import { crearFacturaDesdeVenta, fetchFacturas } from '../../redux/slices/facturasSlice';
+import { Venta } from '../../types';
 import {
   Box,
   Typography,
@@ -40,8 +40,8 @@ import {
   Edit as EditIcon,
   Info as InfoIcon
 } from '@mui/icons-material';
-import { formatCurrency, formatDate, formatCurrencyDecimals } from '../utils/formatters';
-import ConfirmDialog from '../components/modal/ConfirmDialog';
+import { formatCurrency, formatDate, formatCurrencyDecimals } from '../../utils/formatters';
+import ConfirmDialog from '../../components/modal/ConfirmDialog';
 
 const HistorialVentasPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();

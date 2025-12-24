@@ -136,7 +136,9 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
       .map(employee => {
         // Calcular antigüedad desde fecha de ingreso
         const antiguedadInfo = calcularAntiguedad(employee.fechaIngreso);
-        const adicionalAntiguedad = calcularAdicionalAntiguedad(employee.sueldoBase, antiguedadInfo.anios);
+        const adicionalAntiguedad = (employee as any).aplicaAntiguedad === false
+          ? 0
+          : calcularAdicionalAntiguedad(employee.sueldoBase, antiguedadInfo.anios);
         const sueldoBruto = employee.sueldoBase + adicionalAntiguedad;
         
         // Buscar pagos a este empleado en los gastos de sueldos
