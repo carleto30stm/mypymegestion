@@ -146,6 +146,24 @@ Breve: este proyecto es una aplicación fullstack (React + Vite en frontend, Nod
         - `frontend/components/FormaPagoModal.tsx`: montos de formas de pago
         - `frontend/pages/RRHHPage.tsx`: salarioBasico en formulario de categorías de convenio
     - **NO reinventar formatos** - usar estas funciones en todo el proyecto.
+  - **NO cálculos grandes dentro del `return` de JSX**: Evitar a toda costa poner funciones complejas o cálculos extensos directamente dentro del `return` de un componente React. Siempre precomputar los valores fuera del JSX —por ejemplo en `useMemo`, en helpers definidos antes del `return` o moviendo la lógica a `frontend/utils/*`— y pasar solo los resultados al render. Esto mejora legibilidad, rendimiento y evita bugs sutiles por re-evaluaciones durante el render.
+
+    Ejemplo de patrón recomendado:
+    ```tsx
+    // ✅ Antes del return: computar y/o memoizar
+    const totales = useMemo(() => calcularTotalesDesdeCalculada(calculada), [calculada]);
+
+    return (
+      <Box>
+        {/* JSX simple que consume resultados precomputados */}
+        <Typography>{formatCurrency(totales.totalAPagar)}</Typography>
+      </Box>
+    );
+    ```
+
+    - Preferir `useMemo` para cálculos derivados costosos.
+    - Si la lógica es reutilizable entre componentes, moverla a `frontend/utils/` y exportarla.
+    - Evitar lambdas o expresiones con lógica aritmética extensa directamente dentro de JSX.
   - **Componentes Reutilizables - UI/UX**:
     - **ConfirmDialog**: Modal de confirmación reutilizable en `frontend/components/modal/ConfirmDialog.tsx`
       - **Uso obligatorio**: SIEMPRE usar este componente para confirmar acciones críticas (eliminar, cancelar, modificar datos financieros)

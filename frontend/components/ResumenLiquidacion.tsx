@@ -81,6 +81,63 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
   // Adicionales calculados por convenio (presentismo, zona) por empleadoId
   const [adicionalesPorEmpleado, setAdicionalesPorEmpleado] = useState<Record<string, { presentismo: number; zona: number; loading?: boolean }>>({});
 
+  // Helper: calcula totales a partir del objeto `calculada` (misma fórmula
+  // que se usa en el modal). Permite overrides para descuentos/incentivos.
+  const calcularTotalesDesdeCalculada = (
+    calculada: any,
+    empleadoData: any,
+    selectedEmpleadoArg: LiquidacionEmpleado,
+    periodoArg: LiquidacionPeriodo,
+    descuentosMap: Record<string, number>,
+    incentivosMap: Record<string, number>,
+    descuentosOverride?: number | null,
+    incentivosOverride?: number | null
+  ) => {
+    const sueldoBasePeriodo = periodoArg.tipo === 'quincenal' ? selectedEmpleadoArg.sueldoBase / 2 : selectedEmpleadoArg.sueldoBase;
+    const totalHorasExtra = calculada.totalHorasExtra ?? selectedEmpleadoArg.totalHorasExtra ?? 0;
+    const adelantos = calculada.adelantos ?? selectedEmpleadoArg.adelantos ?? 0;
+
+    const descuentosSistema = typeof descuentosOverride === 'number' ? descuentosOverride : (calculada.descuentos ?? (descuentosMap[selectedEmpleadoArg.empleadoId] || 0));
+    const incentivosSistema = typeof incentivosOverride === 'number' ? incentivosOverride : (calculada.incentivos ?? (incentivosMap[selectedEmpleadoArg.empleadoId] || 0));
+
+    const esEmpleadoFormal = empleadoData?.modalidadContratacion === 'formal';
+
+    const aporteJubilacion = calculada.aporteJubilacion ?? (esEmpleadoFormal ? (calculada.baseImponible ?? (sueldoBasePeriodo + totalHorasExtra)) * (APORTES_EMPLEADO.JUBILACION / 100) : 0);
+    const aporteObraSocial = calculada.aporteObraSocial ?? (esEmpleadoFormal ? (calculada.baseImponible ?? (sueldoBasePeriodo + totalHorasExtra)) * (APORTES_EMPLEADO.OBRA_SOCIAL / 100) : 0);
+    const aportePami = calculada.aportePami ?? (esEmpleadoFormal ? (calculada.baseImponible ?? (sueldoBasePeriodo + totalHorasExtra)) * (APORTES_EMPLEADO.PAMI / 100) : 0);
+    const aporteSindicato = calculada.aporteSindicato ?? (esEmpleadoFormal && empleadoData?.sindicato ? (calculada.baseImponible ?? (sueldoBasePeriodo + totalHorasExtra)) * (APORTES_EMPLEADO.SINDICATO / 100) : 0);
+    const totalAportesEmp = aporteJubilacion + aporteObraSocial + aportePami + aporteSindicato;
+
+    const contribJubilacion = calculada.contribJubilacion ?? (esEmpleadoFormal ? (calculada.baseImponible ?? (sueldoBasePeriodo + totalHorasExtra)) * (CONTRIBUCIONES_EMPLEADOR.JUBILACION / 100) : 0);
+    const contribObraSocial = calculada.contribObraSocial ?? (esEmpleadoFormal ? (calculada.baseImponible ?? (sueldoBasePeriodo + totalHorasExtra)) * (CONTRIBUCIONES_EMPLEADOR.OBRA_SOCIAL / 100) : 0);
+    const contribPami = calculada.contribPami ?? (esEmpleadoFormal ? (calculada.baseImponible ?? (sueldoBasePeriodo + totalHorasExtra)) * (CONTRIBUCIONES_EMPLEADOR.PAMI / 100) : 0);
+    const contribART = calculada.contribART ?? (esEmpleadoFormal ? (calculada.baseImponible ?? (sueldoBasePeriodo + totalHorasExtra)) * (CONTRIBUCIONES_EMPLEADOR.ART / 100) : 0);
+    const totalContribuciones = contribJubilacion + contribObraSocial + contribPami + contribART;
+
+    const totalAPagar = calculada.totalAPagar ?? (sueldoBasePeriodo + totalHorasExtra - adelantos - descuentosSistema + incentivosSistema - totalAportesEmp);
+    const costoTotalEmpresa = calculada.costoTotalEmpresa ?? (totalAPagar + totalAportesEmp + totalContribuciones);
+
+    return {
+      sueldoBasePeriodo,
+      totalHorasExtra,
+      adelantos,
+      descuentosSistema,
+      incentivosSistema,
+      aporteJubilacion,
+      aporteObraSocial,
+      aportePami,
+      aporteSindicato,
+      totalAportesEmp,
+      contribJubilacion,
+      contribObraSocial,
+      contribPami,
+      contribART,
+      totalContribuciones,
+      totalAPagar,
+      costoTotalEmpresa
+    };
+  };
+
   const isEditable = periodo.estado === 'abierto' && (user?.userType === 'admin' || user?.userType === 'oper_ad');
 
   // Obtener período en formato YYYY-MM desde las fechas del período (si aplica)
@@ -478,56 +535,6 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
     setOpenRecibo(true);
   };
 
-  // Calcula el total a pagar para el empleado seleccionado (usado en el ConfirmDialog)
-  const computeTotalAPagarForSelected = () => {
-    if (!selectedEmpleado) return 0;
-    const empleadoData = empleados.find(e => e._id === selectedEmpleado.empleadoId);
-
-    // Usar el calculador centralizado para obtener totalAPagar (fuente de verdad)
-    const calculada = calcularLiquidacionEmpleado({
-      liquidacion: selectedEmpleado,
-      empleadoData,
-      periodo,
-      descuentosDetalle: descuentosDetalleEmpleado[selectedEmpleado.empleadoId] || [],
-      incentivosDetalle: incentivosDetalleEmpleado[selectedEmpleado.empleadoId] || [],
-      adicionalesConvenio: adicionalesPorEmpleado[selectedEmpleado.empleadoId] || null
-    });
-
-    // Si el usuario seleccionó descuentos/incentivos manualmente en el modal,
-    // necesitamos ajustar el resultado para reflejar solo los seleccionados.
-    // Para simplicidad, si hay selecciones aplicadas usaremos el cálculo base
-    // y aplicaremos deltas manuales aquí.
-    let total = calculada.totalAPagar ?? 0;
-
-    // Aplicar descuentos seleccionados (si existen)
-    if (selectedDescuentosIds.length > 0) {
-      const descuentosList = descuentosDetalleEmpleado[selectedEmpleado.empleadoId] || [];
-      const totalDescuentosSeleccionados = selectedDescuentosIds.reduce((sum, id) => {
-        const d = descuentosList.find(x => (typeof x._id === 'string' ? x._id : (x._id as any).toString()) === id);
-        if (!d) return sum;
-        const sueldoBasePeriodo = periodo.tipo === 'quincenal' ? selectedEmpleado.sueldoBase / 2 : selectedEmpleado.sueldoBase;
-        const monto = d.montoCalculado ?? (d.esPorcentaje ? (d.monto / 100) * sueldoBasePeriodo : d.monto);
-        return sum + monto;
-      }, 0);
-      total -= totalDescuentosSeleccionados;
-    }
-
-    // Aplicar incentivos seleccionados (si existen)
-    if (selectedIncentivosIds.length > 0) {
-      const incentivosList = incentivosDetalleEmpleado[selectedEmpleado.empleadoId] || [];
-      const totalIncentivosSeleccionados = selectedIncentivosIds.reduce((sum, id) => {
-        const it = incentivosList.find(x => (typeof x._id === 'string' ? x._id : (x._id as any).toString()) === id);
-        if (!it) return sum;
-        const sueldoBasePeriodo = periodo.tipo === 'quincenal' ? selectedEmpleado.sueldoBase / 2 : selectedEmpleado.sueldoBase;
-        const monto = it.montoCalculado ?? (it.esPorcentaje ? (it.monto / 100) * sueldoBasePeriodo : it.monto);
-        return sum + monto;
-      }, 0);
-      total += totalIncentivosSeleccionados;
-    }
-
-    return total;
-  }; 
-
   const handleCloseRecibo = () => {
     setOpenRecibo(false);
     setReciboEmpleado(null);
@@ -708,6 +715,8 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
               });
 
               const totalAjustado = liquidacion.totalHaberes - liquidacion.totalDeducciones;
+              // Si ya está pagado, mostrar 0 como total a pagar (ya fue liquidadó)
+              const displayTotal = liquidacion.estado === 'pagado' ? 0 : totalAjustado;
               
               return (
               <React.Fragment key={liquidacion.empleadoId}>
@@ -761,7 +770,7 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
                   <TableCell align="right">
                     <Box>
                       <Typography variant="body2" fontWeight="bold" color="primary.main">
-                        {formatCurrency(totalAjustado)}
+                        {formatCurrency(displayTotal)}
                       </Typography>
                       {esEmpleadoFormal && (
                         <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
@@ -980,31 +989,36 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
             }) as any;
 
             const esEmpleadoFormal = empleadoData?.modalidadContratacion === 'formal';
-            const sueldoBasePeriodo = periodo.tipo === 'quincenal' ? selectedEmpleado.sueldoBase / 2 : selectedEmpleado.sueldoBase;
 
-            const totalHorasExtra = calculada.totalHorasExtra ?? selectedEmpleado.totalHorasExtra ?? 0;
-            const adelantos = calculada.adelantos ?? selectedEmpleado.adelantos ?? 0;
-            const descuentosSistema = calculada.descuentos ?? (descuentosPorEmpleado[selectedEmpleado.empleadoId] || 0);
-            const incentivosSistema = calculada.incentivos ?? (incentivosPorEmpleado[selectedEmpleado.empleadoId] || 0);
-            const adicionalPresentismo = calculada.adicionalPresentismo ?? 0;
-            const adicionalZona = calculada.adicionalZona ?? 0;
-            const aguinaldos = calculada.aguinaldos ?? 0;
-            const bonus = calculada.bonus ?? 0;
+            // Reutilizar la fórmula centralizada para evitar cálculos inline.
+            const totales = calcularTotalesDesdeCalculada(
+              calculada,
+              empleadoData,
+              selectedEmpleado,
+              periodo,
+              descuentosPorEmpleado,
+              incentivosPorEmpleado
+            );
 
-            const aporteJubilacion = calculada.aporteJubilacion ?? (esEmpleadoFormal ? (calculada.baseImponible ?? (sueldoBasePeriodo + totalHorasExtra)) * (APORTES_EMPLEADO.JUBILACION / 100) : 0);
-            const aporteObraSocial = calculada.aporteObraSocial ?? (esEmpleadoFormal ? (calculada.baseImponible ?? (sueldoBasePeriodo + totalHorasExtra)) * (APORTES_EMPLEADO.OBRA_SOCIAL / 100) : 0);
-            const aportePami = calculada.aportePami ?? (esEmpleadoFormal ? (calculada.baseImponible ?? (sueldoBasePeriodo + totalHorasExtra)) * (APORTES_EMPLEADO.PAMI / 100) : 0);
-            const aporteSindicato = calculada.aporteSindicato ?? (esEmpleadoFormal && empleadoData?.sindicato ? (calculada.baseImponible ?? (sueldoBasePeriodo + totalHorasExtra)) * (APORTES_EMPLEADO.SINDICATO / 100) : 0);
-            const totalAportesEmp = aporteJubilacion + aporteObraSocial + aportePami + aporteSindicato;
-
-            const contribJubilacion = calculada.contribJubilacion ?? (esEmpleadoFormal ? (calculada.baseImponible ?? (sueldoBasePeriodo + totalHorasExtra)) * (CONTRIBUCIONES_EMPLEADOR.JUBILACION / 100) : 0);
-            const contribObraSocial = calculada.contribObraSocial ?? (esEmpleadoFormal ? (calculada.baseImponible ?? (sueldoBasePeriodo + totalHorasExtra)) * (CONTRIBUCIONES_EMPLEADOR.OBRA_SOCIAL / 100) : 0);
-            const contribPami = calculada.contribPami ?? (esEmpleadoFormal ? (calculada.baseImponible ?? (sueldoBasePeriodo + totalHorasExtra)) * (CONTRIBUCIONES_EMPLEADOR.PAMI / 100) : 0);
-            const contribART = calculada.contribART ?? (esEmpleadoFormal ? (calculada.baseImponible ?? (sueldoBasePeriodo + totalHorasExtra)) * (CONTRIBUCIONES_EMPLEADOR.ART / 100) : 0);
-            const totalContribuciones = contribJubilacion + contribObraSocial + contribPami + contribART;
-
-            const totalAPagar = calculada.totalAPagar ?? (sueldoBasePeriodo + totalHorasExtra - adelantos - descuentosSistema + incentivosSistema - totalAportesEmp);
-            const costoTotalEmpresa = calculada.costoTotalEmpresa ?? (totalAPagar + totalAportesEmp + totalContribuciones);
+            const {
+              sueldoBasePeriodo,
+              totalHorasExtra,
+              adelantos,
+              descuentosSistema,
+              incentivosSistema,
+              aporteJubilacion,
+              aporteObraSocial,
+              aportePami,
+              aporteSindicato,
+              totalAportesEmp,
+              contribJubilacion,
+              contribObraSocial,
+              contribPami,
+              contribART,
+              totalContribuciones,
+              totalAPagar,
+              costoTotalEmpresa
+            } = totales;
 
             return (
             <Box sx={{ pt: 2 }}>
@@ -1247,7 +1261,8 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
           onClose={() => setOpenConfirmLiquidar(false)}
           onConfirm={handleLiquidar}
           title="Confirmar Liquidación"
-          message={`¿Confirmar liquidación de ${selectedEmpleado ? `${selectedEmpleado.empleadoApellido}, ${selectedEmpleado.empleadoNombre}` : 'este empleado'} por ${formatCurrency(computeTotalAPagarForSelected())}? Se generarán los gastos correspondientes.`}
+          // message={`¿Confirmar liquidación de ${selectedEmpleado ? `${selectedEmpleado.empleadoApellido}, ${selectedEmpleado.empleadoNombre}` : 'este empleado'} por ${formatCurrency(computeTotalAPagarForSelected())}? Se generarán los gastos correspondientes.`}
+          message={`¿Confirmar liquidación de ${selectedEmpleado ? `${selectedEmpleado.empleadoApellido}, ${selectedEmpleado.empleadoNombre}` : 'este empleado'}? Se generarán los gastos correspondientes.`}
           confirmText="Liquidar"
           cancelText="Cancelar"
           severity="question"
