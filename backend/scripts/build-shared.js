@@ -1,8 +1,12 @@
-const fs = require('fs');
-const path = require('path');
-const { execSync } = require('child_process');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { execSync } from 'child_process';
 
 console.log('🚀 Starting Pre-build: Building Shared Package...');
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Navigate to shared directory (sibling to current package)
 const sharedDir = path.resolve(__dirname, '../../shared');
