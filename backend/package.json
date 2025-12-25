@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node dist/server.js",
     "dev": "nodemon --watch src --ext ts --exec \"node --loader ts-node/esm src/server.ts\"",
-    "prebuild": "bash scripts/copy-shared.sh || scripts\\copy-shared.bat",
+    "prebuild": "node scripts/build-shared.js",
     "build": "tsc",
     "afip:generar-cert": "node scripts/generar-certificado-afip.js",
     "afip:exportar-cert": "node scripts/exportar-certificados.cjs",
