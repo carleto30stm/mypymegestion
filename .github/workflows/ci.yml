@@ -24,7 +24,7 @@ jobs:
           cache: 'npm'
 
       - name: Install Dependencies (Root)
-        run: npm ci
+        run: npm install
 
       - name: Build Shared
         run: npm run build --workspace=@mygestor/shared
