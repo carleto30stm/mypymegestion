@@ -5,6 +5,7 @@ import Employee from '../models/Employee.js';
 import Convenio from '../models/Convenio.js';
 import { reciboSueldoPdfService } from '../services/reciboSueldoPdfService.js';
 import type { IReciboSueldoData, IConceptoRecibo } from '../services/reciboSueldoPdfService.js';
+import { APORTES_EMPLEADO, CONTRIBUCIONES_EMPLEADOR } from '@mygestor/shared';
 
 // Datos del empleador (configurables desde env o base de datos)
 const DATOS_EMPLEADOR = {
@@ -18,20 +19,8 @@ const DATOS_EMPLEADOR = {
   email: process.env.EMPRESA_EMAIL || '',
 };
 
-// Constantes de aportes (Argentina)
-const APORTES_EMPLEADO = {
-  JUBILACION: 11,
-  OBRA_SOCIAL: 3,
-  PAMI: 3,
-  SINDICATO: 2,
-};
-
-const CONTRIBUCIONES_EMPLEADOR = {
-  JUBILACION: 10.17,
-  OBRA_SOCIAL: 6,
-  PAMI: 1.5,
-  ART: 2.5,
-};
+// Constantes de aportes importadas desde paquete compartido
+// Las constantes ahora vienen de @mygestor/shared
 
 /**
  * @desc    Generar recibo de sueldo PDF para un empleado en un período
@@ -43,9 +32,9 @@ export const generarReciboPDF = async (req: Request, res: Response) => {
     const { periodoId, empleadoId } = req.params;
 
     // Validar IDs
-    if (!periodoId || !empleadoId || 
-        !mongoose.Types.ObjectId.isValid(periodoId) || 
-        !mongoose.Types.ObjectId.isValid(empleadoId)) {
+    if (!periodoId || !empleadoId ||
+      !mongoose.Types.ObjectId.isValid(periodoId) ||
+      !mongoose.Types.ObjectId.isValid(empleadoId)) {
       return res.status(400).json({ message: 'IDs inválidos' });
     }
 
@@ -93,10 +82,10 @@ export const generarReciboPDF = async (req: Request, res: Response) => {
     let totalDeducciones = 0;
 
     // Sueldo básico
-    const sueldoBasePeriodo = periodo.tipo === 'quincenal' 
-      ? liquidacion.sueldoBase / 2 
+    const sueldoBasePeriodo = periodo.tipo === 'quincenal'
+      ? liquidacion.sueldoBase / 2
       : liquidacion.sueldoBase;
-    
+
     conceptos.push({
       codigo: '001',
       descripcion: 'Sueldo Básico',
@@ -133,19 +122,30 @@ export const generarReciboPDF = async (req: Request, res: Response) => {
       totalHaberes += liquidacion.aguinaldos;
     }
 
-    // Bonus/Premios
-    if (liquidacion.bonus > 0) {
+    // Incentivos
+    if (liquidacion.incentivos > 0) {
       conceptos.push({
         codigo: '030',
-        descripcion: 'Premio / Bonificación',
-        haberes: liquidacion.bonus,
+        descripcion: 'Incentivos',
+        haberes: liquidacion.incentivos,
         deducciones: 0
       });
-      totalHaberes += liquidacion.bonus;
+      totalHaberes += liquidacion.incentivos;
     }
 
-    // Base imponible para aportes
-    const baseImponible = sueldoBasePeriodo + liquidacion.totalHorasExtra;
+    // Base imponible para aportes (CRÍTICO: incluir TODOS los adicionales)
+    // Obtener adicionales guardados en la liquidación (se guardan al liquidar)
+    const adicionalPresentismo = (liquidacion as any).adicionalPresentismo || 0;
+    const adicionalZona = (liquidacion as any).adicionalZona || 0;
+    const adicionalAntiguedad = (liquidacion as any).adicionalAntiguedad || 0;
+
+    const baseImponible =
+      sueldoBasePeriodo +
+      liquidacion.totalHorasExtra +
+      adicionalPresentismo +
+      adicionalZona +
+      adicionalAntiguedad +
+      (liquidacion.incentivos || 0);
 
     // Deducciones - Solo para empleados formales
     if (esEmpleadoFormal) {
@@ -221,7 +221,7 @@ export const generarReciboPDF = async (req: Request, res: Response) => {
       const contribOS = baseImponible * (CONTRIBUCIONES_EMPLEADOR.OBRA_SOCIAL / 100);
       const contribPAMI = baseImponible * (CONTRIBUCIONES_EMPLEADOR.PAMI / 100);
       const contribART = baseImponible * (CONTRIBUCIONES_EMPLEADOR.ART / 100);
-      
+
       contribucionesPatronales = {
         jubilacion: contribJubilacion,
         obraSocial: contribOS,
@@ -309,15 +309,15 @@ export const generarTodosLosRecibos = async (req: Request, res: Response) => {
     );
 
     if (liquidacionesPagadas.length === 0) {
-      return res.status(400).json({ 
-        message: 'No hay liquidaciones pagadas en este período' 
+      return res.status(400).json({
+        message: 'No hay liquidaciones pagadas en este período'
       });
     }
 
     // Por ahora, retornar info de recibos a generar
     // En una implementación completa, se generaría un PDF combinado
     const recibosInfo = [];
-    
+
     for (const liq of liquidacionesPagadas) {
       const empleado = await Employee.findById((liq as any).empleadoId);
       recibosInfo.push({
@@ -351,9 +351,9 @@ export const previsualizarRecibo = async (req: Request, res: Response) => {
   try {
     const { periodoId, empleadoId } = req.params;
 
-    if (!periodoId || !empleadoId || 
-        !mongoose.Types.ObjectId.isValid(periodoId) || 
-        !mongoose.Types.ObjectId.isValid(empleadoId)) {
+    if (!periodoId || !empleadoId ||
+      !mongoose.Types.ObjectId.isValid(periodoId) ||
+      !mongoose.Types.ObjectId.isValid(empleadoId)) {
       return res.status(400).json({ message: 'IDs inválidos' });
     }
 
@@ -391,7 +391,7 @@ export const previsualizarRecibo = async (req: Request, res: Response) => {
     }
 
     // Calcular totales
-    const totalHaberes = sueldoBasePeriodo + liquidacion.totalHorasExtra + liquidacion.aguinaldos + liquidacion.bonus;
+    const totalHaberes = sueldoBasePeriodo + liquidacion.totalHorasExtra + liquidacion.aguinaldos + (liquidacion.incentivos || 0);
     let totalDeducciones = liquidacion.adelantos + liquidacion.descuentos;
     if (aportes) {
       totalDeducciones += Object.values(aportes).reduce((a, b) => a + b, 0);
@@ -417,7 +417,7 @@ export const previsualizarRecibo = async (req: Request, res: Response) => {
         sueldoBase: sueldoBasePeriodo,
         horasExtra: liquidacion.totalHorasExtra,
         aguinaldo: liquidacion.aguinaldos,
-        bonus: liquidacion.bonus,
+        incentivos: liquidacion.incentivos || 0,
         totalHaberes,
         adelantos: liquidacion.adelantos,
         descuentos: liquidacion.descuentos,
@@ -479,7 +479,7 @@ export const getHistorialRecibos = async (req: Request, res: Response) => {
             fechaPago: liquidacion.fechaPago,
             reciboGenerado: liquidacion.reciboGenerado
           },
-          urlRecibo: liquidacion.estado === 'pagado' 
+          urlRecibo: liquidacion.estado === 'pagado'
             ? `/api/recibos-sueldo/generar/${periodo._id}/${empleadoId}`
             : null
         });
@@ -507,6 +507,6 @@ function generarNumeroRecibo(periodo: any, empleado: any): string {
   const mes = String(new Date().getMonth() + 1).padStart(2, '0');
   const legajo = empleado.legajo || empleado._id.toString().slice(-6);
   const tipo = periodo.tipo === 'quincenal' ? 'Q' : 'M';
-  
+
   return `${año}${mes}-${tipo}-${legajo}`;
 }

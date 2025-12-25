@@ -16,5 +16,17 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    // Configuración para soportar paquete compartido CommonJS
+    resolve: {
+      preserveSymlinks: true,
+    },
+    build: {
+      commonjsOptions: {
+        include: [/shared/, /node_modules/],
+      },
+    },
+    optimizeDeps: {
+      include: ['@mygestor/shared'],
+    },
   }
 })

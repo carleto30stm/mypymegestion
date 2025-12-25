@@ -168,9 +168,7 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
         const aguinaldos = employeePayments
           .filter(gasto => gasto.concepto === 'aguinaldo')
           .reduce((sum, gasto) => sum + (gasto.salida || 0), 0);
-        const bonus = employeePayments
-          .filter(gasto => gasto.concepto === 'bonus')
-          .reduce((sum, gasto) => sum + (gasto.salida || 0), 0);
+        // bonus removed
 
         // Calcular saldo pendiente usando sueldo bruto (base + antigüedad)
         // Horas extra, aguinaldos y bonus NO afectan el sueldo base
@@ -209,7 +207,7 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
           horasExtra,
           sueldos,
           aguinaldos,
-          bonus,
+          // bonus removed
           descuentos: descuentosEmpleado,
           incentivos: incentivosEmpleado,
           saldoPendiente
@@ -227,7 +225,7 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
     horasExtra: acc.horasExtra + emp.horasExtra,
     sueldos: acc.sueldos + emp.sueldos,
     aguinaldos: acc.aguinaldos + emp.aguinaldos,
-    bonus: acc.bonus + emp.bonus,
+    // bonus removed
     descuentos: acc.descuentos + (emp.descuentos || 0),
     incentivos: acc.incentivos + (emp.incentivos || 0),
     saldoPendiente: acc.saldoPendiente + emp.saldoPendiente
@@ -240,7 +238,7 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
     horasExtra: 0,
     sueldos: 0,
     aguinaldos: 0,
-    bonus: 0,
+    // bonus removed
     descuentos: 0,
     incentivos: 0,
     saldoPendiente: 0 
@@ -275,7 +273,7 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
         <Typography variant="body2">
           <strong>Información:</strong> Los datos se calculan automáticamente. El <strong>Sueldo Bruto</strong> incluye 
           el Sueldo Base + Adicional por Antigüedad (1% por año). El saldo pendiente se calcula como: 
-          Sueldo Bruto - Pagos + Incentivos - Descuentos. Las horas extra, aguinaldos y bonus son pagos adicionales.
+          Sueldo Bruto - Pagos + Incentivos - Descuentos. Las horas extra y aguinaldos son pagos adicionales.
         </Typography>
       </Alert>
 
@@ -318,7 +316,7 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
               <TableCell align="right"><strong>Adelantos</strong></TableCell>
               <TableCell align="right"><strong>Horas Extra</strong></TableCell>
               <TableCell align="right"><strong>Aguinaldos</strong></TableCell>
-              <TableCell align="right"><strong>Bonus</strong></TableCell>
+              {/* Bonus column removed */}
               <TableCell align="right">
                 <Tooltip title="Descuentos por sanciones, faltantes, etc.">
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
@@ -410,11 +408,7 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
                   </Typography>
                 </TableCell>
                 
-                <TableCell align="right">
-                  <Typography variant="body2" color="purple">
-                    {formatCurrency(employee.bonus)}
-                  </Typography>
-                </TableCell>
+                {/* Bonus cell removed */}
                 
                 <TableCell align="right">
                   <Typography variant="body2" color="error.main" fontWeight={(employee.descuentos || 0) > 0 ? 'bold' : 'normal'}>
@@ -500,11 +494,7 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
                   {formatCurrency(totales.aguinaldos)}
                 </Typography>
               </TableCell>
-              <TableCell align="right">
-                <Typography variant="h6" fontWeight="bold">
-                  {formatCurrency(totales.bonus)}
-                </Typography>
-              </TableCell>
+              {/* Bonus total removed */}
               <TableCell align="right">
                 <Typography variant="h6" fontWeight="bold" color="error.main">
                   -{formatCurrency(totales.descuentos)}
@@ -540,7 +530,7 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
 
             {payrollData.length === 0 && (
               <TableRow>
-                <TableCell colSpan={16} align="center">
+                <TableCell colSpan={15} align="center">
                   <Typography variant="body2" color="text.secondary" sx={{ py: 3 }}>
                     No hay empleados activos registrados.
                   </Typography>
@@ -554,10 +544,10 @@ const EmployeePayrollComponent: React.FC<EmployeePayrollProps> = ({ filterType, 
       {/* Información adicional */}
       <Box sx={{ mt: 2, p: 2, backgroundColor: 'grey.50', borderRadius: 1 }}>
         <Typography variant="body2" color="text.secondary">
-          📊 <strong>Saldo Pendiente:</strong> Se calcula como Sueldo Base - (Sueldos + Adelantos). Las horas extra, aguinaldos y bonus NO afectan el cálculo del sueldo base.
+          📊 <strong>Saldo Pendiente:</strong> Se calcula como Sueldo Base - (Sueldos + Adelantos). Las horas extra y aguinaldos NO afectan el cálculo del sueldo base.
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-          💰 <strong>Pagos Adicionales:</strong> Horas extra, aguinaldos y bonus son compensaciones adicionales independientes del sueldo base
+          💰 <strong>Pagos Adicionales:</strong> Horas extra y aguinaldos son compensaciones adicionales independientes del sueldo base
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
           📉 <strong>Descuentos:</strong> Sanciones, faltantes de caja, roturas, ausencias y otros descuentos aplicados al empleado

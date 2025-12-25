@@ -1,0 +1,23 @@
+{
+    "name": "@mygestor/shared",
+    "version": "1.0.0",
+    "description": "Shared logic for myGestor frontend and backend",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "scripts": {
+        "build": "tsc",
+        "watch": "tsc --watch",
+        "clean": "rm -rf dist"
+    },
+    "keywords": [
+        "mygestor",
+        "shared",
+        "liquidacion"
+    ],
+    "author": "",
+    "license": "MIT",
+    "devDependencies": {
+        "typescript": "^5.0.0"
+    },
+    "dependencies": {}
+}

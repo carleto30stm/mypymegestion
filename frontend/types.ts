@@ -220,9 +220,8 @@ export interface EmployeePayroll {
   horasExtra: number;   // Horas extra (concepto = 'hora_extra')
   sueldos: number;      // Sueldos regulares (concepto = 'sueldo')
   aguinaldos: number;   // Aguinaldos (concepto = 'aguinaldo')
-  bonus: number;        // Bonus (concepto = 'bonus')
+  incentivos: number;        // Incentivos (concepto = 'incentivos')
   descuentos?: number;  // Descuentos aplicados
-  incentivos?: number;  // Incentivos aplicados
   saldoPendiente: number; // sueldoBruto - (sueldos + adelantos) + incentivos - descuentos
 }
 
@@ -319,7 +318,6 @@ export interface LiquidacionEmpleado {
   adicionalZona: number;
   otrosAdicionales: number;
   aguinaldos: number;
-  bonus: number;
   incentivos: number;
   totalRemunerativo: number;
 
@@ -416,7 +414,7 @@ export interface Gasto {
   clientes: string;
   detalleGastos: string;
   tipoOperacion: 'entrada' | 'salida' | 'transferencia';
-  concepto?: 'sueldo' | 'adelanto' | 'hora_extra' | 'aguinaldo' | 'bonus' | 'otro';
+  concepto?: 'sueldo' | 'adelanto' | 'hora_extra' | 'aguinaldo' | 'incentivos' | 'otro';
   comentario: string;
   fechaStandBy?: string;
   estado?: 'activo' | 'cancelado';

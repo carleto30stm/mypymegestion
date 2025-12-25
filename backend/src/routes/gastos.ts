@@ -229,7 +229,7 @@ router.patch('/:id/cancel', async (req, res) => {
             liquidacion.sueldoBase +
             liquidacion.totalHorasExtra +
             liquidacion.aguinaldos +
-            liquidacion.bonus -
+            liquidacion.incentivos -
             liquidacion.adelantos -
             liquidacion.descuentos;
           
@@ -307,7 +307,7 @@ router.patch('/:id/reactivate', async (req, res) => {
             liquidacion.sueldoBase +
             liquidacion.totalHorasExtra +
             liquidacion.aguinaldos +
-            liquidacion.bonus -
+            liquidacion.incentivos -
             liquidacion.adelantos -
             liquidacion.descuentos;
           

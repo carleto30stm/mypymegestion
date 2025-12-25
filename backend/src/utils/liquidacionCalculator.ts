@@ -101,7 +101,7 @@ export async function calcularLiquidacionEmpleadoBackend(params: Params) {
   }
 
   // Incluir adicional de antigüedad en los totales para mantener consistencia con el frontend
-  const totalAPagar = (liquidacion.sueldoBase || sueldoBasePeriodo) + (liquidacion.totalHorasExtra || 0) + (liquidacion.aguinaldos || 0) + totalIncentivos - (liquidacion.adelantos || 0) - totalDescuentos - totalAportesEmpleado + adicionalPresentismo + adicionalZona + adicionalAntiguedad + (liquidacion.bonus || 0);
+  const totalAPagar = (liquidacion.sueldoBase || sueldoBasePeriodo) + (liquidacion.totalHorasExtra || 0) + (liquidacion.aguinaldos || 0) + totalIncentivos - (liquidacion.adelantos || 0) - totalDescuentos - totalAportesEmpleado + adicionalPresentismo + adicionalZona + adicionalAntiguedad + (liquidacion.incentivos || 0);
 
   const montoNetoPagar = sueldoBasePeriodo + (liquidacion.totalHorasExtra || 0) + adicionalPresentismo + adicionalZona + adicionalAntiguedad + totalIncentivos - (liquidacion.adelantos || 0) - totalDescuentos - totalAportesEmpleado;
 

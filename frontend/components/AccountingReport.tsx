@@ -606,8 +606,8 @@ const AccountingReport: React.FC = () => {
           return `Horas Extra - ${gasto.subRubro}`;
         case 'aguinaldo':
           return `Aguinaldos - ${gasto.subRubro}`;
-        case 'bonus':
-          return `Bonus - ${gasto.subRubro}`;
+        case 'incentivos':
+          return `Incentivos - ${gasto.subRubro}`;
         default:
           return `Personal - ${gasto.subRubro}`;
       }
