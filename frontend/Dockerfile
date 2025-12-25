@@ -1,4 +1,4 @@
-# Backend Dockerfile
+# Frontend Dockerfile
 FROM node:18-alpine
 
 WORKDIR /app
@@ -6,28 +6,28 @@ WORKDIR /app
 # 1. Copiar manifiestos de dependencias
 COPY package.json ./
 COPY package-lock.json ./
-# Copiar package.json de los workspaces para que npm install funcione
 COPY shared/package.json ./shared/
 COPY backend/package.json ./backend/
 COPY frontend/package.json ./frontend/
 
-# 2. Instalación limpia de dependencias (para Linux)
-# Eliminamos package-lock.json para forzar resolución de binarios Linux si venimos de Windows
+# 2. Instalación limpia de dependencias (para Linux + Rollup binaries)
 RUN rm -f package-lock.json
 RUN npm install
 
 # 3. Copiar código fuente
 COPY shared ./shared
-COPY backend ./backend
+COPY frontend ./frontend
 
 # 4. Construir Shared
 WORKDIR /app/shared
 RUN npm run build
 
-# 5. Construir Backend
-WORKDIR /app/backend
+# 5. Construir Frontend
+WORKDIR /app/frontend
+# Aumentar memoria para el build si es necesario
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 RUN npm run build
 
-# 6. Ejecutar
-EXPOSE 3001
-CMD ["npm", "start"]
+# 6. Servir (usando 'serve' que está en dependencias o npx)
+EXPOSE 3000
+CMD ["npx", "serve", "-s", "dist", "-l", "3000"]
