@@ -448,7 +448,7 @@ const DescuentosIncentivosComponent: React.FC = () => {
                             color="success"
                             onClick={() => handleChangeEstado(descuento._id!, 'descuento', 'aplicado')}
                           >
-                            <CheckIcon />
+                            {/* <CheckIcon /> */}
                           </IconButton>
                         </Tooltip>
                         <Tooltip title="Editar">
@@ -566,7 +566,7 @@ const DescuentosIncentivosComponent: React.FC = () => {
                             color="success"
                             onClick={() => handleChangeEstado(incentivo._id!, 'incentivo', 'pagado')}
                           >
-                            <CheckIcon />
+                            {/* <CheckIcon /> */}
                           </IconButton>
                         </Tooltip>
                         <Tooltip title="Editar">
