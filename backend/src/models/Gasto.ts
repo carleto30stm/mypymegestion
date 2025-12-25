@@ -59,7 +59,7 @@ const gastoSchema = new mongoose.Schema({
   },
   concepto: {
     type: String,
-    enum: ['sueldo', 'adelanto', 'hora_extra', 'aguinaldo', 'bonus', 'impuesto', 'otro'],
+    enum: ['sueldo', 'adelanto', 'hora_extra', 'aguinaldo', 'incentivos', 'impuesto', 'otro'],
     default: 'sueldo'
   },
   comentario: { type: String },

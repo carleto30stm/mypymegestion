@@ -531,7 +531,13 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
       adicionalZona: adicionales.zona || (liquidacionEnriquecida as any).adicionalZona || 0
     } as LiquidacionEmpleado;
 
-    setReciboEmpleado(enrichedWithAd);
+    // Attach the authoritative calculados object so ReciboSueldo can use it
+    const enrichedWithCalculados = {
+      ...enrichedWithAd,
+      calculados: liquidacionEnriquecida
+    } as any;
+
+    setReciboEmpleado(enrichedWithCalculados);
     setOpenRecibo(true);
   };
 
@@ -860,12 +866,6 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
                               {liquidacion.adicionalZona && liquidacion.adicionalZona > 0 ? `+${formatCurrency(liquidacion.adicionalZona)}` : '-'}
                             </Typography>
                           </Box> 
-                          <Box>
-                            <Typography variant="caption" color="text.secondary">Bonus:</Typography>
-                            <Typography variant="body2" color="secondary.main">
-                              +{formatCurrency(liquidacion.bonus)}
-                            </Typography>
-                          </Box>
                           <Box>
                             <Typography variant="caption" color="text.secondary">Adelantos:</Typography>
                             <Typography variant="body2" color="warning.main">
@@ -1358,6 +1358,10 @@ const ResumenLiquidacion: React.FC<ResumenLiquidacionProps> = ({ periodo }) => {
           onClose={handleCloseRecibo}
           descuentosDetalle={descuentosDetalleEmpleado[reciboEmpleado.empleadoId] || []}
           incentivosDetalle={incentivosDetalleEmpleado[reciboEmpleado.empleadoId] || []}
+          adicionalPresentismo={reciboEmpleado.adicionalPresentismo || 0}
+          adicionalAntiguedad={reciboEmpleado.adicionalAntiguedad || 0}
+          adicionalZona={reciboEmpleado.adicionalZona || 0}
+          calculados={(reciboEmpleado as any).calculados}
         />
       )}
     </Box>

@@ -13,7 +13,7 @@ import {
   ADICIONALES_LEGALES
 } from '../types';
 import { formatCurrency, formatDateForDisplay } from '../utils/formatters';
-import calcularLiquidacionEmpleado from '../utils/liquidacionCalculator';
+// Nota: ReciboSueldo ya no ejecuta el cálculo; debe recibir `calculados` desde la página de liquidación.
 
 interface ReciboSueldoProps {
   liquidacion: LiquidacionEmpleado;
@@ -23,6 +23,12 @@ interface ReciboSueldoProps {
   descuentosDetalle?: DescuentoEmpleado[];
   incentivosDetalle?: IncentivoEmpleado[];
   incluirAportes?: boolean; // Si incluir aportes legales
+  // Valores dinámicos que pueden venir desde el frontend (fuente de verdad)
+  adicionalPresentismo?: number;
+  adicionalAntiguedad?: number;
+  adicionalZona?: number;
+  // Objeto calculado por el frontend (fuente de verdad completa). Si está presente, usar sus totales sin recomputar.
+  calculados?: any;
 }
 
 const ReciboSueldo: React.FC<ReciboSueldoProps> = ({ 
@@ -32,7 +38,11 @@ const ReciboSueldo: React.FC<ReciboSueldoProps> = ({
   onClose, 
   descuentosDetalle = [], 
   incentivosDetalle = [],
-  incluirAportes: incluirAportesInitial 
+  incluirAportes: incluirAportesInitial,
+  adicionalPresentismo: adicionalPresentismoProp,
+  adicionalAntiguedad: adicionalAntiguedadProp,
+  adicionalZona: adicionalZonaProp,
+  calculados: calculadosProp
 }) => {
   
   // Usar la modalidad del empleado para determinar si incluir aportes
@@ -45,12 +55,14 @@ const ReciboSueldo: React.FC<ReciboSueldoProps> = ({
   );
 
   // Calcular totales de descuentos e incentivos
-  const totalDescuentosPersonalizados = descuentosDetalle.reduce((sum, d) => sum + (d.montoCalculado || d.monto), 0);
-  const totalIncentivos = incentivosDetalle.reduce((sum, i) => sum + (i.montoCalculado || i.monto), 0);
-  // `bonusAmount` unifica el monto de incentivos/bonus: si se pasaron detalles usamos `totalIncentivos`,
-  // si no, usamos `liquidacion.bonus` (legacy/guardado)
-  const bonusAmount = (incentivosDetalle && incentivosDetalle.length > 0) ? totalIncentivos : (liquidacion.bonus || 0);
-// Ajustes por tipo de período (usar calculador central si es posible)
+  const totalDescuentosDetalle = descuentosDetalle.reduce((sum, d) => sum + Math.abs(d.montoCalculado ?? d.monto ?? 0), 0);
+  const totalIncentivosDetalle = incentivosDetalle.reduce((sum, i) => sum + (i.montoCalculado || i.monto), 0);
+
+  // Totales desde la liquidación (legacy o calculados)
+  const incentivos = liquidacion.incentivos || 0;
+  // Si hay detalles, el total es la suma de ellos; si no, miramos el campo totalizado
+  const totalIncentivos = (incentivosDetalle.length > 0) ? totalIncentivosDetalle : (liquidacion.incentivos || 0);
+
   const empleadoData: any = {
     fechaIngreso: (liquidacion as any).empleadoFechaIngreso || liquidacion.empleadoFechaIngreso,
     modalidadContratacion: (liquidacion as any).empleadoModalidad || liquidacion.empleadoModalidad,
@@ -60,29 +72,42 @@ const ReciboSueldo: React.FC<ReciboSueldoProps> = ({
     aplicaZonaPeligrosa: (liquidacion as any).aplicaZonaPeligrosa
   };
 
-  const enriched = calcularLiquidacionEmpleado({
-    liquidacion,
-    empleadoData,
-    periodo,
-    descuentosDetalle,
-    incentivosDetalle
-  });
+  // Fuente de verdad: si la página de liquidación pasó `calculados`, usarlo; si no, mapear desde `liquidacion`.
+  const enriched = (liquidacion as any) || {};
+  const hasCalculados = calculadosProp !== undefined && calculadosProp !== null;
+  const sourceTotals = hasCalculados ? calculadosProp : enriched;
 
-  const sueldoBasePeriodo = periodo.tipo === 'quincenal' ? (enriched.sueldoBase / 2) : enriched.sueldoBase;
-  const adicionalAntiguedadAmount = enriched.adicionalAntiguedad || 0;
-  const adicionalPresentismoAmount = enriched.adicionalPresentismo || 0;
-  const adicionalZonaAmount = enriched.adicionalZona || 0;
+  // Totales y montos mapeados
+  const sueldoBasePeriodo = (sourceTotals && typeof sourceTotals.sueldoBasePeriodo === 'number')
+    ? sourceTotals.sueldoBasePeriodo
+    : (periodo.tipo === 'quincenal' ? ((enriched.sueldoBase ?? 0) / 2) : (enriched.sueldoBase ?? 0));
 
-  const baseImponible = enriched.baseImponible || (sueldoBasePeriodo + enriched.totalHorasExtra + adicionalAntiguedadAmount + adicionalPresentismoAmount + adicionalZonaAmount + bonusAmount);
+  const adicionalAntiguedadAmount = (sourceTotals && (typeof sourceTotals.adicionalAntiguedad === 'number')) ? sourceTotals.adicionalAntiguedad : (adicionalAntiguedadProp ?? enriched.adicionalAntiguedad ?? 0);
+  const adicionalPresentismoAmount = (sourceTotals && (typeof sourceTotals.adicionalPresentismo === 'number')) ? sourceTotals.adicionalPresentismo : (adicionalPresentismoProp ?? enriched.adicionalPresentismo ?? 0);
+  const adicionalZonaAmount = (sourceTotals && (typeof sourceTotals.adicionalZona === 'number')) ? sourceTotals.adicionalZona : (adicionalZonaProp ?? enriched.adicionalZona ?? 0);
+  
+  // Base Imponible: recalcular visualmente si faltan datos
+  const baseImponible = sourceTotals?.baseImponible ?? 0;
 
   const aportes = incluirAportes ? {
-    jubilacion: enriched.aporteJubilacion || 0,
-    obraSocial: enriched.aporteObraSocial || 0,
-    pami: enriched.aportePami || 0,
-    sindicato: enriched.aporteSindicato || 0,
+    jubilacion: sourceTotals?.aporteJubilacion ?? enriched.aporteJubilacion ?? 0,
+    obraSocial: sourceTotals?.aporteObraSocial ?? enriched.aporteObraSocial ?? 0,
+    pami: sourceTotals?.aportePami ?? enriched.aportePami ?? 0,
+    sindicato: sourceTotals?.aporteSindicato ?? enriched.aporteSindicato ?? 0,
   } : { jubilacion: 0, obraSocial: 0, pami: 0, sindicato: 0 };
 
-  const totalAportes = aportes.jubilacion + aportes.obraSocial + aportes.pami + aportes.sindicato;
+  const totalAportes = sourceTotals?.totalAportes ?? (aportes.jubilacion + aportes.obraSocial + aportes.pami + aportes.sindicato);
+
+  // Totales explícitos
+  const enrichedTotalAPagar = (sourceTotals && typeof sourceTotals.totalAPagar === 'number') ? sourceTotals.totalAPagar : undefined;
+  const enrichedTotalAportes = (sourceTotals && typeof sourceTotals.totalAportes === 'number') ? sourceTotals.totalAportes : undefined;
+
+  // Total de descuentos para mostrar en PDF/HTML
+  // Si hay detalles, usamos la suma. Si no, usamos el total guardado.
+  // IMPORTANTE: si usamos calculadosProp y trae 'descuentos', usamos ese.
+  let totalDescuentosVisual = (descuentosDetalle.length > 0) 
+    ? totalDescuentosDetalle 
+    : (sourceTotals?.descuentos ? Math.abs(sourceTotals.descuentos) : Math.abs(liquidacion.descuentos || 0));
 
   const generarPDF = () => {
     const doc = new jsPDF();
@@ -241,25 +266,34 @@ const ReciboSueldo: React.FC<ReciboSueldoProps> = ({
       yPos += 4;
     }
 
-    // Bonus/Premios (solo si no tenemos detalles de incentivos)
-    if ((!incentivosDetalle || incentivosDetalle.length === 0) && bonusAmount > 0) {
-      doc.text('Premios/Bonus', marginLeft + 2, yPos);
+    // incentivos/Premios (Manual legacy o fijo)
+    if (incentivos > 0) {
+      doc.text('Premios/incentivos', marginLeft + 2, yPos);
       doc.text('-', 95, yPos, { align: 'center' });
-      doc.text(formatCurrency(bonusAmount), 130, yPos, { align: 'right' });
-      totalHaberes += bonusAmount;
+      doc.text(formatCurrency(incentivos), 130, yPos, { align: 'right' });
+      totalHaberes += incentivos;
       yPos += 4;
     }
 
-    // Incentivos detallados (si existen, ya suman a totalHaberes)
-    incentivosDetalle.forEach(incentivo => {
-      const tipoLabel = TIPOS_INCENTIVO[incentivo.tipo as keyof typeof TIPOS_INCENTIVO] || incentivo.tipo;
-      const monto = incentivo.montoCalculado || incentivo.monto;
-      doc.text(`Incentivo: ${tipoLabel}`, marginLeft + 2, yPos);
-      doc.text(incentivo.esPorcentaje ? `${incentivo.monto}%` : '-', 95, yPos, { align: 'center' });
-      doc.text(formatCurrency(monto), 130, yPos, { align: 'right' });
-      totalHaberes += monto;
+    // Incentivos detallados
+    if (incentivosDetalle.length > 0) {
+      incentivosDetalle.forEach(incentivo => {
+        const tipoLabel = TIPOS_INCENTIVO[incentivo.tipo as keyof typeof TIPOS_INCENTIVO] || incentivo.tipo;
+        const monto = incentivo.montoCalculado || incentivo.monto;
+        doc.text(`Incentivo: ${tipoLabel}`, marginLeft + 2, yPos);
+        doc.text(incentivo.esPorcentaje ? `${incentivo.monto}%` : '-', 95, yPos, { align: 'center' });
+        doc.text(formatCurrency(monto), 130, yPos, { align: 'right' });
+        totalHaberes += monto;
+        yPos += 4;
+      });
+    } else if (totalIncentivos > 0) {
+      // Caso fallback: hay totalIncentivos pero no detalle (legacy)
+      doc.text('Total Incentivos', marginLeft + 2, yPos);
+      doc.text('-', 95, yPos, { align: 'center' });
+      doc.text(formatCurrency(totalIncentivos), 130, yPos, { align: 'right' });
+      totalHaberes += totalIncentivos;
       yPos += 4;
-    });
+    }
 
     // Viáticos (no remunerativo)
     if (liquidacion.viaticos && liquidacion.viaticos > 0) {
@@ -321,22 +355,24 @@ const ReciboSueldo: React.FC<ReciboSueldoProps> = ({
     }
 
     // Descuentos personalizados
-    descuentosDetalle.forEach(descuento => {
-      const tipoLabel = TIPOS_DESCUENTO[descuento.tipo as keyof typeof TIPOS_DESCUENTO] || descuento.tipo;
-      const monto = descuento.montoCalculado || descuento.monto;
-      doc.text(`Desc: ${tipoLabel}`, marginLeft + 2, yPos);
-      doc.text(formatCurrency(monto), marginRight - 2, yPos, { align: 'right' });
-      totalDeducciones += monto;
-      yPos += 4;
-    });
-
-    // Descuentos legacy (si no hay detalle)
-    if (descuentosDetalle.length === 0 && liquidacion.descuentos > 0) {
+    if (descuentosDetalle.length > 0) {
+      descuentosDetalle.forEach(descuento => {
+        const tipoLabel = TIPOS_DESCUENTO[descuento.tipo as keyof typeof TIPOS_DESCUENTO] || descuento.tipo;
+        const rawMonto = descuento.montoCalculado ?? descuento.monto ?? 0;
+        const monto = Math.abs(rawMonto);
+        doc.text(`Desc: ${tipoLabel}`, marginLeft + 2, yPos);
+        doc.text(formatCurrency(monto), marginRight - 2, yPos, { align: 'right' });
+        totalDeducciones += monto;
+        yPos += 4;
+      });
+    } else if (totalDescuentosVisual > 0) {
+      // Fallback: solo mostrar total si no hay desglose
       doc.text('Otros Descuentos', marginLeft + 2, yPos);
-      doc.text(formatCurrency(liquidacion.descuentos), marginRight - 2, yPos, { align: 'right' });
-      totalDeducciones += liquidacion.descuentos;
+      doc.text(formatCurrency(totalDescuentosVisual), marginRight - 2, yPos, { align: 'right' });
+      totalDeducciones += totalDescuentosVisual;
       yPos += 4;
     }
+    // (Ya no usamos el bloque else-if antiguo que sumaba siempre totalDescuentosVisual si length===0)
 
     yPos += 2;
 
@@ -368,8 +404,15 @@ const ReciboSueldo: React.FC<ReciboSueldoProps> = ({
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(11);
     const netoACobrar = totalHaberes - totalDeducciones;
+    // Preferir el total calculado por el util; si no existe, usar la suma local
+    const netoPreferido = (typeof enrichedTotalAPagar === 'number')
+      ? enrichedTotalAPagar
+      : netoACobrar;
+    // Si el usuario eligió NO incluir aportes, mostrar el neto sin aportes (sumar aportes de nuevo)
+    const netoParaMostrarPDF = incluirAportes ? netoPreferido : (netoPreferido + (typeof enrichedTotalAportes === 'number' ? enrichedTotalAportes : totalAportes));
+
     doc.text('NETO A COBRAR:', marginLeft + 5, yPos + 2);
-    doc.text(`$ ${formatCurrency(netoACobrar > 0 ? netoACobrar : liquidacion.totalAPagar)}`, marginRight - 5, yPos + 2, { align: 'right' });
+    doc.text(`$ ${formatCurrency(netoParaMostrarPDF > 0 ? netoParaMostrarPDF : (liquidacion.totalAPagar || 0))}`, marginRight - 5, yPos + 2, { align: 'right' });
     yPos += 12;
 
     // ============ FORMA DE PAGO ============
@@ -477,11 +520,19 @@ const ReciboSueldo: React.FC<ReciboSueldoProps> = ({
   };
 
   // Calcular neto para mostrar en el dialog
-  const netoMostrar = incluirAportes 
-    ? (sueldoBasePeriodo + liquidacion.totalHorasExtra + adicionalAntiguedadAmount + 
-       adicionalPresentismoAmount + adicionalZonaAmount + liquidacion.aguinaldos + bonusAmount - 
-       totalAportes - liquidacion.adelantos - totalDescuentosPersonalizados)
-    : liquidacion.totalAPagar; 
+  // Mostrar el neto usando el calculador central cuando esté disponible.
+  // Si `incluirAportes` es false, sumar los aportes al totalAPagar para mostrar el neto sin aportes.
+  const netoMostrar = (() => {
+    if (typeof enrichedTotalAPagar === 'number') {
+      return incluirAportes ? enrichedTotalAPagar : (enrichedTotalAPagar + (typeof enrichedTotalAportes === 'number' ? enrichedTotalAportes : totalAportes));
+    }
+
+    // Fallback legacy: calcular a mano si no hay enriched
+    if (incluirAportes) {
+      return (sueldoBasePeriodo + liquidacion.totalHorasExtra + adicionalAntiguedadAmount + adicionalPresentismoAmount + adicionalZonaAmount + liquidacion.aguinaldos + incentivos + totalIncentivos - totalAportes - liquidacion.adelantos - totalDescuentosVisual);
+    }
+    return liquidacion.totalAPagar;
+  })();
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -531,10 +582,16 @@ const ReciboSueldo: React.FC<ReciboSueldoProps> = ({
                 <Typography variant="body2">$ {formatCurrency(liquidacion.totalHorasExtra)}</Typography>
               </Box>
             )}
-            {bonusAmount > 0 && (
+            {incentivos > 0 && (
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography variant="body2" color="success.main">Incentivos:</Typography>
-                <Typography variant="body2" color="success.main">$ {formatCurrency(bonusAmount)}</Typography>
+                <Typography variant="body2" color="success.main">$ {formatCurrency(incentivos)}</Typography>
+              </Box>
+            )}
+            {totalIncentivos > 0 && (
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="body2" color="success.main">Incentivos:</Typography>
+                <Typography variant="body2" color="success.main">$ {formatCurrency(totalIncentivos)}</Typography>
               </Box>
             )} 
 
@@ -565,7 +622,7 @@ const ReciboSueldo: React.FC<ReciboSueldoProps> = ({
             </Box>
           )}
 
-          {(liquidacion.adelantos > 0 || totalDescuentosPersonalizados > 0) && (
+          {(liquidacion.adelantos > 0 || totalDescuentosVisual > 0) && (
             <Box sx={{ mb: 2 }}>
               <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                 Otras Deducciones
@@ -576,10 +633,10 @@ const ReciboSueldo: React.FC<ReciboSueldoProps> = ({
                   <Typography variant="body2" color="warning.main">-$ {formatCurrency(liquidacion.adelantos)}</Typography>
                 </Box>
               )}
-              {totalDescuentosPersonalizados > 0 && (
+              {totalDescuentosVisual > 0 && (
                 <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                   <Typography variant="body2" color="error.main">Descuentos:</Typography>
-                  <Typography variant="body2" color="error.main">-$ {formatCurrency(totalDescuentosPersonalizados)}</Typography>
+                  <Typography variant="body2" color="error.main">-$ {formatCurrency(totalDescuentosVisual)}</Typography>
                 </Box>
               )}
             </Box>

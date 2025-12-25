@@ -58,7 +58,7 @@ describe('POST /api/liquidacion/liquidar (integration)', () => {
         totalHorasExtra: 0,
         adelantos: 0,
         aguinaldos: 0,
-        bonus: 0,
+        incentivos: 0,
         descuentos: 0,
         totalAPagar: empleado.sueldoBase,
         estado: 'pendiente',

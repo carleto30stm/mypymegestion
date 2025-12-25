@@ -58,3 +58,6 @@ Thumbs.db
 # Temporary folders
 tmp/
 temp/
+
+# Shared package (copied during Railway build)
+shared/

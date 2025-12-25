@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node dist/server.js",
     "dev": "nodemon --watch src --ext ts --exec \"node --loader ts-node/esm src/server.ts\"",
+    "prebuild": "node scripts/build-shared.js",
     "build": "tsc",
     "afip:generar-cert": "node scripts/generar-certificado-afip.js",
     "afip:exportar-cert": "node scripts/exportar-certificados.cjs",
@@ -37,6 +38,7 @@
     "testEnvironment": "node"
   },
   "dependencies": {
+    "@mygestor/shared": "file:../shared",
     "@types/pdfkit": "^0.17.3",
     "axios": "^1.13.2",
     "bcryptjs": "^2.4.3",

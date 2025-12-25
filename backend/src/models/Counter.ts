@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-export interface ICounter extends mongoose.Document {
+export interface ICounter extends Omit<mongoose.Document, '_id'> {
   _id: string;
   seq: number;
 }

@@ -147,11 +147,11 @@ const AdelantosTab: React.FC<AdelantosTabProps> = ({ periodo }) => {
                     </Box>
                   )}
                   
-                  {liquidacion.bonus > 0 && (
+                  {liquidacion.incentivos > 0 && (
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography variant="body2" color="secondary.main">Bonus:</Typography>
+                      <Typography variant="body2" color="secondary.main">Incentivos:</Typography>
                       <Typography variant="body2" color="secondary.main">
-                        +{formatCurrency(liquidacion.bonus)}
+                        +{formatCurrency(liquidacion.incentivos)}
                       </Typography>
                     </Box>
                   )}

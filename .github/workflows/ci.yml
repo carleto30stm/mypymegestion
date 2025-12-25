@@ -11,36 +11,32 @@ on:
       - ventas
 
 jobs:
-  backend:
-    name: Backend - Build & Typecheck
+  build-and-test:
+    name: Build & Test (Monorepo)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
-
+    
     steps:
       - uses: actions/checkout@v4
+      
       - uses: actions/setup-node@v4
         with:
           node-version: 18
-      - run: npm ci
-      - name: Run backend tests
-        run: npm test
-      - run: npm run build
+          cache: 'npm'
 
-  frontend:
-    name: Frontend - Build & Typecheck
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
+      - name: Install Dependencies (Root)
+        run: |
+          rm -f package-lock.json
+          npm install
 
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 18
-      - run: npm ci
-      - name: Run frontend tests
-        run: npm test || echo "Frontend tests exited with non-zero status" && true
-      - run: npm run build
+      - name: Build Shared
+        run: npm run build --workspace=@mygestor/shared
+
+      - name: Backend - Build & Test
+        run: |
+          npm run build --workspace=gestor-gastos-backend
+          npm test --workspace=gestor-gastos-backend
+
+      - name: Frontend - Build & Test
+        run: |
+          npm run build --workspace=gestor-gastos-fullstack
+          npm test --workspace=gestor-gastos-fullstack || echo "Frontend tests failed"

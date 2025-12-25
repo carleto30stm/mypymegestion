@@ -1,0 +1,19 @@
+{
+    "name": "gestor-gastos-monorepo",
+    "private": true,
+    "type": "module",
+    "workspaces": [
+        "backend",
+        "frontend",
+        "shared"
+    ],
+    "engines": {
+        "node": "18.x"
+    },
+    "packageManager": "npm@9.5.0",
+    "scripts": {
+        "build:shared": "npm run build --workspace=@mygestor/shared",
+        "build:backend": "npm run build --workspace=gestor-gastos-backend",
+        "build:frontend": "npm run build --workspace=gestor-gastos-fullstack"
+    }
+}

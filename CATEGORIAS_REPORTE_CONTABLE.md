@@ -83,7 +83,7 @@
 - **Adelantos - [SubRubro]**: `concepto='adelanto'`
 - **Horas Extra - [SubRubro]**: `concepto='hora_extra'`
 - **Aguinaldos - [SubRubro]**: `concepto='aguinaldo'`
-- **Bonus - [SubRubro]**: `concepto='bonus'`
+- **incentivos - [SubRubro]**: `concepto='incentivos'`
 - **Personal - [SubRubro]**: Otros conceptos
 
 ---

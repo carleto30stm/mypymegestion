@@ -16,7 +16,7 @@ describe('liquidacionCalculator - unit', () => {
       totalHorasExtra: 0,
       adelantos: 0,
       aguinaldos: 0,
-      bonus: 0
+      incentivos: 0
     };
 
     const periodo: any = { tipo: 'mensual' };

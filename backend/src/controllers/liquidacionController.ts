@@ -6,7 +6,8 @@ import HoraExtra from '../models/HoraExtra.js';
 import Gasto from '../models/Gasto.js';
 import DescuentoEmpleado from '../models/DescuentoEmpleado.js';
 import IncentivoEmpleado from '../models/IncentivoEmpleado.js';
-import calcularLiquidacionEmpleadoBackend from '../utils/liquidacionCalculator.js';
+import { calcularLiquidacionEmpleado } from '@mygestor/shared';
+import type { IEmpleadoData, IAdicionalesConvenio, TipoPeriodo } from '@mygestor/shared';
 
 // Obtener todos los períodos de liquidación
 export const getPeriodos = async (req: Request, res: Response) => {
@@ -49,8 +50,8 @@ export const createPeriodo = async (req: Request, res: Response) => {
     });
 
     if (periodoExistente) {
-      return res.status(400).json({ 
-        message: 'Ya existe un período abierto que se solapa con estas fechas' 
+      return res.status(400).json({
+        message: 'Ya existe un período abierto que se solapa con estas fechas'
       });
     }
 
@@ -67,7 +68,7 @@ export const createPeriodo = async (req: Request, res: Response) => {
       totalHorasExtra: 0,
       adelantos: 0,
       aguinaldos: 0,
-      bonus: 0,
+      incentivos: 0,
       descuentos: 0,
       totalAPagar: emp.sueldoBase,
       estado: 'pendiente' as const,
@@ -129,7 +130,7 @@ export const agregarHorasExtra = async (req: Request, res: Response) => {
     const yaAgregada = liquidacion.horasExtra.some(
       he => he.horaExtraId === (horaExtra._id as any).toString()
     );
-    
+
     if (yaAgregada) {
       return res.status(400).json({ message: 'Esta hora extra ya fue agregada a la liquidación' });
     }
@@ -168,11 +169,11 @@ export const agregarHorasExtra = async (req: Request, res: Response) => {
     liquidacion.horasExtra.push(horaExtraResumen);
     liquidacion.totalHorasExtra += horaExtra.montoTotal;
     liquidacion.gastosRelacionados.push(gastoHoraExtra._id as any);
-    liquidacion.totalAPagar = 
+    liquidacion.totalAPagar =
       liquidacion.sueldoBase +
       liquidacion.totalHorasExtra +
       liquidacion.aguinaldos +
-      liquidacion.bonus -
+      liquidacion.incentivos -
       liquidacion.adelantos -
       liquidacion.descuentos;
 
@@ -237,16 +238,16 @@ export const registrarAdelanto = async (req: Request, res: Response) => {
     // Actualizar adelantos
     liquidacion.adelantos += monto;
     liquidacion.gastosRelacionados.push(gastoAdelanto._id as any);
-    liquidacion.totalAPagar = 
+    liquidacion.totalAPagar =
       liquidacion.sueldoBase +
       liquidacion.totalHorasExtra +
       liquidacion.aguinaldos +
-      liquidacion.bonus -
+      liquidacion.incentivos -
       liquidacion.adelantos -
       liquidacion.descuentos;
 
     if (observaciones) {
-      liquidacion.observaciones = 
+      liquidacion.observaciones =
         (liquidacion.observaciones || '') + '\n' + observaciones;
     }
 
@@ -258,20 +259,104 @@ export const registrarAdelanto = async (req: Request, res: Response) => {
   }
 };
 
-// Constantes de aportes y contribuciones (Argentina)
-const APORTES_EMPLEADO = {
-  JUBILACION: 11, // 11%
-  OBRA_SOCIAL: 3, // 3%
-  PAMI: 3, // 3%
-  SINDICATO: 2, // 2%
-};
+// Constantes ahora importadas desde @mygestor/shared
 
-const CONTRIBUCIONES_EMPLEADOR = {
-  JUBILACION: 10.17, // 10.17%
-  OBRA_SOCIAL: 6, // 6%
-  PAMI: 1.5, // 1.5%
-  ART: 2.5, // Variable según ART
-};
+/**
+ * Recalcula el totalAPagar usando el calculador compartido
+ * Debe llamarse después de cada operación que modifique la liquidación
+ */
+async function recalcularTotalAPagar(
+  liquidacion: any,
+  empleado: any,
+  periodo: any
+): Promise<number> {
+  const periodoAplicacion = periodo.fechaInicio.toISOString().slice(0, 7);
+
+  // Obtener descuentos e incentivos del período
+  const descuentos = await DescuentoEmpleado.find({
+    empleadoId: empleado._id,
+    periodoAplicacion,
+    estado: { $ne: 'anulado' },
+  });
+
+  const incentivos = await IncentivoEmpleado.find({
+    empleadoId: empleado._id,
+    periodoAplicacion,
+    estado: { $ne: 'anulado' },
+  });
+
+  const empleadoData: IEmpleadoData = {
+    _id: empleado._id?.toString(),
+    modalidadContratacion: empleado.modalidadContratacion,
+    fechaIngreso: empleado.fechaIngreso,
+    sindicato: empleado.sindicato,
+    aplicaAntiguedad: empleado.aplicaAntiguedad,
+    aplicaPresentismo: empleado.aplicaPresentismo,
+    aplicaZonaPeligrosa: empleado.aplicaZonaPeligrosa,
+    convenioId: empleado.convenioId?.toString(),
+    categoriaConvenio: empleado.categoriaConvenio,
+  };
+
+  // Calcular adicionales desde convenio si aplica
+  let adicionalesConvenio: IAdicionalesConvenio | null = null;
+  if (empleado.convenioId && empleado.categoriaConvenio) {
+    const Convenio = (await import('../models/Convenio.js')).default;
+    const convenio = await Convenio.findById(empleado.convenioId);
+    if (convenio) {
+      const antig = empleadoData.fechaIngreso
+        ? Math.floor(
+          (Date.now() - new Date(empleadoData.fechaIngreso).getTime()) /
+          (365.25 * 24 * 60 * 60 * 1000)
+        )
+        : 0;
+      const calculo = (convenio as any).calcularSueldoCategoria(
+        empleado.categoriaConvenio,
+        antig,
+        !!empleadoData.aplicaPresentismo,
+        !!empleadoData.aplicaZonaPeligrosa
+      );
+      adicionalesConvenio = {
+        presentismo:
+          calculo.adicionales.find((a: any) =>
+            a.concepto.toLowerCase().includes('presentismo')
+          )?.monto || 0,
+        zona:
+          calculo.adicionales.find((a: any) =>
+            a.concepto.toLowerCase().includes('zona')
+          )?.monto || 0,
+        antiguedad:
+          calculo.adicionales.find((a: any) =>
+            a.concepto.toLowerCase().includes('antig')
+          )?.monto || 0,
+      };
+    }
+  }
+
+  const calc = calcularLiquidacionEmpleado({
+    liquidacion: liquidacion as any,
+    empleadoData,
+    tipoPeriodo: periodo.tipo as TipoPeriodo,
+    descuentosDetalle: descuentos.map((d) => ({
+      _id: d._id?.toString() || '',
+      tipo: d.tipo as string,
+      monto: d.monto,
+      montoCalculado: d.montoCalculado || d.monto,
+      esPorcentaje: d.esPorcentaje,
+      estado: d.estado as 'pendiente' | 'aplicado' | 'anulado',
+    })) as any,
+    incentivosDetalle: incentivos.map((i) => ({
+      _id: i._id?.toString() || '',
+      tipo: i.tipo as string,
+      monto: i.monto,
+      montoCalculado: i.montoCalculado || i.monto,
+      esPorcentaje: i.esPorcentaje,
+      estado: i.estado as 'pendiente' | 'pagado' | 'anulado',
+    })) as any,
+    adicionalesConvenio,
+  });
+
+  return calc.totalAPagar;
+}
 
 // Liquidar (pagar) a un empleado
 export const liquidarEmpleado = async (req: Request, res: Response) => {
@@ -321,8 +406,8 @@ export const liquidarEmpleado = async (req: Request, res: Response) => {
 
     // Obtener periodoAplicacion YYYY-MM
     const periodoAplicacion = periodo.fechaInicio instanceof Date
-      ? periodo.fechaInicio.toISOString().slice(0,7)
-      : new Date(periodo.fechaInicio).toISOString().slice(0,7);
+      ? periodo.fechaInicio.toISOString().slice(0, 7)
+      : new Date(periodo.fechaInicio).toISOString().slice(0, 7);
 
     // Permitir que el payload incluya descuentos/incentivos aplicados explícitamente
     // Formato esperado (opcional):
@@ -410,12 +495,12 @@ export const liquidarEmpleado = async (req: Request, res: Response) => {
 
     // Actualizar campos en la liquidación
     liquidacion.descuentos = totalDescuentos;
-    liquidacion.bonus = totalIncentivos;
-    liquidacion.totalAPagar = 
+    liquidacion.incentivos = totalIncentivos;
+    liquidacion.totalAPagar =
       liquidacion.sueldoBase +
       liquidacion.totalHorasExtra +
       liquidacion.aguinaldos +
-      liquidacion.bonus -
+      liquidacion.incentivos -
       liquidacion.adelantos -
       liquidacion.descuentos;
     // Permitir que el frontend envie el resultado del calculador (para asegurar coincidencia)
@@ -443,14 +528,97 @@ export const liquidarEmpleado = async (req: Request, res: Response) => {
         totalAPagar: Number(payloadCalculos.totalAPagar || 0)
       };
     } else {
-      // Usar util centralizado para calcular adicionales, aportes, contribuciones y totales
-      calc = await calcularLiquidacionEmpleadoBackend({
-        empleado,
-        liquidacion,
-        periodo,
-        totalDescuentos,
-        totalIncentivos
+      // Usar calculador compartido para calcular adicionales, aportes, contribuciones y totales
+      const empleadoData: IEmpleadoData = {
+        _id: empleado._id?.toString() || '',
+        modalidadContratacion: empleado.modalidadContratacion,
+        fechaIngreso: empleado.fechaIngreso,
+        sindicato: empleado.sindicato || undefined,
+        aplicaAntiguedad: empleado.aplicaAntiguedad,
+        aplicaPresentismo: empleado.aplicaPresentismo,
+        aplicaZonaPeligrosa: empleado.aplicaZonaPeligrosa,
+        convenioId: empleado.convenioId?.toString() || undefined,
+        categoriaConvenio: empleado.categoriaConvenio || undefined,
+      } as IEmpleadoData;
+
+      // Calcular adicionales desde convenio si aplica
+      let adicionalesConvenio: IAdicionalesConvenio | null = null;
+      if (empleado.convenioId && empleado.categoriaConvenio) {
+        const Convenio = (await import('../models/Convenio.js')).default;
+        const convenio = await Convenio.findById(empleado.convenioId);
+        if (convenio) {
+          const antig = empleadoData.fechaIngreso
+            ? Math.floor(
+              (Date.now() - new Date(empleadoData.fechaIngreso).getTime()) /
+              (365.25 * 24 * 60 * 60 * 1000)
+            )
+            : 0;
+          const calculo = (convenio as any).calcularSueldoCategoria(
+            empleado.categoriaConvenio,
+            antig,
+            !!empleadoData.aplicaPresentismo,
+            !!empleadoData.aplicaZonaPeligrosa
+          );
+          adicionalesConvenio = {
+            presentismo:
+              calculo.adicionales.find((a: any) =>
+                a.concepto.toLowerCase().includes('presentismo')
+              )?.monto || 0,
+            zona:
+              calculo.adicionales.find((a: any) =>
+                a.concepto.toLowerCase().includes('zona')
+              )?.monto || 0,
+            antiguedad:
+              calculo.adicionales.find((a: any) =>
+                a.concepto.toLowerCase().includes('antig')
+              )?.monto || 0,
+          };
+        }
+      }
+
+      const resultado = calcularLiquidacionEmpleado({
+        liquidacion: liquidacion as any,
+        empleadoData,
+        tipoPeriodo: periodo.tipo as TipoPeriodo,
+        descuentosDetalle: appliedDescuentos.map((d) => ({
+          _id: d.id?.toString() || '',
+          tipo: 'otro' as string,
+          monto: d.monto,
+          montoCalculado: d.monto,
+          esPorcentaje: false,
+          estado: 'aplicado' as 'pendiente' | 'aplicado' | 'anulado',
+        })),
+        incentivosDetalle: appliedIncentivos.map((i) => ({
+          _id: i.id?.toString() || '',
+          tipo: 'otro' as string,
+          monto: i.monto,
+          montoCalculado: i.monto,
+          esPorcentaje: false,
+          estado: 'pagado' as 'pendiente' | 'pagado' | 'anulado',
+        })),
+        adicionalesConvenio,
       });
+
+      // Mapear resultado al formato esperado
+      calc = {
+        adicionalPresentismo: resultado.adicionalPresentismo,
+        adicionalZona: resultado.adicionalZona,
+        adicionalAntiguedad: resultado.adicionalAntiguedad,
+        totalAportesEmpleado: resultado.totalAportes,
+        totalContribucionesPatronales: resultado.totalContribucionesPatronales,
+        sueldoBasePeriodo: resultado.sueldoBasePeriodo,
+        montoNetoPagar: resultado.totalAPagar,
+        costoTotalEmpresa: resultado.costoTotalEmpresa,
+        aporteJubilacion: resultado.aporteJubilacion,
+        aporteObraSocial: resultado.aporteObraSocial,
+        aportePami: resultado.aportePami,
+        aporteSindicato: resultado.aporteSindicato,
+        contribJubilacion: resultado.contribJubilacion,
+        contribObraSocial: resultado.contribObraSocial,
+        contribPami: resultado.contribPami,
+        contribART: resultado.contribART,
+        totalAPagar: resultado.totalAPagar,
+      };
     }
 
     const adicionalPresentismo = calc.adicionalPresentismo || 0;
@@ -461,9 +629,9 @@ export const liquidarEmpleado = async (req: Request, res: Response) => {
     sueldoBasePeriodo = calc.sueldoBasePeriodo;
     const montoNetoPagar = calc.montoNetoPagar;
     const costoTotalEmpresa = calc.costoTotalEmpresa;
-    
+
     const gastosSueldoCreados = [];
-    
+
     // Solo crear gasto de sueldo si hay monto pendiente
     if (montoNetoPagar > 0) {
       const gastoSueldo = new Gasto({
@@ -474,7 +642,7 @@ export const liquidarEmpleado = async (req: Request, res: Response) => {
         banco: bancoFinal,
         tipoOperacion: 'salida',
         clientes: `${liquidacion.empleadoApellido}, ${liquidacion.empleadoNombre}`,
-        detalleGastos: esEmpleadoFormal 
+        detalleGastos: esEmpleadoFormal
           ? `Liquidación sueldo NETO (formal) - ${periodo.nombre}`
           : `Liquidación sueldo - ${periodo.nombre}`,
         comentario: observaciones || `Liquidación período: ${periodo.nombre}`,
@@ -484,7 +652,7 @@ export const liquidarEmpleado = async (req: Request, res: Response) => {
         estado: 'activo',
         confirmado: true
       });
-      
+
       await gastoSueldo.save();
       gastosSueldoCreados.push(gastoSueldo);
       liquidacion.gastosRelacionados.push(gastoSueldo._id as any);
@@ -510,7 +678,7 @@ export const liquidarEmpleado = async (req: Request, res: Response) => {
         confirmado: false, // Pendiente de pago a AFIP (vencimiento mensual)
         fechaStandBy: new Date(new Date().setDate(15)) // Vence el 15 del mes siguiente
       });
-      
+
       await gastoAFIP.save();
       gastosSueldoCreados.push(gastoAFIP);
       liquidacion.gastosRelacionados.push(gastoAFIP._id as any);
@@ -553,9 +721,9 @@ export const liquidarEmpleado = async (req: Request, res: Response) => {
     }
 
     await periodo.save();
-    
-    res.json({ 
-      periodo, 
+
+    res.json({
+      periodo,
       gastosCreados: gastosSueldoCreados,
       modalidadEmpleado: empleado.modalidadContratacion || 'informal',
       aportes: esEmpleadoFormal ? {
@@ -590,8 +758,8 @@ export const cerrarPeriodo = async (req: Request, res: Response) => {
     // Verificar que todos estén pagados o cancelados
     const pendientes = periodo.liquidaciones.filter((liq: any) => liq.estado === 'pendiente');
     if (pendientes.length > 0) {
-      return res.status(400).json({ 
-        message: `Hay ${pendientes.length} empleados con liquidación pendiente` 
+      return res.status(400).json({
+        message: `Hay ${pendientes.length} empleados con liquidación pendiente`
       });
     }
 
@@ -677,7 +845,7 @@ export const agregarEmpleado = async (req: Request, res: Response) => {
       totalHorasExtra: 0,
       adelantos: 0,
       aguinaldos: 0,
-      bonus: 0,
+      incentivos: 0,
       descuentos: 0,
       totalAPagar: empleado.sueldoBase,
       estado: 'pendiente' as const,
@@ -710,8 +878,8 @@ export const deletePeriodo = async (req: Request, res: Response) => {
 
     const hayPagos = periodo.liquidaciones.some((liq: any) => liq.estado === 'pagado');
     if (hayPagos) {
-      return res.status(400).json({ 
-        message: 'No se puede eliminar un período con pagos realizados' 
+      return res.status(400).json({
+        message: 'No se puede eliminar un período con pagos realizados'
       });
     }
 

@@ -23,7 +23,7 @@ export interface ILiquidacionEmpleado {
   totalHorasExtra: number;
   adelantos: number;
   aguinaldos: number;
-  bonus: number;
+  incentivos: number;
   descuentos: number;
   totalAPagar: number;
   estado: 'pendiente' | 'pagado' | 'cancelado';
@@ -70,7 +70,7 @@ const LiquidacionEmpleadoSchema = new Schema({
   totalHorasExtra: { type: Number, default: 0 },
   adelantos: { type: Number, default: 0 },
   aguinaldos: { type: Number, default: 0 },
-  bonus: { type: Number, default: 0 },
+  incentivos: { type: Number, default: 0 },
   descuentos: { type: Number, default: 0 },
   adicionalPresentismo: { type: Number, default: 0 },
   adicionalZona: { type: Number, default: 0 },

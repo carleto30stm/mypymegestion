@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import path from 'path'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
@@ -15,6 +16,21 @@ export default defineConfig(({ mode }) => {
           secure: false,
         },
       },
+    },
+    // Configuración para soportar paquete compartido CommonJS
+    resolve: {
+      preserveSymlinks: true,
+      alias: {
+        '@mygestor/shared': path.resolve(__dirname, '../shared'),
+      },
+    },
+    build: {
+      commonjsOptions: {
+        include: [/shared/, /node_modules/],
+      },
+    },
+    optimizeDeps: {
+      include: ['@mygestor/shared'],
     },
   }
 })

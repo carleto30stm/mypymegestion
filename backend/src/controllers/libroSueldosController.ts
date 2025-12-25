@@ -33,13 +33,13 @@ const CODIGOS_CONCEPTO = {
   ZONA_DESFAVORABLE: '1600',
   PLUS_CONVENIO: '1700',
   OTROS_CONCEPTOS_REM: '1900',
-  
+
   // No remunerativos
   ASIGNACION_FAMILIAR: '2010',
   VIATICOS: '2020',
   REFRIGERIO: '2030',
   OTROS_NO_REM: '2900',
-  
+
   // Deducciones
   JUBILACION: '3010',
   OBRA_SOCIAL: '3020',
@@ -125,8 +125,8 @@ export const generarLibroSueldos = async (req: Request, res: Response) => {
     }
 
     if (periodo.estado !== 'cerrado') {
-      return res.status(400).json({ 
-        message: 'El período debe estar cerrado para generar el Libro de Sueldos' 
+      return res.status(400).json({
+        message: 'El período debe estar cerrado para generar el Libro de Sueldos'
       });
     }
 
@@ -149,7 +149,7 @@ export const generarLibroSueldos = async (req: Request, res: Response) => {
     for (const liq of liquidacionesPagadas) {
       const empleado = await Employee.findById((liq as any).empleadoId);
       if (!empleado) continue;
-      
+
       // Solo empleados formales
       if (empleado.modalidadContratacion !== 'formal') continue;
       if (!empleado.cuit) continue;
@@ -160,8 +160,8 @@ export const generarLibroSueldos = async (req: Request, res: Response) => {
       let totalDeducciones = 0;
 
       // Sueldo básico
-      const sueldoBasePeriodo = periodo.tipo === 'quincenal' 
-        ? (liq as any).sueldoBase / 2 
+      const sueldoBasePeriodo = periodo.tipo === 'quincenal'
+        ? (liq as any).sueldoBase / 2
         : (liq as any).sueldoBase;
 
       conceptos.push({
@@ -210,15 +210,15 @@ export const generarLibroSueldos = async (req: Request, res: Response) => {
         totalRemunerativo += (liq as any).aguinaldos;
       }
 
-      // Bonus/Gratificaciones
-      if ((liq as any).bonus > 0) {
+      // Incentivos/Gratificaciones
+      if ((liq as any).incentivos > 0) {
         conceptos.push({
           codigoConcepto: CODIGOS_CONCEPTO.GRATIFICACIONES,
-          descripcion: 'Gratificación',
-          importe: (liq as any).bonus,
+          descripcion: 'Incentivos',
+          importe: (liq as any).incentivos,
           tipo: 'remunerativo'
         });
-        totalRemunerativo += (liq as any).bonus;
+        totalRemunerativo += (liq as any).incentivos;
       }
 
       // DEDUCCIONES
@@ -376,8 +376,8 @@ export const exportarLibroTXT = async (req: Request, res: Response) => {
       if (!empleado || empleado.modalidadContratacion !== 'formal') continue;
       if (!empleado.cuit) continue;
 
-      const sueldoBasePeriodo = periodo.tipo === 'quincenal' 
-        ? (liq as any).sueldoBase / 2 
+      const sueldoBasePeriodo = periodo.tipo === 'quincenal'
+        ? (liq as any).sueldoBase / 2
         : (liq as any).sueldoBase;
 
       // Registro tipo 2: Datos empleado
@@ -433,7 +433,7 @@ export const exportarLibroExcel = async (req: Request, res: Response) => {
     const periodoNombre = periodo.nombre;
 
     let csv = '';
-    
+
     // Encabezado
     csv += `LIBRO DE SUELDOS DIGITAL\r\n`;
     csv += `Empleador: ${razonSocial}\r\n`;
@@ -453,14 +453,14 @@ export const exportarLibroExcel = async (req: Request, res: Response) => {
       const empleado = await Employee.findById((liq as any).empleadoId);
       if (!empleado || empleado.modalidadContratacion !== 'formal') continue;
 
-      const sueldoBase = periodo.tipo === 'quincenal' 
-        ? (liq as any).sueldoBase / 2 
+      const sueldoBase = periodo.tipo === 'quincenal'
+        ? (liq as any).sueldoBase / 2
         : (liq as any).sueldoBase;
 
       const adicionales = (liq as any).adicionales?.reduce((sum: number, a: any) => sum + a.monto, 0) || 0;
       const horasExtra = (liq as any).totalHorasExtra || 0;
       const bruto = sueldoBase + adicionales + horasExtra;
-      
+
       const jubilacion = bruto * 0.11;
       const obraSocial = bruto * 0.03;
       const pami = bruto * 0.03;
@@ -534,8 +534,8 @@ export const previewLibroSueldos = async (req: Request, res: Response) => {
           empleadosSinCuil.push(`${empleado.apellido}, ${empleado.nombre}`);
         } else {
           empleadosFormales++;
-          const sueldoBase = periodo.tipo === 'quincenal' 
-            ? (liq as any).sueldoBase / 2 
+          const sueldoBase = periodo.tipo === 'quincenal'
+            ? (liq as any).sueldoBase / 2
             : (liq as any).sueldoBase;
           totalBruto += sueldoBase + ((liq as any).totalHorasExtra || 0);
         }
@@ -554,8 +554,8 @@ export const previewLibroSueldos = async (req: Request, res: Response) => {
         empleadosSinCuil,
         totalBrutoEstimado: redondear(totalBruto)
       },
-      advertencias: empleadosSinCuil.length > 0 
-        ? `${empleadosSinCuil.length} empleado(s) sin CUIL` 
+      advertencias: empleadosSinCuil.length > 0
+        ? `${empleadosSinCuil.length} empleado(s) sin CUIL`
         : null,
       listoParaGenerar: periodo.estado === 'cerrado' && empleadosSinCuil.length === 0,
       formatosDisponibles: ['json', 'txt', 'excel']
@@ -694,7 +694,7 @@ function generarRegistro2(
   const adicStr = String(Math.round(adicionalesTotal * 100)).padStart(12, '0');
   const secStr = String(secuencia).padStart(5, '0');
   const relleno = ' '.repeat(86);
-  
+
   return `${tipo}${cuil}${apellido}${nombre}${diasStr}${sueldoStr}${horasStr}${adicStr}${secStr}${relleno}`;
 }
 

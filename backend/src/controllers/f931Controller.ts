@@ -63,14 +63,14 @@ const ALICUOTAS = {
   JUBILACION_EMPLEADO: 11,
   OBRA_SOCIAL_EMPLEADO: 3,
   PAMI_EMPLEADO: 3,
-  
+
   // Contribuciones del empleador
   JUBILACION_EMPLEADOR: 10.17,
   OBRA_SOCIAL_EMPLEADOR: 6,
   PAMI_EMPLEADOR: 1.5,
   FONDO_EMPLEO: 0.89,
   ART: 2.5, // Variable según ART
-  
+
   // Reducciones por zona desfavorable
   REDUCCION_PATAGONIA: 50
 };
@@ -167,8 +167,8 @@ export const generarDatosF931 = async (req: Request, res: Response) => {
 
     // Verificar que el período esté cerrado
     if (periodo.estado !== 'cerrado') {
-      return res.status(400).json({ 
-        message: 'El período debe estar cerrado para generar el F931' 
+      return res.status(400).json({
+        message: 'El período debe estar cerrado para generar el F931'
       });
     }
 
@@ -178,8 +178,8 @@ export const generarDatosF931 = async (req: Request, res: Response) => {
     );
 
     if (liquidacionesPagadas.length === 0) {
-      return res.status(400).json({ 
-        message: 'No hay liquidaciones pagadas en este período' 
+      return res.status(400).json({
+        message: 'No hay liquidaciones pagadas en este período'
       });
     }
 
@@ -199,9 +199,9 @@ export const generarDatosF931 = async (req: Request, res: Response) => {
     for (const liq of liquidacionesPagadas) {
       // Obtener datos completos del empleado
       const empleado = await Employee.findById((liq as any).empleadoId);
-      
+
       if (!empleado) continue;
-      
+
       // Solo procesar empleados formales
       if (empleado.modalidadContratacion !== 'formal') continue;
 
@@ -212,14 +212,14 @@ export const generarDatosF931 = async (req: Request, res: Response) => {
       }
 
       // Calcular sueldo según tipo de período
-      const sueldoBasePeriodo = periodo.tipo === 'quincenal' 
-        ? (liq as any).sueldoBase / 2 
+      const sueldoBasePeriodo = periodo.tipo === 'quincenal'
+        ? (liq as any).sueldoBase / 2
         : (liq as any).sueldoBase;
 
       // Remuneraciones
       const remuneracionImponible = sueldoBasePeriodo + (liq as any).totalHorasExtra;
       const sacProporcional = remuneracionImponible / 12; // SAC mensual
-      
+
       // Bases imponibles (puede haber topes MOPRE)
       const baseJubilacion = remuneracionImponible;
       const baseObraSocial = remuneracionImponible;
@@ -238,7 +238,7 @@ export const generarDatosF931 = async (req: Request, res: Response) => {
       const contribPami = baseContribuciones * (ALICUOTAS.PAMI_EMPLEADOR / 100);
       const contribFondoEmpleo = baseContribuciones * (ALICUOTAS.FONDO_EMPLEO / 100);
       const contribART = baseContribuciones * (ALICUOTAS.ART / 100);
-      const totalContribucionesPatronales = contribJubilacion + contribObraSocial + 
+      const totalContribucionesPatronales = contribJubilacion + contribObraSocial +
         contribPami + contribFondoEmpleo + contribART;
 
       // Construir registro del empleado
@@ -259,7 +259,7 @@ export const generarDatosF931 = async (req: Request, res: Response) => {
         remuneracion6: calcularHorasExtra50((liq as any).horasExtra),
         remuneracion7: calcularHorasExtra100((liq as any).horasExtra),
         remuneracion8: 0, // Zona patagónica
-        remuneracion9: (liq as any).bonus || 0,
+        remuneracion9: (liq as any).incentivos || 0,
         remuneracion10: (liq as any).aguinaldos || 0,
         baseImponible1: baseJubilacion,
         baseImponible2: baseObraSocial,
@@ -349,8 +349,8 @@ export const exportarF931TXT = async (req: Request, res: Response) => {
     }
 
     if (periodo.estado !== 'cerrado') {
-      return res.status(400).json({ 
-        message: 'El período debe estar cerrado para exportar' 
+      return res.status(400).json({
+        message: 'El período debe estar cerrado para exportar'
       });
     }
 
@@ -373,8 +373,8 @@ export const exportarF931TXT = async (req: Request, res: Response) => {
       if (!empleado || empleado.modalidadContratacion !== 'formal') continue;
       if (!empleado.cuit) continue;
 
-      const sueldoBasePeriodo = periodo.tipo === 'quincenal' 
-        ? (liq as any).sueldoBase / 2 
+      const sueldoBasePeriodo = periodo.tipo === 'quincenal'
+        ? (liq as any).sueldoBase / 2
         : (liq as any).sueldoBase;
 
       // Línea de nómina (tipo registro 02)
@@ -442,8 +442,8 @@ export const previewF931 = async (req: Request, res: Response) => {
           empleadosSinCUIL.push(`${empleado.apellido}, ${empleado.nombre}`);
         } else {
           empleadosFormalees++;
-          const sueldo = periodo.tipo === 'quincenal' 
-            ? (liq as any).sueldoBase / 2 
+          const sueldo = periodo.tipo === 'quincenal'
+            ? (liq as any).sueldoBase / 2
             : (liq as any).sueldoBase;
           totalRemuneraciones += sueldo + (liq as any).totalHorasExtra;
         }
@@ -453,11 +453,11 @@ export const previewF931 = async (req: Request, res: Response) => {
     }
 
     // Calcular totales estimados
-    const totalAportes = totalRemuneraciones * 
+    const totalAportes = totalRemuneraciones *
       ((ALICUOTAS.JUBILACION_EMPLEADO + ALICUOTAS.OBRA_SOCIAL_EMPLEADO + ALICUOTAS.PAMI_EMPLEADO) / 100);
-    
-    const totalContribuciones = totalRemuneraciones * 
-      ((ALICUOTAS.JUBILACION_EMPLEADOR + ALICUOTAS.OBRA_SOCIAL_EMPLEADOR + 
+
+    const totalContribuciones = totalRemuneraciones *
+      ((ALICUOTAS.JUBILACION_EMPLEADOR + ALICUOTAS.OBRA_SOCIAL_EMPLEADOR +
         ALICUOTAS.PAMI_EMPLEADOR + ALICUOTAS.FONDO_EMPLEO + ALICUOTAS.ART) / 100);
 
     res.json({
@@ -474,7 +474,7 @@ export const previewF931 = async (req: Request, res: Response) => {
         empleadosFormales: empleadosFormalees,
         empleadosInformales,
         empleadosSinCUIL,
-        advertencias: empleadosSinCUIL.length > 0 
+        advertencias: empleadosSinCUIL.length > 0
           ? `${empleadosSinCUIL.length} empleado(s) formal(es) sin CUIL registrado`
           : null
       },
@@ -575,7 +575,7 @@ function generarLineaEncabezado(cuit: string, periodo: string): string {
   const secuencia = '0001';
   const rectificativa = 'N';
   const relleno = ' '.repeat(175);
-  
+
   return `${tipo}${cuitPadded}${periodoPadded}${secuencia}${rectificativa}${relleno}`;
 }
 
@@ -595,19 +595,19 @@ function generarLineaNomina(
   const actividad = '01';
   const modalidad = '00';
   const diasTrabajados = String(dias).padStart(2, '0');
-  
+
   // Remuneraciones (en centavos, 11 dígitos)
   const rem1 = String(Math.round(sueldoBase * 100)).padStart(11, '0');
   const rem2 = String(Math.round(horasExtra * 100)).padStart(11, '0');
   const rem3 = String(Math.round(sac * 100)).padStart(11, '0');
-  
+
   // Aportes
   const aporteJub = String(Math.round(sueldoBase * ALICUOTAS.JUBILACION_EMPLEADO)).padStart(11, '0');
   const aporteOS = String(Math.round(sueldoBase * ALICUOTAS.OBRA_SOCIAL_EMPLEADO)).padStart(11, '0');
   const aportePami = String(Math.round(sueldoBase * ALICUOTAS.PAMI_EMPLEADO)).padStart(11, '0');
-  
+
   const relleno = ' '.repeat(50);
-  
+
   return `${tipo}${cuil}${apellidoNombre}${situacion}${condicion}${actividad}${modalidad}${diasTrabajados}${rem1}${rem2}${rem3}${aporteJub}${aporteOS}${aportePami}${relleno}`;
 }
 
@@ -616,6 +616,6 @@ function generarLineaTotales(cantidadEmpleados: number): string {
   const tipo = '03';
   const cantidad = String(cantidadEmpleados).padStart(5, '0');
   const relleno = ' '.repeat(193);
-  
+
   return `${tipo}${cantidad}${relleno}`;
 }

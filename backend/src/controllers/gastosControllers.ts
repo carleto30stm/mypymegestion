@@ -157,7 +157,7 @@ export const deleteGasto = async (req: ExpressRequest, res: ExpressResponse) => 
                         liquidacion.sueldoBase +
                         liquidacion.totalHorasExtra +
                         liquidacion.aguinaldos +
-                        liquidacion.bonus -
+                        liquidacion.incentivos -
                         liquidacion.adelantos -
                         liquidacion.descuentos;
 

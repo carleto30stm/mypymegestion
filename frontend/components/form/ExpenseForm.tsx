@@ -727,7 +727,7 @@ const ExpenseForm: React.FC<ExpenseFormProps> = ({ onClose, gastoToEdit }) => {
                 <MenuItem value="adelanto">Adelanto</MenuItem>
                 {/* <MenuItem value="hora_extra">Hora Extra</MenuItem> */}
                 <MenuItem value="aguinaldo">Aguinaldo</MenuItem>
-                <MenuItem value="bonus">Bonus</MenuItem>
+                <MenuItem value="incentivos">Incentivos</MenuItem>
                 <MenuItem value="otro">Otro</MenuItem>
               </Select>
             </FormControl>
