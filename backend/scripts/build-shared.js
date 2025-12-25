@@ -19,8 +19,10 @@ if (!fs.existsSync(sharedDir)) {
 console.log(`📂 Found shared directory at: ${sharedDir}`);
 
 try {
-  console.log('📦 Installing shared dependencies...');
-  execSync('npm ci', { cwd: sharedDir, stdio: 'inherit' });
+  // En entorno monorepo/workspace, las dependencias ya están instaladas en el root.
+  // Ejecutar npm ci aquí causa conflictos (EBUSY) con otros workspaces.
+  // console.log('📦 Installing shared dependencies...');
+  // execSync('npm ci', { cwd: sharedDir, stdio: 'inherit' });
 
   console.log('🔨 Building shared package...');
   execSync('npm run build', { cwd: sharedDir, stdio: 'inherit' });
