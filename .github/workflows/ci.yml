@@ -23,6 +23,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 18
+      - name: Build Shared Library
+        run: |
+          npm ci
+          npm run build
+        working-directory: shared
       - run: npm ci
       - name: Run backend tests
         run: npm test
