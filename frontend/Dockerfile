@@ -26,6 +26,9 @@ RUN npm run build
 WORKDIR /app/frontend
 # Aumentar memoria para el build si es necesario
 ENV NODE_OPTIONS="--max-old-space-size=4096"
+# Inyectar VITE_BACKEND_URL como variable de entorno durante el build
+ARG VITE_BACKEND_URL
+ENV VITE_BACKEND_URL=$VITE_BACKEND_URL
 RUN npm run build
 
 # 6. Servir (usando 'serve' que está en dependencias o npx)
