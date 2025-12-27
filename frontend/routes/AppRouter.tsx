@@ -16,6 +16,8 @@ import FacturasPage from "../pages/ventas/FacturasPage"
 import HistorialVentasPage from "../pages/ventas/HistorialVentasPage"
 import RemitosPage from "../pages/ventas/RemitosPage"
 import VentasPage from "../pages/ventas/VentasPage"
+import CajaPage from "../pages/CajaPage"
+import CajaHistorial from "../pages/CajaHistorial"
 import { useSelector } from "react-redux"
 import { RootState } from "../redux/store"
 import { useTokenExpiration } from "../hooks/useTokenExpiration"
@@ -61,6 +63,8 @@ export const AppRouter = () => {
           <Route path="/ordenes-procesamiento/nueva" element={<OrdenProcesamientoForm />} />
           <Route path="/ordenes-procesamiento/:id" element={<OrdenProcesamientoForm />} />
           <Route path="/ordenes-procesamiento/:id/recibir" element={<OrdenProcesamientoRecepcion />} />
+          <Route path="/caja" element={<CajaPage />} />
+          <Route path="/caja/historial" element={<CajaHistorial />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -7,6 +7,7 @@ import {
 } from '../controllers/gastosControllers.js';
 import { protect } from '../middleware/authMiddleware.js';
 import { requireEditDeletePermission } from '../middleware/operAuth.js';
+import { checkCajaAbierta } from '../middleware/checkCajaAbierta.js';
 import Gasto from '../models/Gasto.js';
 import ReciboPago from '../models/ReciboPago.js';
 import LiquidacionPeriodo from '../models/LiquidacionPeriodo.js';
@@ -16,13 +17,13 @@ const router = express.Router();
 
 router.route('/')
   .get(protect, getGastos)
-  .post(protect, createGasto); // OPER puede crear gastos
+  .post(protect, checkCajaAbierta, createGasto); // OPER puede crear gastos
 
 // Confirmar un cheque (cambiar confirmado a true)
 router.patch('/:id/confirmar', async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     const gasto = await Gasto.findByIdAndUpdate(
       id,
       { confirmado: true },
@@ -46,11 +47,11 @@ router.patch('/:id/confirmar', async (req, res) => {
 });
 
 // Endpoint para "disponer" de un cheque de tercero (depositarlo o pagarlo a proveedor)
-router.post('/:id/disponer-cheque', async (req, res) => {
+router.post('/:id/disponer-cheque', checkCajaAbierta, async (req, res) => {
   try {
     const { id } = req.params;
     const { tipoDisposicion, destino, detalleOperacion } = req.body;
-    
+
     // Buscar el cheque original
     const chequeOriginal = await Gasto.findById(id);
     if (!chequeOriginal) {
@@ -69,7 +70,7 @@ router.post('/:id/disponer-cheque', async (req, res) => {
 
     let nuevoEstado: 'recibido' | 'depositado' | 'pagado_proveedor' | 'endosado' = 'recibido';
     let nuevoBanco = '';
-    
+
     // Determinar estado y destino según tipo de disposición
     if (tipoDisposicion === 'depositar') {
       nuevoEstado = 'depositado';
@@ -104,7 +105,7 @@ router.post('/:id/disponer-cheque', async (req, res) => {
     let movimientoEntrada = null;
     if (tipoDisposicion === 'depositar') {
       console.log('🏦 Creando movimiento de entrada con numeroCheque:', chequeOriginal.numeroCheque);
-      
+
       movimientoEntrada = new Gasto({
         fecha: new Date(),
         rubro: 'BANCO',
@@ -128,7 +129,7 @@ router.post('/:id/disponer-cheque', async (req, res) => {
 
     // Actualizar el estado del cheque original
     chequeOriginal.estadoCheque = nuevoEstado;
-    
+
     // CRÍTICO: Actualizar también el estadoCheque en ReciboPago.formasPago[].datosCheque
     // para que el contador de "Cheques Pendientes" refleje correctamente los cheques dispuestos
     if (chequeOriginal.numeroCheque) {
@@ -142,8 +143,8 @@ router.post('/:id/disponer-cheque', async (req, res) => {
         if (reciboConCheque) {
           // Encontrar el índice de la forma de pago que contiene este cheque
           const indiceFP = reciboConCheque.formasPago.findIndex(
-            (fp: any) => fp.medioPago === 'CHEQUE' && 
-                        fp.datosCheque?.numeroCheque === chequeOriginal.numeroCheque
+            (fp: any) => fp.medioPago === 'CHEQUE' &&
+              fp.datosCheque?.numeroCheque === chequeOriginal.numeroCheque
           );
 
           if (indiceFP !== -1) {
@@ -158,11 +159,11 @@ router.post('/:id/disponer-cheque', async (req, res) => {
         // No fallar la operación principal si esto falla, solo loguear
       }
     }
-    
+
     // Guardar todas las operaciones
     await chequeOriginal.save();
     await movimientoSalida.save();
-    
+
     const resultados: any = {
       chequeOriginal,
       movimientoSalida,
@@ -193,70 +194,70 @@ router.route('/:id')
 router.patch('/:id/cancel', async (req, res) => {
   try {
     const { comentario } = req.body;
-    
+
     // Obtener el gasto antes de cancelarlo para verificar si es adelanto
     const gastoAntesDeCancelar = await Gasto.findById(req.params.id);
-    
+
     if (!gastoAntesDeCancelar) {
       return res.status(404).json({ message: 'Gasto no encontrado' });
     }
-    
+
     // Si es un adelanto y está activo, revertir el monto en la liquidación
     if (gastoAntesDeCancelar.concepto === 'adelanto' && gastoAntesDeCancelar.estado === 'activo') {
       const periodo = await LiquidacionPeriodo.findOne({
         'liquidaciones.gastosRelacionados': gastoAntesDeCancelar._id
       });
-      
+
       if (periodo) {
         if (periodo.estado === 'cerrado') {
-          return res.status(400).json({ 
-            message: 'No se puede cancelar un adelanto de un período cerrado' 
+          return res.status(400).json({
+            message: 'No se puede cancelar un adelanto de un período cerrado'
           });
         }
-        
+
         const liquidacion = periodo.liquidaciones.find((liq: any) =>
-          liq.gastosRelacionados.some((id: any) => 
+          liq.gastosRelacionados.some((id: any) =>
             id.toString() === gastoAntesDeCancelar._id.toString()
           )
         );
-        
+
         if (liquidacion) {
           // Revertir el adelanto
           liquidacion.adelantos -= gastoAntesDeCancelar.salida;
-          
+
           // Recalcular totalAPagar
-          liquidacion.totalAPagar = 
+          liquidacion.totalAPagar =
             liquidacion.sueldoBase +
             liquidacion.totalHorasExtra +
             liquidacion.aguinaldos +
             liquidacion.incentivos -
             liquidacion.adelantos -
             liquidacion.descuentos;
-          
+
           await periodo.save();
-          
+
           console.log(`✅ Adelanto cancelado y revertido: $${gastoAntesDeCancelar.salida} restado de ${liquidacion.empleadoApellido}, ${liquidacion.empleadoNombre}`);
         }
       }
     }
-    
+
     const updateData: any = { estado: 'cancelado' };
-    
+
     // Si se proporciona un comentario, actualizar también ese campo
     if (comentario) {
       updateData.comentario = comentario;
     }
-    
+
     const gasto = await Gasto.findByIdAndUpdate(
       req.params.id,
       updateData,
       { new: true }
     );
-    
+
     if (!gasto) {
       return res.status(404).json({ message: 'Gasto no encontrado' });
     }
-    
+
     res.json({
       ...gasto.toObject(),
       adelantoRevertido: gastoAntesDeCancelar.concepto === 'adelanto'
@@ -271,70 +272,70 @@ router.patch('/:id/cancel', async (req, res) => {
 router.patch('/:id/reactivate', async (req, res) => {
   try {
     const { comentario } = req.body;
-    
+
     // Obtener el gasto antes de reactivarlo para verificar si es adelanto
     const gastoAntesDeReactivar = await Gasto.findById(req.params.id);
-    
+
     if (!gastoAntesDeReactivar) {
       return res.status(404).json({ message: 'Gasto no encontrado' });
     }
-    
+
     // Si es un adelanto y está cancelado, volver a aplicar el monto en la liquidación
     if (gastoAntesDeReactivar.concepto === 'adelanto' && gastoAntesDeReactivar.estado === 'cancelado') {
       const periodo = await LiquidacionPeriodo.findOne({
         'liquidaciones.gastosRelacionados': gastoAntesDeReactivar._id
       });
-      
+
       if (periodo) {
         if (periodo.estado === 'cerrado') {
-          return res.status(400).json({ 
-            message: 'No se puede reactivar un adelanto de un período cerrado' 
+          return res.status(400).json({
+            message: 'No se puede reactivar un adelanto de un período cerrado'
           });
         }
-        
+
         const liquidacion = periodo.liquidaciones.find((liq: any) =>
-          liq.gastosRelacionados.some((id: any) => 
+          liq.gastosRelacionados.some((id: any) =>
             id.toString() === gastoAntesDeReactivar._id.toString()
           )
         );
-        
+
         if (liquidacion) {
           // Re-aplicar el adelanto
           liquidacion.adelantos += gastoAntesDeReactivar.salida;
-          
+
           // Recalcular totalAPagar
-          liquidacion.totalAPagar = 
+          liquidacion.totalAPagar =
             liquidacion.sueldoBase +
             liquidacion.totalHorasExtra +
             liquidacion.aguinaldos +
             liquidacion.incentivos -
             liquidacion.adelantos -
             liquidacion.descuentos;
-          
+
           await periodo.save();
-          
+
           console.log(`✅ Adelanto reactivado: $${gastoAntesDeReactivar.salida} sumado nuevamente a ${liquidacion.empleadoApellido}, ${liquidacion.empleadoNombre}`);
         }
       }
     }
-    
+
     const updateData: any = { estado: 'activo' };
-    
+
     // Si se proporciona un comentario, actualizar también ese campo
     if (comentario) {
       updateData.comentario = comentario;
     }
-    
+
     const gasto = await Gasto.findByIdAndUpdate(
       req.params.id,
       updateData,
       { new: true }
     );
-    
+
     if (!gasto) {
       return res.status(404).json({ message: 'Gasto no encontrado' });
     }
-    
+
     res.json({
       ...gasto.toObject(),
       adelantoReaplicado: gastoAntesDeReactivar.concepto === 'adelanto'

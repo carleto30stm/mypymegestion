@@ -14,13 +14,14 @@ import {
   getVentasPendientesProduccion
 } from '../controllers/ventasController.js';
 import { protect } from '../middleware/authMiddleware.js';
+import { checkCajaAbierta } from '../middleware/checkCajaAbierta.js';
 
 const router = express.Router();
 
 // Rutas públicas (requieren autenticación básica)
 router.route('/')
   .get(protect, getVentas)
-  .post(protect, crearVenta); // Todos los usuarios autenticados pueden crear ventas
+  .post(protect, checkCajaAbierta, crearVenta); // Todos los usuarios autenticados pueden crear ventas
 
 router.get('/rango', protect, getVentasByRango); // Filtrar por rango de fechas
 

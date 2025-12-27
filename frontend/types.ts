@@ -1,5 +1,5 @@
-// Bancos disponibles
 export const BANCOS = ['PROVINCIA', 'SANTANDER', 'EFECTIVO', 'FCI', 'RESERVA'] as const;
+export const CAJAS = BANCOS;
 
 // Unidades de medida para productos
 export const UNIDADES_MEDIDA = ['UNIDAD', 'KG', 'METRO', 'LITRO', 'CAJA', 'PAQUETE'] as const;

@@ -184,6 +184,18 @@ const Sidebar: React.FC<SidebarProps> = ({
             </ListItemButton>
           </ListItem>
         )}
+
+        <ListItem disablePadding>
+          <ListItemButton 
+            onClick={() => navigate('/caja')}
+            selected={location.pathname === '/caja'}
+          >
+            <ListItemIcon>
+              <PointOfSaleIcon />
+            </ListItemIcon>
+            <ListItemText primary="Control de Caja" />
+          </ListItemButton>
+        </ListItem>
       </List>
       <Divider />
       

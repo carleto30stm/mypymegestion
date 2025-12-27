@@ -33,6 +33,7 @@ import recibosSueldoRoutes from './routes/recibosSueldo.js';
 import f931Routes from './routes/f931.js';
 import antiguedadRoutes from './routes/antiguedad.js';
 import libroSueldosRoutes from './routes/libroSueldos.js';
+import cajaRoutes from './routes/caja.js';
 import { iniciarCalculoInteresesDiario } from './jobs/calcularInteresesPunitorios.js';
 
 dotenv.config();
@@ -120,6 +121,9 @@ const start = async () => {
     app.use('/api/f931', f931Routes);
     app.use('/api/antiguedad', antiguedadRoutes);
     app.use('/api/libro-sueldos', libroSueldosRoutes);
+
+    // Rutas de Control de Caja
+    app.use('/api/caja', cajaRoutes);
 
     const env = process.env.NODE_ENV || 'development';
     app.listen(PORT, () => {

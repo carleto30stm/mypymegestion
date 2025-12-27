@@ -9,6 +9,7 @@ import {
   corregirMonto
 } from '../controllers/recibosController.js';
 import { protect } from '../middleware/authMiddleware.js';
+import { checkCajaAbierta } from '../middleware/checkCajaAbierta.js';
 
 const router = express.Router();
 
@@ -38,7 +39,7 @@ router.get('/:id', getReciboById);
 // @route   POST /api/recibos
 // @desc    Crear nuevo recibo de pago
 // @access  Private (admin/oper_ad/oper)
-router.post('/', crearRecibo);
+router.post('/', protect, checkCajaAbierta, crearRecibo);
 
 // @route   PATCH /api/recibos/:id/anular
 // @desc    Anular recibo de pago

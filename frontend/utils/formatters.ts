@@ -137,24 +137,30 @@ export const parseCurrency = (value: string): number => {
 export const formatNumberInput = (value: string): string => {
   // Si el valor está vacío, retornar vacío
   if (!value) return '';
-  
-  // Permitir solo números y una coma
-  const cleanValue = value.replace(/[^\d,]/g, '');
-  
-  // Si solo hay una coma al final, permitirla
-  if (cleanValue === ',') return '';
-  
+  // Permitir signo negativo inicial además de números y una coma
+  const trimmed = value.trim();
+  const hasLeadingMinus = trimmed.startsWith('-');
+
+  // Remover todo excepto dígitos y coma
+  let temp = trimmed.replace(/[^\d,]/g, '');
+  if (hasLeadingMinus) temp = `-${temp}`;
+
+  // Si solo hay una coma al final, permitirla (pero conservar signo si existe)
+  if (temp === ',' || temp === '-,') return hasLeadingMinus ? '-,' : '';
+
   // Dividir por la coma (separador decimal argentino)
-  const parts = cleanValue.split(',');
+  const parts = temp.split(',');
   
   // Solo permitir una coma
-  if (parts.length > 2) {
-    // Si hay más de una coma, tomar solo las primeras dos partes
-    parts.splice(2);
-  }
-  
-  // Parte entera
+  if (parts.length > 2) parts.splice(2);
+
+  // Parte entera (puede incluir el signo '-')
   let integerPart = parts[0] || '';
+  let sign = '';
+  if (integerPart.startsWith('-')) {
+    sign = '-';
+    integerPart = integerPart.substring(1);
+  }
   
   // Formatear la parte entera con puntos cada tres dígitos (solo si tiene valor)
   if (integerPart.length > 0) {
@@ -169,19 +175,15 @@ export const formatNumberInput = (value: string): string => {
   // Parte decimal (máximo 3 dígitos)
   let decimalPart = parts[1];
   if (decimalPart !== undefined) {
-    if (decimalPart.length > 3) {
-      decimalPart = decimalPart.substring(0, 3);
-    }
-    // Si hay parte decimal (incluso vacía), agregar la coma
-    return `${integerPart},${decimalPart}`;
+    if (decimalPart.length > 3) decimalPart = decimalPart.substring(0, 3);
+    // Si hay parte decimal (incluso vacía), agregar la coma y el signo
+    return `${sign}${integerPart},${decimalPart}`;
   }
-  
-  // Si termina con coma en el input original, mantenerla
-  if (value.endsWith(',') && parts.length === 2) {
-    return `${integerPart},`;
-  }
-  
-  return integerPart;
+
+  // Si termina con coma en el input original, mantenerla (con signo)
+  if (value.endsWith(',') && parts.length === 2) return `${sign}${integerPart},`;
+
+  return `${sign}${integerPart}`;
 };
 
 /**
